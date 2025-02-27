@@ -1,0 +1,264 @@
+# Configuration for Canadian university website scraping
+scraping:
+  max_depth: 3        # Maximum link depth for crawling
+  timeout: 30         # Request timeout in seconds
+  max_pages: 100      # Maximum pages to scrape per university
+  user_agent: random  # Use random user agent or specify a string
+  
+# Vector database configuration
+vector_db:
+  collection_name: "canadian_universities"
+  persist_directory: "./chroma_db"
+  embedding_model: "sentence-transformers/all-MiniLM-L6-v2"
+
+# LLM configuration
+llm:
+  provider: "deepseek"  # The LLM provider to use (deepseek, huggingface)
+  api_key: ""          # Set your DeepSeek API key here or in .env file as DEEPSEEK_API_KEY
+  model_name: "deepseek-chat"  # DeepSeek model to use
+  temperature: 0.1
+  max_tokens: 1000
+  request_timeout: 60   # Timeout for API requests in seconds
+  max_retries: 3        # Number of retries for failed API calls
+  retry_delay: 2        # Initial delay between retries in seconds (doubles with each retry)
+  fallback_to_huggingface: true  # Whether to fall back to HuggingFace if DeepSeek API fails
+  fallback_model: "deepseek-ai/deepseek-coder-1.3b-base"  # HuggingFace model to use as fallback
+
+# Web search configuration
+web_search:
+  enabled: true
+  tavily_api_key: ""  # Set your Tavily API key here or in .env file
+  search_depth: "basic"  # basic or comprehensive
+  max_results: 5
+
+# Workflow settings
+workflow:
+  relevance_threshold: 0.7  # Threshold for document relevance (0-1)
+  hallucination_threshold: 0.8  # Threshold for hallucination detection (0-1)
+  include_web_results_in_rag: true  # Whether to add web search results to RAG store
+
+# Logging configuration
+logging:
+  level: "INFO"       # Default log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+  console_level: "INFO"    # Console output log level
+  file_level: "DEBUG"      # File output log level
+  max_file_size: 10485760  # Maximum log file size in bytes (10 MB)
+  backup_count: 5          # Number of backup log files to keep
+  log_api_calls: true      # Whether to log API calls (may contain sensitive data)
+  log_dir: "./logs"        # Directory to store log files
+
+# University websites to scrape
+universities:
+  # Ontario Universities
+  - name: "University of Toronto"
+    base_url: "https://www.utoronto.ca/"
+    focus_urls:
+      - "https://www.utoronto.ca/academics"
+      - "https://www.utoronto.ca/admissions"
+      - "https://www.adm.utoronto.ca/finances/"
+      - "https://future.utoronto.ca/scholarships/"
+  
+  - name: "McMaster University"
+    base_url: "https://www.mcmaster.ca/"
+    focus_urls:
+      - "https://www.mcmaster.ca/academics/"
+      - "https://future.mcmaster.ca/admission/"
+      - "https://registrar.mcmaster.ca/tuition-fees/"
+      - "https://sfas.mcmaster.ca/scholarships/"
+
+  - name: "University of Waterloo"
+    base_url: "https://uwaterloo.ca/"
+    focus_urls:
+      - "https://uwaterloo.ca/future-students/programs"
+      - "https://uwaterloo.ca/future-students/admissions"
+      - "https://uwaterloo.ca/finance/student-financial-services"
+      - "https://uwaterloo.ca/student-awards-financial-aid/"
+
+  - name: "Western University"
+    base_url: "https://www.uwo.ca/"
+    focus_urls:
+      - "https://www.uwo.ca/academics/"
+      - "https://welcome.uwo.ca/admissions/"
+      - "https://registrar.uwo.ca/student_finances/"
+      - "https://registrar.uwo.ca/student_finances/scholarships_awards/"
+
+  - name: "Queen's University"
+    base_url: "https://www.queensu.ca/"
+    focus_urls:
+      - "https://www.queensu.ca/academics/"
+      - "https://www.queensu.ca/admission/"
+      - "https://www.queensu.ca/registrar/tuition-fees"
+      - "https://www.queensu.ca/studentawards/"
+
+  - name: "University of Ottawa"
+    base_url: "https://www.uottawa.ca/"
+    focus_urls:
+      - "https://www.uottawa.ca/academic/en"
+      - "https://www.uottawa.ca/undergraduate-admissions/"
+      - "https://www.uottawa.ca/university-fees/"
+      - "https://www.uottawa.ca/financial-aid-awards/"
+
+  - name: "York University"
+    base_url: "https://www.yorku.ca/"
+    focus_urls:
+      - "https://www.yorku.ca/programs/"
+      - "https://www.yorku.ca/admissions/"
+      - "https://sfs.yorku.ca/fees/"
+      - "https://sfs.yorku.ca/scholarships/"
+
+  - name: "Carleton University"
+    base_url: "https://carleton.ca/"
+    focus_urls:
+      - "https://carleton.ca/academics/"
+      - "https://admissions.carleton.ca/"
+      - "https://carleton.ca/studentaccounts/tuition-fees/"
+      - "https://carleton.ca/awards/"
+  
+  # British Columbia Universities
+  - name: "University of British Columbia"
+    base_url: "https://www.ubc.ca/"
+    focus_urls:
+      - "https://www.ubc.ca/academics/"
+      - "https://you.ubc.ca/applying-ubc/"
+      - "https://students.ubc.ca/enrolment/finances/tuition-fees"
+      - "https://students.ubc.ca/enrolment/finances/awards-scholarships-bursaries"
+
+  - name: "Simon Fraser University"
+    base_url: "https://www.sfu.ca/"
+    focus_urls:
+      - "https://www.sfu.ca/programs.html"
+      - "https://www.sfu.ca/admission.html"
+      - "https://www.sfu.ca/students/financialaid/costs.html"
+      - "https://www.sfu.ca/students/financialaid/entrance.html"
+  
+  - name: "University of Victoria"
+    base_url: "https://www.uvic.ca/"
+    focus_urls:
+      - "https://www.uvic.ca/undergraduate/programs/"
+      - "https://www.uvic.ca/undergraduate/admissions/"
+      - "https://www.uvic.ca/registrar/students/financials/"
+      - "https://www.uvic.ca/registrar/students/financials/financial-aid/"
+  
+  # Quebec Universities
+  - name: "McGill University"
+    base_url: "https://www.mcgill.ca/"
+    focus_urls:
+      - "https://www.mcgill.ca/undergraduate-admissions/"
+      - "https://www.mcgill.ca/undergraduate-admissions/apply"
+      - "https://www.mcgill.ca/student-accounts/tuition-charges/fallwinter-term-tuition-and-fees"
+      - "https://www.mcgill.ca/studentaid/scholarships-aid"
+  
+  - name: "Université de Montréal"
+    base_url: "https://www.umontreal.ca/"
+    focus_urls:
+      - "https://admission.umontreal.ca/programmes/"
+      - "https://admission.umontreal.ca/admission/"
+      - "https://registraire.umontreal.ca/droits-de-scolarite/"
+      - "https://bourses.umontreal.ca/"
+  
+  - name: "Laval University"
+    base_url: "https://www.ulaval.ca/"
+    focus_urls:
+      - "https://www.ulaval.ca/etudes/programmes"
+      - "https://www.ulaval.ca/admission"
+      - "https://www.ulaval.ca/etudes/droits-de-scolarite"
+      - "https://www.bbaf.ulaval.ca/"
+  
+  - name: "Université du Québec"
+    base_url: "https://www.uquebec.ca/"
+    focus_urls:
+      - "https://www.uquebec.ca/reseau/fr/futurs-etudiants/programmes-detudes"
+      - "https://www.uquebec.ca/reseau/fr/futurs-etudiants/admission"
+      - "https://www.uquebec.ca/reseau/fr/futurs-etudiants/couts-des-etudes"
+      - "https://www.uquebec.ca/reseau/fr/futurs-etudiants/bourses"
+  
+  # Alberta Universities
+  - name: "University of Alberta"
+    base_url: "https://www.ualberta.ca/"
+    focus_urls:
+      - "https://www.ualberta.ca/admissions/index.html"
+      - "https://www.ualberta.ca/admissions/undergraduate/tuition-and-scholarships/index.html"
+      - "https://www.ualberta.ca/registrar/scholarships-awards-financial-support/index.html"
+  
+  - name: "University of Calgary"
+    base_url: "https://www.ucalgary.ca/"
+    focus_urls:
+      - "https://www.ucalgary.ca/future-students/undergraduate/explore-programs"
+      - "https://www.ucalgary.ca/future-students/undergraduate/apply"
+      - "https://www.ucalgary.ca/registrar/finances/tuition-and-fees"
+      - "https://www.ucalgary.ca/registrar/finances/awards-scholarships-and-bursaries"
+  
+  # Other Major Universities
+  - name: "Dalhousie University"
+    base_url: "https://www.dal.ca/"
+    focus_urls:
+      - "https://www.dal.ca/academics/programs.html"
+      - "https://www.dal.ca/admissions.html"
+      - "https://www.dal.ca/admissions/money_matters/tuition_fees.html"
+      - "https://www.dal.ca/admissions/money_matters/funding-sources/scholarships.html"
+  
+  - name: "University of Saskatchewan"
+    base_url: "https://www.usask.ca/"
+    focus_urls:
+      - "https://programs.usask.ca/"
+      - "https://admissions.usask.ca/"
+      - "https://students.usask.ca/money/tuition-fees/"
+      - "https://students.usask.ca/money/scholarships.php"
+  
+  - name: "University of Manitoba"
+    base_url: "https://umanitoba.ca/"
+    focus_urls:
+      - "https://umanitoba.ca/explore/programs-of-study"
+      - "https://umanitoba.ca/admissions/"
+      - "https://umanitoba.ca/admissions/undergraduate/costs-and-finances"
+      - "https://umanitoba.ca/financial-aid-and-awards/"
+
+# Provincial Application Portals
+  - name: "ApplyAlberta"
+    base_url: "https://www.applyalberta.ca/"
+    focus_urls:
+      - "https://www.applyalberta.ca/program-search"
+      - "https://www.applyalberta.ca/how-to-apply"
+      - "https://www.applyalberta.ca/finance-your-education"
+  
+  - name: "EducationPlannerBC"
+    base_url: "https://www.educationplannerbc.ca/"
+    focus_urls:
+      - "https://www.educationplannerbc.ca/search"
+      - "https://www.educationplannerbc.ca/plan/apply"
+      - "https://www.educationplannerbc.ca/plan/finance"
+  
+  - name: "Ontario Universities' Application Centre (OUAC)"
+    base_url: "https://www.ouac.on.ca/"
+    focus_urls:
+      - "https://www.ouac.on.ca/ouac-101/"
+      - "https://www.ouac.on.ca/ouac-105/"
+      - "https://www.ontariouniversitiesinfo.ca/"
+  
+  - name: "SRAM (Quebec)"
+    base_url: "https://www.sram.qc.ca/"
+    focus_urls:
+      - "https://www.sram.qc.ca/diploma-of-college-studies/available-programs"
+      - "https://www.sram.qc.ca/diploma-of-college-studies/student-for-a-day"
+      - "https://www.sram.qc.ca/international-student/admission"
+  
+  - name: "SRACQ (Quebec)"
+    base_url: "https://www.sracq.qc.ca/"
+    focus_urls:
+      - "https://www.sracq.qc.ca/programmes/"
+      - "https://www.sracq.qc.ca/admission/"
+      - "https://www.sracq.qc.ca/international/"
+
+# Tags to extract specific information (used for metadata)
+information_tags:
+  - tag: "programs"
+    keywords: ["program", "degree", "major", "minor", "course", "faculty", "department", "study"]
+  
+  - tag: "admissions"
+    keywords: ["admission", "apply", "application", "requirement", "deadline", "eligibility", "entry"]
+  
+  - tag: "tuition"
+    keywords: ["tuition", "fee", "cost", "expense", "financial", "payment", "pay"]
+  
+  - tag: "scholarships"
+    keywords: ["scholarship", "award", "grant", "bursary", "financial aid", "funding", "support"] 
