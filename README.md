@@ -1,4 +1,4 @@
-# Canadian University Information Agent
+# Kevin
 
 An AI-powered agent that provides accurate and up-to-date information about Canadian universities using web scraping, Retrieval-Augmented Generation (RAG), and LangGraph. This system helps prospective students explore programs, admission requirements, tuition costs, and scholarship opportunities across Canadian institutions.
 
@@ -55,8 +55,8 @@ This project implements a modular, extensible information retrieval system with:
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/canadian-university-agent.git
-cd canadian-university-agent
+git clone https://github.com/qianghan/Kevin.git
+cd Kevin
 ```
 
 2. Install the required packages:
@@ -276,7 +276,7 @@ The test suite includes:
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome! Please feel free to submit a Pull Request to https://github.com/qianghan/Kevin.
 
 ## License
 
