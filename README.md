@@ -30,7 +30,7 @@ This project implements a modular, extensible information retrieval system with:
 ├── logs/                    # Log files directory
 ├── main.py                  # Application entry point
 ├── README.md                # Project documentation
-├── requirements.txt         # Python dependencies
+├── pyproject.toml           # Project dependencies and metadata
 ├── setup.py                 # Installation script
 ├── src/                     # Source code directory
 │   ├── core/                # Core application components
@@ -59,9 +59,9 @@ git clone https://github.com/qianghan/Kevin.git
 cd Kevin
 ```
 
-2. Install the required packages:
+2. Install the package and its dependencies:
 ```bash
-pip install -r requirements.txt
+pip install -e .
 ```
 
 3. Set up your API keys in `.env` file:
@@ -79,10 +79,10 @@ The system provides several APIs for different use cases:
 ### Core Agent API
 
 ```python
-from src.core.agent import UniversityAgent
+from src.core.agent import Kevin
 
 # Initialize the agent
-agent = UniversityAgent()
+agent = Kevin()
 
 # Basic query
 response = agent.query("What are the admission requirements for international students at UBC?")
@@ -171,19 +171,19 @@ The application provides a convenient command-line interface:
 
 ```bash
 # Start the web interface
-python main.py --mode web
+kevin --mode web
 
 # Run the web scraper to collect data
-python main.py --mode scrape
+kevin --mode scrape
 
 # Process a query directly
-python main.py --mode query --query "What are the admission requirements for McGill University?"
+kevin --mode query --query "What are the admission requirements for McGill University?"
 
 # Enable web search for a query
-python main.py --mode query --query "What are the latest COVID policies at UBC?" --web-search
+kevin --mode query --query "What are the latest COVID policies at UBC?" --web-search
 
 # Update the vector database with fresh content
-python main.py --mode train
+kevin --mode train
 ```
 
 ### Web Interface
@@ -191,7 +191,7 @@ python main.py --mode train
 Launch the Streamlit web interface:
 
 ```bash
-python main.py
+kevin
 ```
 
 Then open your browser at `http://localhost:8501`.
@@ -206,7 +206,7 @@ The web interface provides:
 
 ## Agent Workflow
 
-The University Agent follows a sophisticated workflow:
+The Kevin agent follows a sophisticated workflow:
 
 1. **Router** - Decides whether to search the knowledge base or the web based on the query
 2. **Retriever** - Gets relevant documents from the chosen source
