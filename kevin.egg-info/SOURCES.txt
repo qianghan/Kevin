@@ -8,5 +8,6 @@ kevin.egg-info/entry_points.txt
 kevin.egg-info/requires.txt
 kevin.egg-info/top_level.txt
 src/__init__.py
+src/main.py
 tests/test_structure.py
 tests/test_webui.py
