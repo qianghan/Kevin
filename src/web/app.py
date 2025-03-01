@@ -66,6 +66,90 @@ def setup_page():
         max-width: 1200px;
         margin: 0 auto;
     }
+    /* Styling for thinking process timeline */
+    .thinking-timeline {
+        border-left: 3px solid #4CAF50;
+        margin-left: 10px;
+        padding-left: 20px;
+        background-color: #f9f9f9;
+        border-radius: 8px;
+        padding: 15px 15px 15px 30px;
+    }
+    .thinking-step {
+        margin-bottom: 20px;
+        padding: 12px 15px;
+        background-color: white;
+        border-radius: 8px;
+        position: relative;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);
+        transition: all 0.3s;
+    }
+    .thinking-step:hover {
+        box-shadow: 0 3px 6px rgba(0,0,0,0.16), 0 3px 6px rgba(0,0,0,0.23);
+    }
+    .thinking-step:before {
+        content: "";
+        width: 14px;
+        height: 14px;
+        background-color: #4CAF50;
+        border: 3px solid white;
+        border-radius: 50%;
+        position: absolute;
+        left: -37px;
+        top: 15px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+    }
+    .thinking-time {
+        font-weight: bold;
+        color: #1E88E5;
+        font-size: 0.9em;
+    }
+    .thinking-description {
+        font-weight: bold;
+        margin-top: 5px;
+        color: #333;
+        font-size: 1.1em;
+    }
+    .thinking-details {
+        margin-top: 10px;
+        padding: 10px;
+        background-color: #f8f9fa;
+        border-radius: 5px;
+        font-size: 0.9em;
+    }
+    /* Highlight for search results */
+    .search-highlight {
+        background-color: #fff3cd;
+        padding: 2px 4px;
+        border-radius: 3px;
+        font-weight: 500;
+    }
+    /* Highlight for timing information */
+    .timing-highlight {
+        color: #1E88E5;
+        font-weight: 500;
+        font-family: monospace;
+    }
+    /* Highlight for errors */
+    .error-highlight {
+        color: #d32f2f;
+        font-weight: 500;
+        background-color: #ffebee;
+        padding: 2px 4px;
+        border-radius: 3px;
+    }
+    /* Error step styling */
+    .thinking-error {
+        border-left: 4px solid #d32f2f;
+    }
+    .thinking-error:before {
+        background-color: #d32f2f !important;
+    }
+    /* Expander styling */
+    .streamlit-expanderHeader {
+        font-weight: bold;
+        color: #4CAF50;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -139,6 +223,7 @@ def main():
         # Settings
         st.markdown("### Settings")
         show_sources = st.checkbox("Show sources", value=True)
+        show_thinking = st.checkbox("Show thinking process", value=True)
         
         # About
         st.markdown("---")
@@ -198,13 +283,81 @@ def main():
                     # Handle different response formats
                     if isinstance(response, dict):
                         answer = response.get("output", response.get("answer", str(response)))
+                        thinking_steps = response.get("thinking", [])
                     else:
                         answer = str(response)
+                        thinking_steps = []
                     
                     st.write(answer)
                     
                     # Store response
                     st.session_state.messages.append({"role": "assistant", "content": answer})
+                    
+                    # Show thinking process if enabled
+                    if show_thinking and thinking_steps:
+                        with st.expander("Show Kevin's Thinking Process", expanded=True):
+                            # Add a header with timing info
+                            total_steps = len(thinking_steps)
+                            start_time = thinking_steps[0].get("time", "") if thinking_steps else ""
+                            end_time = thinking_steps[-1].get("time", "") if thinking_steps else ""
+                            
+                            if start_time and end_time:
+                                st.markdown(f"**Processing Timeline:** {start_time} → {end_time} | **Steps:** {total_steps}")
+                            
+                            # Create a timeline view of the thinking steps
+                            st.markdown('<div class="thinking-timeline">', unsafe_allow_html=True)
+                            
+                            for step in thinking_steps:
+                                step_time = step.get("time", "")
+                                step_name = step.get("description", step.get("step", "Unknown step"))
+                                details = step.get("details", {})
+                                
+                                # Check if this is an error step to apply special styling
+                                is_error = "error" in step.get("step", "").lower() or "fail" in step.get("step", "").lower()
+                                step_class = "thinking-step thinking-error" if is_error else "thinking-step"
+                                
+                                # Format the step display using custom CSS
+                                st.markdown(f'<div class="{step_class}">', unsafe_allow_html=True)
+                                st.markdown(f'<span class="thinking-time">{step_time}</span> - <span class="thinking-description">{step_name}</span>', unsafe_allow_html=True)
+                                
+                                # Display details in a formatted way
+                                if details:
+                                    st.markdown('<div class="thinking-details">', unsafe_allow_html=True)
+                                    
+                                    # Handle different types of details
+                                    for key, value in details.items():
+                                        # Format key for better readability
+                                        display_key = key.replace("_", " ").title()
+                                        
+                                        if isinstance(value, list) and len(value) > 0:
+                                            st.markdown(f"<b>{display_key}:</b>", unsafe_allow_html=True)
+                                            for item in value:
+                                                if isinstance(item, dict):
+                                                    for k, v in item.items():
+                                                        # Format dictionary item keys
+                                                        display_k = k.replace("_", " ").title()
+                                                        st.markdown(f"• {display_k}: <span class='search-highlight'>{v}</span>", unsafe_allow_html=True)
+                                                else:
+                                                    st.markdown(f"• <span class='search-highlight'>{item}</span>", unsafe_allow_html=True)
+                                        elif isinstance(value, dict):
+                                            st.markdown(f"<b>{display_key}:</b>", unsafe_allow_html=True)
+                                            for k, v in value.items():
+                                                display_k = k.replace("_", " ").title()
+                                                st.markdown(f"• {display_k}: {v}", unsafe_allow_html=True)
+                                        elif key == "time_taken" or key == "elapsed_time":
+                                            # Highlight timing information
+                                            st.markdown(f"<b>{display_key}:</b> <span class='timing-highlight'>{value}</span>", unsafe_allow_html=True)
+                                        elif key == "error":
+                                            # Highlight errors
+                                            st.markdown(f"<b>{display_key}:</b> <span class='error-highlight'>{value}</span>", unsafe_allow_html=True)
+                                        else:
+                                            st.markdown(f"<b>{display_key}:</b> {value}", unsafe_allow_html=True)
+                                    
+                                    st.markdown('</div>', unsafe_allow_html=True)
+                                
+                                st.markdown('</div>', unsafe_allow_html=True)
+                            
+                            st.markdown('</div>', unsafe_allow_html=True)
                     
                     # Show sources if enabled
                     if show_sources:

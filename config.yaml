@@ -19,28 +19,31 @@ llm:
   api_key: "sk-a8c90a7a82884c0e994508e0608728eb"          # Set your DeepSeek API key here or in .env file as DEEPSEEK_API_KEY
   model_name: "deepseek-chat"  # DeepSeek model to use
   temperature: 0.1
-  max_tokens: 1000
-  request_timeout: 60   # Timeout for API requests in seconds
+  max_tokens: 800     # Reduced for faster responses
+  request_timeout: 30   # Reduced timeout for faster responses
+  use_cache: true     # Enable response caching for faster responses
+  max_retries: 2      # Reduced retries for faster responses
+  retry_delay: 1      # Reduced delay for faster responses
   fallback_to_huggingface: false  # Disabled - always use DeepSeek API
 
 # Web search configuration
 web_search:
-  enabled: false
+  enabled: true
   tavily_api_key: "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"  # Set your Tavily API key here or in .env file
   search_depth: "basic"  # basic or comprehensive
-  max_results: 5
+  max_results: 3        # Reduced for faster processing
 
 # Workflow settings
 workflow:
-  relevance_threshold: 0.7  # Threshold for document relevance (0-1)
-  hallucination_threshold: 0.8  # Threshold for hallucination detection (0-1)
-  include_web_results_in_rag: true  # Whether to add web search results to RAG store
+  relevance_threshold: 0.6  # Lowered threshold for document relevance (0-1)
+  hallucination_threshold: 0.7  # Lowered threshold for hallucination detection (0-1)
+  include_web_results_in_rag: false  # Disabled to speed up response time
 
 # Logging configuration
 logging:
   level: "INFO"       # Default log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-  console_level: "DEBUG"    # Console output log level
-  file_level: "DEBUG"      # File output log level
+  console_level: "DEBUG"    # Reduced logging for better performance
+  file_level: "INFO"      # Reduced logging for better performance
   max_file_size: 10485760  # Maximum log file size in bytes (10 MB)
   backup_count: 5          # Number of backup log files to keep
   log_api_calls: true      # Whether to log API calls (may contain sensitive data)
@@ -262,9 +265,5 @@ information_tags:
   - tag: "scholarships"
     keywords: ["scholarship", "award", "grant", "bursary", "financial aid", "funding", "support"] 
 
-# Changed from class-based configuration:
-# class Config:
-#     arbitrary_types_allowed = True
-
-# To dictionary-based configuration:
+# Pydantic configuration 
 model_config = {"arbitrary_types_allowed": True} 

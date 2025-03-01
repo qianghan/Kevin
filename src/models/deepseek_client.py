@@ -8,11 +8,13 @@ import json
 import requests
 import yaml
 import time
-from typing import Any, Dict, List, Mapping, Optional, Union
+import hashlib
+from typing import Any, Dict, List, Mapping, Optional, Union, ClassVar
+from functools import lru_cache
 from dotenv import load_dotenv
 from langchain.callbacks.manager import CallbackManagerForLLMRun
 from langchain.llms.base import LLM
-from pydantic import BaseModel, Field, root_validator
+from pydantic import BaseModel, Field, root_validator, model_validator
 
 # Add parent directory to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
@@ -26,6 +28,10 @@ load_dotenv()
 # Configure module logger
 logger = get_logger(__name__)
 
+# Create a simple cache for API responses
+RESPONSE_CACHE = {}
+MAX_CACHE_SIZE = 100  # Maximum number of cached responses
+
 class DeepSeekAPI(LLM, BaseModel):
     """LangChain compatible client for the DeepSeek API."""
     
@@ -38,10 +44,15 @@ class DeepSeekAPI(LLM, BaseModel):
     request_timeout: int = Field(default=60)
     max_retries: int = Field(default=3)
     retry_delay: int = Field(default=2)
+    use_cache: bool = Field(default=True)  # Whether to use caching
+    
+    # Add class variables with proper type annotations
+    EMBEDDING_CACHE: ClassVar[Dict[str, List[float]]] = {}
     
     model_config = {"arbitrary_types_allowed": True}
     
-    @root_validator(pre=True)
+    @model_validator(mode='before')
+    @classmethod
     def validate_environment(cls, values: Dict) -> Dict:
         """Validate that API key exists in environment."""
         # Load config if provided or use defaults/env vars
@@ -70,6 +81,7 @@ class DeepSeekAPI(LLM, BaseModel):
                 values["request_timeout"] = llm_config.get('request_timeout', values.get("request_timeout", 60))
                 values["max_retries"] = llm_config.get('max_retries', values.get("max_retries", 3))
                 values["retry_delay"] = llm_config.get('retry_delay', values.get("retry_delay", 2))
+                values["use_cache"] = llm_config.get('use_cache', values.get("use_cache", True))
         else:
             # Use environment variable if no config file
             logger.warning(f"Config file {config_path} not found, using environment variables")
@@ -88,6 +100,33 @@ class DeepSeekAPI(LLM, BaseModel):
     def _llm_type(self) -> str:
         return "deepseek"
     
+    def _get_cache_key(self, prompt: str, stop: Optional[List[str]] = None, **kwargs) -> str:
+        """Generate a cache key for the prompt and parameters."""
+        # Create a string representation of the kwargs that affect the output
+        kwargs_str = json.dumps({
+            "model": self.model_name,
+            "temperature": self.temperature,
+            "max_tokens": self.max_tokens,
+            "top_p": self.top_p,
+            "stop": stop,
+            **{k: v for k, v in kwargs.items() if k not in ["stream", "timeout"]}
+        }, sort_keys=True)
+        
+        # Combine prompt and kwargs to create a hash
+        combined = f"{prompt}|{kwargs_str}"
+        return hashlib.md5(combined.encode()).hexdigest()
+    
+    def _manage_cache(self):
+        """Manage the cache size to prevent memory issues."""
+        global RESPONSE_CACHE
+        if len(RESPONSE_CACHE) > MAX_CACHE_SIZE:
+            # Remove oldest 20% of cache entries
+            items_to_remove = int(MAX_CACHE_SIZE * 0.2)
+            keys_to_remove = list(RESPONSE_CACHE.keys())[:items_to_remove]
+            for key in keys_to_remove:
+                del RESPONSE_CACHE[key]
+            logger.debug(f"Cache pruned, removed {items_to_remove} entries")
+    
     def _call(
         self,
         prompt: str,
@@ -96,6 +135,13 @@ class DeepSeekAPI(LLM, BaseModel):
         **kwargs
     ) -> str:
         """Call the DeepSeek API with the given prompt."""
+        # Check cache first if caching is enabled
+        if self.use_cache:
+            cache_key = self._get_cache_key(prompt, stop, **kwargs)
+            if cache_key in RESPONSE_CACHE:
+                logger.info("Using cached response")
+                return RESPONSE_CACHE[cache_key]
+        
         # Log the API call
         prompt_preview = prompt[:100] + "..." if len(prompt) > 100 else prompt
         api_logger.info(f"DeepSeek API call: {prompt_preview}")
@@ -165,6 +211,13 @@ class DeepSeekAPI(LLM, BaseModel):
                     result_preview = result[:100] + "..." if len(result) > 100 else result
                     api_logger.info(f"DeepSeek API response received: {result_preview}")
                     logger.debug("API call successful")
+                    
+                    # Cache the result if caching is enabled
+                    if self.use_cache:
+                        cache_key = self._get_cache_key(prompt, stop, **kwargs)
+                        RESPONSE_CACHE[cache_key] = result
+                        self._manage_cache()
+                        
                     return result
                 except (KeyError, IndexError) as e:
                     error_msg = f"Failed to parse DeepSeek API response: {e}"
@@ -192,7 +245,7 @@ class DeepSeekAPI(LLM, BaseModel):
         logger.critical(error_msg)
         raise RuntimeError(error_msg)
     
-    # Custom invoke method to handle different input formats
+    # Cached version of invoke for better performance
     def invoke(self, input_data: Union[str, Dict[str, Any]], **kwargs) -> Union[str, Dict[str, str]]:
         """
         Invoke the model with the given input.
@@ -243,6 +296,13 @@ class DeepSeekAPI(LLM, BaseModel):
     
     def get_embedding(self, text: str) -> List[float]:
         """Get embedding for the given text using DeepSeek's embedding API."""
+        # Check cache first
+        if self.use_cache:
+            cache_key = hashlib.md5(text.encode()).hexdigest()
+            if cache_key in self.EMBEDDING_CACHE:
+                logger.info("Using cached embedding")
+                return self.EMBEDDING_CACHE[cache_key]
+                
         api_logger.info(f"Getting embedding for text: {text[:50]}...")
         
         headers = {
@@ -298,6 +358,17 @@ class DeepSeekAPI(LLM, BaseModel):
                     embedding = response_data["data"][0]["embedding"]
                     api_logger.info(f"Embedding received, dimension: {len(embedding)}")
                     logger.debug("Embedding API call successful")
+                    
+                    # Cache the embedding
+                    if self.use_cache:
+                        cache_key = hashlib.md5(text.encode()).hexdigest()
+                        self.EMBEDDING_CACHE[cache_key] = embedding
+                        # Manage embedding cache size
+                        if len(self.EMBEDDING_CACHE) > MAX_CACHE_SIZE:
+                            keys_to_remove = list(self.EMBEDDING_CACHE.keys())[:int(MAX_CACHE_SIZE * 0.2)]
+                            for key in keys_to_remove:
+                                del self.EMBEDDING_CACHE[key]
+                    
                     return embedding
                 except (KeyError, IndexError) as e:
                     error_msg = f"Failed to parse DeepSeek embedding API response: {e}"
@@ -331,7 +402,8 @@ class DeepSeekAPI(LLM, BaseModel):
             "model_name": self.model_name,
             "temperature": self.temperature,
             "max_tokens": self.max_tokens,
-            "top_p": self.top_p
+            "top_p": self.top_p,
+            "use_cache": self.use_cache
         }
 
 if __name__ == "__main__":
