@@ -1,3 +1,61 @@
+# Python virtual environments
+kevin/
+venv/
+env/
+.env/
+.venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+coverage.xml
+*.cover
+.hypothesis/
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+*.egg
+eggs/
+.eggs/
+*.so
+*.dylib
+*.dll
+wheelhouse/
+MANIFEST
+
+# IDEs and editors
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+*.sublime-*
+
+# Logs and databases
+*.log
+*.sqlite
+*.db
+chroma_db/
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage.*
+nosetests.xml
+
+# Other
+.coverage
+htmlcov/
+
 # Python build artifacts
 __pycache__/
 *.py[cod]
@@ -19,6 +77,7 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+kevin.egg-info/
 
 # Virtual environments
 kevin_env/
@@ -27,16 +86,28 @@ env/
 ENV/
 .env
 .venv/
+new_venv/
 env.bak/
 venv.bak/
 
 # Logs and databases
 logs/
+src/logs/
+test_logs/
 *.log
 *.sqlite
 *.db
 *.hdf5
 chromadb/
+
+# Cache and backup directories
+cache/
+chroma_db/
+chroma_db_backup*/
+*_backup*/
+data/cache/
+vector_db/
+embeddings/
 
 # Environment and secrets
 .env
@@ -70,6 +141,9 @@ htmlcov/
 .pytest_cache/
 .tox/
 .nox/
+reports/
+**/test-output/
+scraping_errors.txt
 
 # Jupyter Notebook
 .ipynb_checkpoints
@@ -86,6 +160,13 @@ site/
 *.tmp
 tmp/
 
-# Vector database files
-vector_db/
-embeddings/ 
+# Shell scripts (except important ones)
+# Uncomment the following if you want to ignore shell scripts
+# *.sh
+
+# Run-specific files that don't need version control
+run_*.py
+!run_kevin.py
+
+# Specific to this project
+kevin/ 

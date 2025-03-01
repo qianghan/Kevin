@@ -1,0 +1,645 @@
+[
+  {
+    "page_content": "404 page not found | University of Toronto Skip to main content 404 page not found We're sorry. It looks like this page has been moved or deleted. Back to homepage",
+    "metadata": {
+      "source": "https://www.utoronto.ca/admissions",
+      "title": "404 page not found | University of Toronto",
+      "crawled_at": "2025-03-01T09:02:59.595186",
+      "word_count": 31,
+      "status_code": 404,
+      "page_type": "admission_page",
+      "structured_data": {
+        "phones": [
+          "1041546173",
+          "1134326665",
+          "9153225340"
+        ]
+      },
+      "description": "We're sorry. It looks like this page was moved or deleted.",
+      "largest_section": "main",
+      "sections": [
+        "main",
+        "Main menu tools",
+        "Jump to menu",
+        "Main navigation",
+        "404 page not found",
+        "Main navigation repeated",
+        "Jump to menu repeated",
+        "Quick links"
+      ],
+      "content_categories": [
+        "admission"
+      ],
+      "information_types": "",
+      "content_density": 0.0016,
+      "content_quality": "low",
+      "university": "University of Toronto",
+      "from_cache": true
+    }
+  },
+  {
+    "page_content": "Finances - Future Students. University of Toronto | University of Toronto Finances Fees Learn about the costs associated with attending university. Get the Big Picture Awards (Scholarships and Grants) Our student awards (scholarships and grants) programs recognize a wide range of achievements — everything from academic excellence and leadership to community engagement and creative accomplishments. Explore What's Available Financial Aid There are many sources of financial aid available to help you cover the costs of your education — from OSAP and other government programs to aid provided by the University of Toronto. Explore Your Options FAQ How much does it cost to study at U of T? Your university fees consist of tuition, incidental and ancillary fees, and are based on several factors. In addition, you’ll want to consider other costs such as books, supplies, residence, transportation, food and other expenses. Find out more about the costs associated with university . How do I apply for Financial Aid? If you are a Canadian citizen, permanent resident or protected person, there are many sources of financial aid available to help you cover the costs of your University of Toronto education – from OSAP and other government aid, to assistance provided by the University. Explore your options . If you are an international applicant, you should find out about your home country’s financial aid programs to see if you qualify for assistance. The University of Toronto is a publicly-funded institution and because of that cannot offer financial aid to international students. Find out more about scholarships & awards for international students here. I’m an international applicant, can I receive financial assistance from U of T? The University of Toronto is a publicly-funded institution and because of that cannot offer financial aid to international students. If you are an international applicant, you should find out about your home country’s financial aid programs to see if you qualify for assistance. How do I apply for OSAP? Apply online at https://www.ontario.ca/osap Submit your OSAP application, then print and sign the consents and declaration pages – and any other required supporting documentation – and upload to your account on the OSAP website. Follow the instructions provided to complete your online Master Student Financial Assistance Agreement (MSFAA) with the National Student Loan Service Centre. If you are a returning applicant you may not need to submit any documentation. Find more details on our OSAP FAQ list. How do I apply for Scholarships? Eligible high school students are automatically considered for a variety of admission scholarships when they apply to the University. There are also admissions scholarships that require a separate application, and others that require you to complete an awards profile. Note, however, that the value of scholarships is rarely sufficient to cover all costs the student will incur while attending University of Toronto. Find out more about Scholarships here. How do I contact the Office of University Admissions and Outreach? Telephone & In-Person Inquiries We are available for telephone and in-person inquiries. Email Inquiries Connect with us by email for: Admissions: apply.adm.utoronto.ca/register/questions Ask a Student: apply.adm.utoronto.ca/register/askastudent Contact Client Services for financial aid inquires including: OSAP (Ontario Student Assistant Program) full and part-time BSWD (Bursaries for Students with Disabilities) UTAPS (University of Toronto Advanced Planning for Students) Part-Time Financial OOP Funding for other provinces outside of Ontario US student aid – for United States citizens (US Federal Student Aid loan opportunities, private loans (non-government), Veteran Affairs certification requests for benefits & education tax credit Your feedback is important to us. Please take a couple of minutes to let us know how we did by completing our University Admissions and Outreach Satisfaction Survey . Connect With Us",
+    "metadata": {
+      "source": "https://future.utoronto.ca/finances/",
+      "title": "Finances - Future Students. University of Toronto | University of Toronto",
+      "crawled_at": "2025-03-01T09:03:00.269729",
+      "word_count": 609,
+      "status_code": 200,
+      "page_type": "admission_page",
+      "structured_data": {
+        "phones": [
+          "1070635925",
+          "1098566587",
+          "1396859857"
+        ],
+        "lists": [
+          [
+            "How much does it cost to study at U of T?Your university fees consist of tuition, incidental and ancillary fees, and are based on several factors. In addition, you’ll want to consider other costs such as books, supplies, residence, transportation, food and other expenses.Find out more about the costs associated with university.",
+            "How do I apply for Financial Aid?If you are a Canadian citizen, permanent resident or protected person, there are many sources of financial aid available to help you cover the costs of your University of Toronto education – from OSAP and other government aid, to assistance provided by the University.Explore your options.If you are an international applicant, you should find out about your home country’s financial aid programs to see if you qualify for assistance. The University of Toronto is a publicly-funded institution and because of that cannot offer financial aid to international students.Find out more about scholarships & awards for international students here.",
+            "I’m an international applicant, can I receive financial assistance from U of T?The University of Toronto is a publicly-funded institution and because of that cannot offer financial aid to international students. If you are an international applicant, you should find out about your home country’s financial aid programs to see if you qualify for assistance.",
+            "How do I apply for OSAP?Apply online athttps://www.ontario.ca/osapSubmit your OSAP application, then print and sign the consents and declaration pages – and any other required supporting documentation – and upload to your account on the OSAP website.Follow the instructions provided to complete your online Master Student Financial Assistance Agreement (MSFAA) with the National Student Loan Service Centre.If you are a returning applicant you may not need to submit any documentation.Find more details on ourOSAP FAQ list.",
+            "How do I apply for Scholarships?Eligible high school students are automatically considered for a variety of admission scholarships when they apply to the University. There are also admissions scholarships that require a separate application, and others that require you to complete an awards profile.Note, however, that the value of scholarships is rarely sufficient to cover all costs the student will incur while attending University of Toronto.Find out more about Scholarships here.",
+            "How do I contact the Office of University Admissions and Outreach?Telephone & In-Person InquiriesWe are available for telephone and in-person inquiries.Email InquiriesConnect with us by email for:Admissions:apply.adm.utoronto.ca/register/questionsAsk a Student:apply.adm.utoronto.ca/register/askastudentContactClient Servicesfor financial aid inquires including:OSAP (Ontario Student Assistant Program) full and part-timeBSWD (Bursaries for Students with Disabilities)UTAPS (University of Toronto Advanced Planning for Students)Part-Time FinancialOOP Funding for other provinces outside of OntarioUS student aid – for United States citizens (US Federal Student Aid loan opportunities, private loans (non-government), Veteran Affairs certification requests for benefits & education tax creditYour feedback is important to us. Please take a couple of minutes to let us know how we did by completing ourUniversity Admissions and Outreach Satisfaction Survey.",
+            "Admissions:apply.adm.utoronto.ca/register/questions",
+            "Ask a Student:apply.adm.utoronto.ca/register/askastudent",
+            "OSAP (Ontario Student Assistant Program) full and part-time",
+            "BSWD (Bursaries for Students with Disabilities)",
+            "UTAPS (University of Toronto Advanced Planning for Students)",
+            "Part-Time Financial",
+            "OOP Funding for other provinces outside of Ontario",
+            "US student aid – for United States citizens (US Federal Student Aid loan opportunities, private loans (non-government), Veteran Affairs certification requests for benefits & education tax credit"
+          ],
+          [
+            "Admissions:apply.adm.utoronto.ca/register/questions",
+            "Ask a Student:apply.adm.utoronto.ca/register/askastudent"
+          ],
+          [
+            "OSAP (Ontario Student Assistant Program) full and part-time",
+            "BSWD (Bursaries for Students with Disabilities)",
+            "UTAPS (University of Toronto Advanced Planning for Students)",
+            "Part-Time Financial",
+            "OOP Funding for other provinces outside of Ontario",
+            "US student aid – for United States citizens (US Federal Student Aid loan opportunities, private loans (non-government), Veteran Affairs certification requests for benefits & education tax credit"
+          ]
+        ]
+      },
+      "largest_section": "Financial Aid",
+      "sections": [
+        "main",
+        "Finances",
+        "Fees",
+        "Awards (Scholarships and Grants)",
+        "Financial Aid"
+      ],
+      "content_categories": [
+        "international",
+        "graduate",
+        "tuition",
+        "student_life",
+        "admission",
+        "programs",
+        "contact",
+        "program"
+      ],
+      "information_types": "",
+      "content_density": 0.0677,
+      "content_quality": "high",
+      "university": "University of Toronto",
+      "from_cache": true
+    }
+  },
+  {
+    "page_content": "Financial Aid - Future Students. University of Toronto | University of Toronto Financial Aid Your Future at the University of Toronto is Within Reach We know that financing a university education is no small undertaking. It may involve a mix of financial resources—from student awards to government grants to part-time employment. It will also involve, most importantly, you. In addition to the financial aid programs below, prospective students and their families may wish to consider resources beyond those offered by the government and institution. These may include RESPs; external awards and scholarships offered by community organizations or companies; financial assistance and loans offered through banks and credit unions; part-time employment income; and contributions from family members. At U of T, our goal is to help students like you bring your dream of a university education within reach. Ontario Financial Aid For Ontario residents, the Ontario Student Assistance Program (OSAP) is a government financial aid program made up of a mix of grants and loans. Once you apply and qualify for OSAP, you’ll be considered automatically for other sources of funding, like the University of Toronto Advance Planning for Students (UTAPS) Program. Financial Aid for Ontario Students Canada Financial Aid If you’re from another Canadian province, territory, or First Nations band, you can apply for aid through your government’s financial aid program or your First Nations band. You may also apply for funding through the Out-of-Province University of Toronto Advance Planning for Students (UTAPS) Program. Financial Aid for Canadian Students United States of America Student Aid Students who are U.S. citizens or permanent residents in need of financial aid can explore various funding programs and find out tax information. Financial Aid for U.S. Students International Financial Aid If you’re looking to finance your education, it’s worth finding out about your home country’s financial aid programs to see if you qualify for assistance. U of T, being a publicly-funded institution, is unfortunately only able to offer financial aid to Canadian students. Financial Aid for International Students More About Financing and Funding Your University Education Don’t see what you’re looking for in the list above? Check out the University Registrar’s Office for complete details on the many financial resources and support options to help you finance your education at the University of Toronto. Part-Time Students Indigenous Tuition Initiative Students with Disabilities Emergency Assistance Grants Work Study Other Loans and Lines of Credit FAQ How much does it cost to study at U of T? Your university fees consist of tuition, incidental and ancillary fees, and are based on several factors. In addition, you’ll want to consider other costs such as books, supplies, residence, transportation, food and other expenses. Find out more about the costs associated with university . How do I apply for Financial Aid? If you are a Canadian citizen, permanent resident or protected person, there are many sources of financial aid available to help you cover the costs of your University of Toronto education – from OSAP and other government aid, to assistance provided by the University. Explore your options . If you are an international applicant, you should find out about your home country’s financial aid programs to see if you qualify for assistance. The University of Toronto is a publicly-funded institution and because of that cannot offer financial aid to international students. Find out more about scholarships & awards for international students here. I’m an international applicant, can I receive financial assistance from U of T? The University of Toronto is a publicly-funded institution and because of that cannot offer financial aid to international students. If you are an international applicant, you should find out about your home country’s financial aid programs to see if you qualify for assistance. How do I apply for OSAP? Apply online at https://www.ontario.ca/osap Submit your OSAP application, then print and sign the consents and declaration pages – and any other required supporting documentation – and upload to your account on the OSAP website. Follow the instructions provided to complete your online Master Student Financial Assistance Agreement (MSFAA) with the National Student Loan Service Centre. If you are a returning applicant you may not need to submit any documentation. Find more details on our OSAP FAQ list. How do I apply for Scholarships? Eligible high school students are automatically considered for a variety of admission scholarships when they apply to the University. There are also admissions scholarships that require a separate application, and others that require you to complete an awards profile. Note, however, that the value of scholarships is rarely sufficient to cover all costs the student will incur while attending University of Toronto. Find out more about Scholarships here. How do I contact the Office of University Admissions and Outreach? Telephone & In-Person Inquiries We are available for telephone and in-person inquiries. Email Inquiries Connect with us by email for: Admissions: apply.adm.utoronto.ca/register/questions Ask a Student: apply.adm.utoronto.ca/register/askastudent Contact Client Services for financial aid inquires including: OSAP (Ontario Student Assistant Program) full and part-time BSWD (Bursaries for Students with Disabilities) UTAPS (University of Toronto Advanced Planning for Students) Part-Time Financial OOP Funding for other provinces outside of Ontario US student aid – for United States citizens (US Federal Student Aid loan opportunities, private loans (non-government), Veteran Affairs certification requests for benefits & education tax credit Your feedback is important to us. Please take a couple of minutes to let us know how we did by completing our University Admissions and Outreach Satisfaction Survey . Connect With Us",
+    "metadata": {
+      "source": "https://future.utoronto.ca/finances/financial-aid/",
+      "title": "Financial Aid - Future Students. University of Toronto | University of Toronto",
+      "crawled_at": "2025-03-01T09:03:02.824514",
+      "word_count": 913,
+      "status_code": 200,
+      "page_type": "tuition_page",
+      "structured_data": {
+        "phones": [
+          "1156963718"
+        ],
+        "lists": [
+          [
+            "How much does it cost to study at U of T?Your university fees consist of tuition, incidental and ancillary fees, and are based on several factors. In addition, you’ll want to consider other costs such as books, supplies, residence, transportation, food and other expenses.Find out more about the costs associated with university.",
+            "How do I apply for Financial Aid?If you are a Canadian citizen, permanent resident or protected person, there are many sources of financial aid available to help you cover the costs of your University of Toronto education – from OSAP and other government aid, to assistance provided by the University.Explore your options.If you are an international applicant, you should find out about your home country’s financial aid programs to see if you qualify for assistance. The University of Toronto is a publicly-funded institution and because of that cannot offer financial aid to international students.Find out more about scholarships & awards for international students here.",
+            "I’m an international applicant, can I receive financial assistance from U of T?The University of Toronto is a publicly-funded institution and because of that cannot offer financial aid to international students. If you are an international applicant, you should find out about your home country’s financial aid programs to see if you qualify for assistance.",
+            "How do I apply for OSAP?Apply online athttps://www.ontario.ca/osapSubmit your OSAP application, then print and sign the consents and declaration pages – and any other required supporting documentation – and upload to your account on the OSAP website.Follow the instructions provided to complete your online Master Student Financial Assistance Agreement (MSFAA) with the National Student Loan Service Centre.If you are a returning applicant you may not need to submit any documentation.Find more details on ourOSAP FAQ list.",
+            "How do I apply for Scholarships?Eligible high school students are automatically considered for a variety of admission scholarships when they apply to the University. There are also admissions scholarships that require a separate application, and others that require you to complete an awards profile.Note, however, that the value of scholarships is rarely sufficient to cover all costs the student will incur while attending University of Toronto.Find out more about Scholarships here.",
+            "How do I contact the Office of University Admissions and Outreach?Telephone & In-Person InquiriesWe are available for telephone and in-person inquiries.Email InquiriesConnect with us by email for:Admissions:apply.adm.utoronto.ca/register/questionsAsk a Student:apply.adm.utoronto.ca/register/askastudentContactClient Servicesfor financial aid inquires including:OSAP (Ontario Student Assistant Program) full and part-timeBSWD (Bursaries for Students with Disabilities)UTAPS (University of Toronto Advanced Planning for Students)Part-Time FinancialOOP Funding for other provinces outside of OntarioUS student aid – for United States citizens (US Federal Student Aid loan opportunities, private loans (non-government), Veteran Affairs certification requests for benefits & education tax creditYour feedback is important to us. Please take a couple of minutes to let us know how we did by completing ourUniversity Admissions and Outreach Satisfaction Survey.",
+            "Admissions:apply.adm.utoronto.ca/register/questions",
+            "Ask a Student:apply.adm.utoronto.ca/register/askastudent",
+            "OSAP (Ontario Student Assistant Program) full and part-time",
+            "BSWD (Bursaries for Students with Disabilities)",
+            "UTAPS (University of Toronto Advanced Planning for Students)",
+            "Part-Time Financial",
+            "OOP Funding for other provinces outside of Ontario",
+            "US student aid – for United States citizens (US Federal Student Aid loan opportunities, private loans (non-government), Veteran Affairs certification requests for benefits & education tax credit"
+          ],
+          [
+            "Admissions:apply.adm.utoronto.ca/register/questions",
+            "Ask a Student:apply.adm.utoronto.ca/register/askastudent"
+          ],
+          [
+            "OSAP (Ontario Student Assistant Program) full and part-time",
+            "BSWD (Bursaries for Students with Disabilities)",
+            "UTAPS (University of Toronto Advanced Planning for Students)",
+            "Part-Time Financial",
+            "OOP Funding for other provinces outside of Ontario",
+            "US student aid – for United States citizens (US Federal Student Aid loan opportunities, private loans (non-government), Veteran Affairs certification requests for benefits & education tax credit"
+          ]
+        ]
+      },
+      "largest_section": "More About Financing and Funding Your University Education",
+      "sections": [
+        "main",
+        "Financial Aid",
+        "Your Future at the University of Toronto is Within Reach",
+        "Ontario Financial Aid",
+        "Canada Financial Aid",
+        "United States of America Student Aid",
+        "International Financial Aid",
+        "More About Financing and Funding Your University Education"
+      ],
+      "content_categories": [
+        "international",
+        "tuition",
+        "admission",
+        "contact",
+        "program"
+      ],
+      "information_types": "",
+      "content_density": 0.0913,
+      "content_quality": "high",
+      "university": "University of Toronto",
+      "from_cache": true
+    }
+  },
+  {
+    "page_content": "Page not found – Planning and Budget Skip to content It looks like nothing was found at this location. Maybe try a search? Search for: Search Button",
+    "metadata": {
+      "source": "https://planningandbudget.utoronto.ca/tuition-fee-schedules/",
+      "title": "Page not found – Planning and Budget",
+      "crawled_at": "2025-03-01T09:03:05.768119",
+      "word_count": 27,
+      "status_code": 404,
+      "page_type": "tuition_page",
+      "structured_data": {
+        "emails": [
+          "wordpress@example.com"
+        ]
+      },
+      "largest_section": "main",
+      "sections": [
+        "main",
+        "Oops! That page can’t be found."
+      ],
+      "content_categories": [
+        "deadline",
+        "deadlines",
+        "tuition"
+      ],
+      "information_types": "",
+      "content_density": 0.0019,
+      "content_quality": "low",
+      "university": "University of Toronto"
+    }
+  },
+  {
+    "page_content": "Fee Payment & Service Charge Billing Deadlines View your ACORN invoice starting in mid-July for the Fall-Winter session and mid-April for the Summer session. ACORN tuition fee billing marks the beginning of the registration period for each session. Complete your registration for each session by making a payment or obtaining a tuition deferral (register without payment) by your division’s Pay or Defer to Register deadline to avoid course enrolment and registration cancellation. If you obtained a tuition deferral (register without payment) or paid the Minimum Required payment amount displayed on your ACORN invoice or fees have changed since the registration period, pay outstanding fees by the Fall term, Winter term or Summer session deadlines. Otherwise, monthly service charge fees will be billed on your ACORN invoice on the 15th of every month at a monthly rate of 1.5% compounded (19.56% per annum) until paid in full. View Other Restrictions on Past Due Accounts . Pay or Defer to Register Deadlines for Each Session Before each session, your sessional registration status is initially set as “Invited to Register”. Fall-Winter session fee billing (September to April) will start on July 15, 2024. Summer session fee billing (May to August) will start on April 12, 2024. You can enroll in courses but your registration status has to be changed to “Registered” by your division’s Pay or Defer to Register deadline. Otherwise your sessional registration will be “Financially Cancelled”, and your course enrolment will be cancelled. You need to pay or defer to register for each session. Fall-Winter Session Pay or Defer to Register Deadlines Summer Session Pay or Defer to Register Deadlines Sessional Payment & Service Charge Billing Deadlines You Registered by Deferring If you obtained a tuition deferral(register without payment) to register for the session or fees have changed since the registration period, pay outstanding fees by the Fall term, Winter term or Summer session payment deadlines. Otherwise, monthly service charge fees will be billed on your ACORN invoice on the 15th of every month at a monthly rate of 1.5% compounded (19.56% per annum)until paid in full. Select your tuition deferral type to view Fall-Winter and Summer payment and service charge billing deadlines: OSAP Payments Other Provincial Government Loan Payments Third Party Sponsorship Payments Tuition Waivers for Staff and Dependants of Staff U.S. Loans & Benefits Payments UofT Graduate Funding Package Payments UofT Undergraduate Scholarships/Awards Payments Other Fee Payment Options (Education Savings Plans) You Registered Without a Deferral If you paid the Minimum Required payment amount displayed on your ACORN invoice to register for the Fall-Winter session or fees have changed since the registration period, pay outstanding fees by the Fall term, and Winter term payment deadlines. Otherwise, monthly service charge fees will be billed on your ACORN invoice on the 15th of every month at a monthly rate of 1.5% compounded (19.56% per annum) until paid in full. Fall-Winter Payment Schedule for Registered Students with No Deferral September 30, 2024 Deadline to pay for Fall term Tuition & Non-Tuition fee amounts October 15, 2024 First monthly service charge billing date for unpaid Fall term Tuition & Non-Tuition fee amounts November 30, 2024 Deadline to pay for Winter term Tuition & Non-Tuition fee amounts December 16, 2024 First monthly service charge billing date for unpaid Winter term Tuition & Non-Tuition fee amounts April 30, 2025 Final deadline for full payment of Fall-Winter session Tuition & Non-Tuition fees to avoid the recording of an ACORN financial hold on May 1, 2025, and ineligibility to register for future session(s). If you paid the Minimum Required payment amount displayed on your ACORN invoice to register for the Summer session or fees have changed since the Summer registration period, pay outstanding fees by the Summer session deadlines. Otherwise, monthly service charge fees will be billed on your ACORN invoice on the 15th of every month at a monthly rate of 1.5% compounded (19.56% per annum) until paid in full. Summer Payment Schedule for Registered Students with No Deferral May 31, 2024 Deadline to pay for Summer Session Tuition & Non-Tuition fee amounts June 15, 2024 First monthly service charge billing date for unpaid Summer session Tuition & Non-Tuition fee amounts August 31, 2024. Final deadline for full payment of Summer session Tuition & Non-Tuition fees to avoid the recording of an ACORN financial hold on September 1, 2024, and ineligibility to register for future session(s). * Some divisions may require an earlier deadline to pay Summer session fees to register for Fall-Winter session. Fee Payment Guidelines The amount owed is the ACORN Account Balance Up to the end of the Session displayed at the top right-hand corner of your current session (Fall-Winter session) invoice. If you have paid an academic or residence deposit for the upcoming Summer session, the deposit payment is displayed as an unapplied credit to the upcoming session and is not applied to unpaid Fall-Winter session fees. The University considers you to be responsible for all aspects of your registration including fee payment. If someone else is handling fee payment, it is your responsibility to advise that person of all rules and requirements. Paper invoices are not routinely mailed. You are expected to monitor your account on ACORN at www.acorn.utoronto.ca. Non-receipt of an invoice does not exempt you from meeting your financial obligations. If you were deferred (registered without payment) on the basis of funding, you are responsible for paying for tuition & non-tuition fees not covered by your funding. You are responsible for planning sufficient time for payments to reach the University’s bank account and to be recorded in your ACORN account by the payment and service charge deadlines. Monthly service charge of 1.5% compounded (19.56% per annum) will be billed(recorded) on your ACORN invoice on the 15th of every month until paid in full. Fee payments must be made by the end of the previous month to allow 5-10 business days for recording the fee payment in ACORN account by the monthly service charge billing date. On the current session invoice, Unpaid Fall Term Fee amount (>$0) = ROSI Account Balance Up to the End of the Session minus Winter Term TUITION Sub-Total amounts minus Winter Term NON-TUITION Sub-Total amounts. An ACORN financial hold will be automatically recorded on your account if full payment for the Fall-Winter session fees has not been recorded in the account by April 30th. This will block transcript requests, and registration for the next session will be refused. Fall and Winter term fees are billed at the same time, however you have the option to pay Fall and Winter fees separately. The Fall term balance is not displayed on the ACORN invoice How do I Calculate the Amount of Unpaid Fall Term Fees? Calculate the amount of the unpaid Fall term fees on your Fall-Winter session invoice: Unpaid Fall Term Fee amount = ROSI Account Balance Up to the End of the Session – Winter Term TUITION Sub-Total amounts (listed under TUITION CHARGES) – Winter Term NON-TUITION Sub-Total amounts (listed under NON-TUITION CHARGES) (A) – (B) – (C) Unpaid Fall Term fee amount = $3,573.31 = $14,450.00 (A) – $6,601.50(B) – $652.19(B) – $3,623.00(C) ROSI Account Balance Up to the End of the Session: $ 14,450.00 (A) TUITION – UTSC Bachelor of Commerce 2023 Winter Program fee FT – Domestic $ 6,601.50 Winter Term Sub-Total -------------- $ 6,601.50 (B) Incid. Stud.Soc.:U of T Community Radio-UTSC $ 3.75 Winter Term Sub-Total -------------- $ 652.19 (B) NON-TUITION CHARGES 2023 Winter UTSC Apartment Room $ 3,608.00 Scarborough Student Village Council $ 15.00 Winter Term Sub-Total -------------- $ 3,623.00 (C)",
+    "metadata": {
+      "source": "https://studentaccount.utoronto.ca/payment-deadlines-penalties/fee-payment-service-charge-billing-deadlines/",
+      "title": "Fee Payment & Service Charge Billing Deadlines - Student Accounts - University of Toronto",
+      "crawled_at": "2025-03-01T09:03:06.567941",
+      "word_count": 1261,
+      "status_code": 200,
+      "page_type": "tuition_page",
+      "structured_data": {
+        "phones": [
+          "416-978-2190"
+        ],
+        "tuition_info": "On the current session invoice, Unpaid Fall Term Fee amount (>$0) = ROSI Account Balance Up to the End of the Session minus Winter Term TUITION Sub-Total amounts minus Winter Term NON-TUITION Sub-Total amounts.\n= $3,573.31\n$14,450.00 (A)\n$6,601.50(B)\n$652.19(B)\n$3,623.00(C)\nROSI Account Balance Up to the End of the Session:$ 14,450.00 (A)\r\nTUITION – UTSC Bachelor of Commerce\r\n2023 Winter\r\nProgram fee FT – Domestic                              $  6,601.50\r\n\r\n                               Winter Term Sub-Total  --------------   $  6,601.50 (B)\r\n\r\nIncid. Stud.Soc.:U of T Community Radio-UTSC           $      3.75\r\n\r\n                               Winter Term Sub-Total  --------------   $    652.19 (B)\r\n\r\nNON-TUITION CHARGES\r\n2023 Winter\r\nUTSC Apartment Room                                    $  3,608.00\r\nScarborough Student Village Council                    $     15.00\r\n\r\n                               Winter Term Sub-Total  --------------   $  3,623.00 (C)\n",
+        "deadline_info": "Fall-Winter session fee billing (September to April) will start on July 15, 2024.\nSummer session fee billing (May to August) will start on April 12, 2024.\nSeptember 30, 2024\nOctober 15, 2024\nNovember 30, 2024\nDecember 16, 2024\nApril 30, 2025\nFinal deadline for full payment of Fall-Winter session Tuition & Non-Tuition fees to avoid the recording of an ACORN financial hold on May 1, 2025, and ineligibility to register for future session(s).\nMay 31, 2024\nJune 15, 2024\nAugust 31, 2024.\nFinal deadline for full payment of Summer session Tuition & Non-Tuition fees to avoid the recording of an ACORN financial hold on September 1, 2024, and ineligibility to register for future session(s). * Some divisions may require an earlier deadline to pay Summer session fees toregister for Fall-Winter session.\n",
+        "tables": [
+          {
+            "headers": [],
+            "rows": [
+              [
+                "Fall-Winter Payment Schedule for Registered Students with No Deferral"
+              ],
+              [
+                "September 30, 2024",
+                "Deadline to pay for Fall term Tuition & Non-Tuition fee amounts"
+              ],
+              [
+                "October 15, 2024",
+                "First monthly service charge billing date for unpaid Fall term Tuition & Non-Tuition fee amounts"
+              ],
+              [
+                "November 30, 2024",
+                "Deadline to pay for Winter term Tuition & Non-Tuition fee amounts"
+              ],
+              [
+                "December 16, 2024",
+                "First monthly service charge billing date for unpaid Winter term Tuition & Non-Tuition fee amounts"
+              ],
+              [
+                "April 30, 2025",
+                "Final deadline for full payment of Fall-Winter session Tuition & Non-Tuition fees to avoid the recording of an ACORN financial hold on May 1, 2025, and ineligibility to register for future session(s)."
+              ]
+            ]
+          },
+          {
+            "headers": [],
+            "rows": [
+              [
+                "Summer Payment Schedule for Registered Students with No Deferral"
+              ],
+              [
+                "May 31, 2024",
+                "Deadline to pay for Summer Session Tuition & Non-Tuition fee amounts"
+              ],
+              [
+                "June 15, 2024",
+                "First monthly service charge billing date for unpaid Summer session Tuition & Non-Tuition fee amounts"
+              ],
+              [
+                "August 31, 2024.",
+                "Final deadline for full payment of Summer session Tuition & Non-Tuition fees to avoid the recording of an ACORN financial hold on September 1, 2024, and ineligibility to register for future session(s). * Some divisions may require an earlier deadline to pay Summer session fees toregister for Fall-Winter session."
+              ]
+            ]
+          },
+          {
+            "headers": [],
+            "rows": [
+              [
+                "UnpaidFall TermFee amount",
+                "=",
+                "ROSIAccount Balance Up to the End of the Session",
+                "–",
+                "Winter Term TUITIONSub-Total amounts(listed underTUITIONCHARGES)",
+                "–",
+                "Winter Term NON-TUITIONSub-Total amounts(listed underNON-TUITIONCHARGES)"
+              ],
+              [
+                "",
+                "(A)",
+                "–",
+                "(B)",
+                "–",
+                "(C)"
+              ]
+            ]
+          }
+        ],
+        "lists": [
+          [
+            "Payment Deadlines & PenaltiesFall-Winter Session Pay or Defer DeadlinesFee Payment & Service Charge Billing DeadlinesRestrictions on Past Due AccountsSummer Session Pay or Defer to Register Deadlines",
+            "Fall-Winter Session Pay or Defer Deadlines",
+            "Fee Payment & Service Charge Billing Deadlines",
+            "Restrictions on Past Due Accounts",
+            "Summer Session Pay or Defer to Register Deadlines"
+          ],
+          [
+            "Fall-Winter Session Pay or Defer Deadlines",
+            "Fee Payment & Service Charge Billing Deadlines",
+            "Restrictions on Past Due Accounts",
+            "Summer Session Pay or Defer to Register Deadlines"
+          ],
+          [
+            "Fall-Winter session fee billing (September to April) will start on July 15, 2024.",
+            "Summer session fee billing (May to August) will start on April 12, 2024."
+          ],
+          [
+            "You Registered by DeferringIf you obtained a tuition deferral(register without payment) to register for the session or fees have changed since the registration period, pay outstanding fees by the Fall term, Winter term or Summer session payment deadlines.  Otherwise, monthly service charge fees will be billed on your ACORN invoice on the 15th of every month at a monthly rate of 1.5% compounded (19.56% per annum)until paid in full.Select your tuition deferral type to view Fall-Winter and Summer payment and service charge billing deadlines:OSAP PaymentsOther Provincial Government Loan PaymentsThird Party Sponsorship PaymentsTuition Waivers for Staff and Dependants of StaffU.S. Loans & Benefits PaymentsUofT Graduate Funding Package PaymentsUofT Undergraduate Scholarships/Awards PaymentsOther Fee Payment Options (Education Savings Plans)",
+            "OSAP Payments",
+            "Other Provincial Government Loan Payments",
+            "Third Party Sponsorship Payments",
+            "Tuition Waivers for Staff and Dependants of Staff",
+            "U.S. Loans & Benefits Payments",
+            "UofT Graduate Funding Package Payments",
+            "UofT Undergraduate Scholarships/Awards Payments",
+            "Other Fee Payment Options (Education Savings Plans)",
+            "You Registered Without a DeferralIf you paid the Minimum Required payment amount displayed on your ACORN invoice to register for the Fall-Winter session or fees have changed since the registration period, pay outstanding fees by the Fall term, and Winter term payment deadlines.  Otherwise, monthly service charge fees will be billed on your ACORN invoice on the 15th of every month at a monthly rate of 1.5% compounded (19.56% per annum) until paid in full.Fall-Winter Payment Schedule for Registered Students with No DeferralSeptember 30, 2024Deadline to pay for Fall term Tuition & Non-Tuition fee amountsOctober 15, 2024First monthly service charge billing date for unpaid Fall term Tuition & Non-Tuition fee amountsNovember 30, 2024Deadline to pay for Winter term Tuition & Non-Tuition fee amountsDecember 16, 2024First monthly service charge billing date for unpaid Winter term Tuition & Non-Tuition fee amountsApril 30, 2025Final deadline for full payment of Fall-Winter session Tuition & Non-Tuition fees to avoid the recording of an ACORN financial hold on May 1, 2025, and ineligibility to register for future session(s).If you paid the Minimum Required payment amount displayed on your ACORN invoice to register for the Summer session or fees have changed since the Summer registration period, pay outstanding fees by the Summer session deadlines.  Otherwise, monthly service charge fees will be billed on your ACORN invoice on the 15th of every month at a monthly rate of 1.5% compounded (19.56% per annum)  until paid in full.Summer Payment Schedule for Registered Students with No DeferralMay 31, 2024Deadline to pay for Summer Session Tuition & Non-Tuition fee amountsJune 15, 2024First monthly service charge billing date for unpaid Summer session Tuition & Non-Tuition fee amountsAugust 31, 2024.Final deadline for full payment of Summer session Tuition & Non-Tuition fees to avoid the recording of an ACORN financial hold on September 1, 2024, and ineligibility to register for future session(s). * Some divisions may require an earlier deadline to pay Summer session fees toregister for Fall-Winter session.",
+            "Fee Payment GuidelinesThe amount owed is the ACORN Account Balance Up to the end of the Session displayed at the top right-hand corner of your current session (Fall-Winter session) invoice.  If you have paid an academic or residence deposit for the upcoming Summer session, the deposit payment is displayed as an unapplied credit to the upcoming session and is not applied to unpaid Fall-Winter session fees.The University considers you to be responsible for all aspects of your registration including fee payment.  If someone else is handling fee payment, it is your responsibility to advise that person of all rules and requirements.Paper invoices are not routinely mailed.  You are expected to monitor your account on ACORN at www.acorn.utoronto.ca.  Non-receipt of an invoice does not exempt you from meeting your financial obligations.If you were deferred (registered without payment) on the basis of funding, you are responsible for paying for tuition & non-tuition fees not covered by your funding.You are responsible for planning sufficient time for payments to reach the University’s bank account and to be recorded in your ACORN account by the payment and service charge deadlines.Monthly service charge of 1.5% compounded (19.56% per annum) will be billed(recorded) on your ACORN invoice on the 15th of every month until paid in full.  Fee payments must be made by the end of the previous month to allow 5-10 business days for recording the fee payment in ACORN account by the monthly service charge billing date.On the current session invoice, Unpaid Fall Term Fee amount (>$0) = ROSI Account Balance Up to the End of the Session minus Winter Term TUITION Sub-Total amounts minus Winter Term NON-TUITION Sub-Total amounts.An ACORN financial hold will be automatically recorded on your account if full payment for the Fall-Winter session fees has not been recorded in the account by April 30th.  This will block transcript requests, and registration for the next session will be refused.Fall and Winter term fees are billed at the same time, however you have the option to pay Fall and Winter fees separately.  The Fall term balance is not displayed on the ACORN invoice",
+            "The amount owed is the ACORN Account Balance Up to the end of the Session displayed at the top right-hand corner of your current session (Fall-Winter session) invoice.  If you have paid an academic or residence deposit for the upcoming Summer session, the deposit payment is displayed as an unapplied credit to the upcoming session and is not applied to unpaid Fall-Winter session fees.",
+            "The University considers you to be responsible for all aspects of your registration including fee payment.  If someone else is handling fee payment, it is your responsibility to advise that person of all rules and requirements.",
+            "Paper invoices are not routinely mailed.  You are expected to monitor your account on ACORN at www.acorn.utoronto.ca.  Non-receipt of an invoice does not exempt you from meeting your financial obligations.",
+            "If you were deferred (registered without payment) on the basis of funding, you are responsible for paying for tuition & non-tuition fees not covered by your funding.",
+            "You are responsible for planning sufficient time for payments to reach the University’s bank account and to be recorded in your ACORN account by the payment and service charge deadlines.",
+            "Monthly service charge of 1.5% compounded (19.56% per annum) will be billed(recorded) on your ACORN invoice on the 15th of every month until paid in full.  Fee payments must be made by the end of the previous month to allow 5-10 business days for recording the fee payment in ACORN account by the monthly service charge billing date.",
+            "On the current session invoice, Unpaid Fall Term Fee amount (>$0) = ROSI Account Balance Up to the End of the Session minus Winter Term TUITION Sub-Total amounts minus Winter Term NON-TUITION Sub-Total amounts.",
+            "An ACORN financial hold will be automatically recorded on your account if full payment for the Fall-Winter session fees has not been recorded in the account by April 30th.  This will block transcript requests, and registration for the next session will be refused.",
+            "Fall and Winter term fees are billed at the same time, however you have the option to pay Fall and Winter fees separately.  The Fall term balance is not displayed on the ACORN invoice",
+            "How do I Calculate the Amount of Unpaid Fall Term Fees?Calculate the amount of the unpaid Fall term fees on your Fall-Winter session invoice:UnpaidFall TermFee amount=ROSIAccount Balance Up to the End of the Session–Winter Term TUITIONSub-Total amounts(listed underTUITIONCHARGES)–Winter Term NON-TUITIONSub-Total amounts(listed underNON-TUITIONCHARGES)(A)–(B)–(C)Unpaid Fall Term fee amount= $3,573.31=$14,450.00 (A)–$6,601.50(B)–$652.19(B)–$3,623.00(C)ROSI Account Balance Up to the End of the Session:$ 14,450.00 (A)\r\nTUITION – UTSC Bachelor of Commerce\r\n2023 Winter\r\nProgram fee FT – Domestic                              $  6,601.50\r\n\r\n                               Winter Term Sub-Total  --------------   $  6,601.50 (B)\r\n\r\nIncid. Stud.Soc.:U of T Community Radio-UTSC           $      3.75\r\n\r\n                               Winter Term Sub-Total  --------------   $    652.19 (B)\r\n\r\nNON-TUITION CHARGES\r\n2023 Winter\r\nUTSC Apartment Room                                    $  3,608.00\r\nScarborough Student Village Council                    $     15.00\r\n\r\n                               Winter Term Sub-Total  --------------   $  3,623.00 (C)"
+          ],
+          [
+            "OSAP Payments",
+            "Other Provincial Government Loan Payments",
+            "Third Party Sponsorship Payments",
+            "Tuition Waivers for Staff and Dependants of Staff",
+            "U.S. Loans & Benefits Payments",
+            "UofT Graduate Funding Package Payments",
+            "UofT Undergraduate Scholarships/Awards Payments",
+            "Other Fee Payment Options (Education Savings Plans)"
+          ],
+          [
+            "The amount owed is the ACORN Account Balance Up to the end of the Session displayed at the top right-hand corner of your current session (Fall-Winter session) invoice.  If you have paid an academic or residence deposit for the upcoming Summer session, the deposit payment is displayed as an unapplied credit to the upcoming session and is not applied to unpaid Fall-Winter session fees.",
+            "The University considers you to be responsible for all aspects of your registration including fee payment.  If someone else is handling fee payment, it is your responsibility to advise that person of all rules and requirements.",
+            "Paper invoices are not routinely mailed.  You are expected to monitor your account on ACORN at www.acorn.utoronto.ca.  Non-receipt of an invoice does not exempt you from meeting your financial obligations.",
+            "If you were deferred (registered without payment) on the basis of funding, you are responsible for paying for tuition & non-tuition fees not covered by your funding.",
+            "You are responsible for planning sufficient time for payments to reach the University’s bank account and to be recorded in your ACORN account by the payment and service charge deadlines.",
+            "Monthly service charge of 1.5% compounded (19.56% per annum) will be billed(recorded) on your ACORN invoice on the 15th of every month until paid in full.  Fee payments must be made by the end of the previous month to allow 5-10 business days for recording the fee payment in ACORN account by the monthly service charge billing date.",
+            "On the current session invoice, Unpaid Fall Term Fee amount (>$0) = ROSI Account Balance Up to the End of the Session minus Winter Term TUITION Sub-Total amounts minus Winter Term NON-TUITION Sub-Total amounts.",
+            "An ACORN financial hold will be automatically recorded on your account if full payment for the Fall-Winter session fees has not been recorded in the account by April 30th.  This will block transcript requests, and registration for the next session will be refused.",
+            "Fall and Winter term fees are billed at the same time, however you have the option to pay Fall and Winter fees separately.  The Fall term balance is not displayed on the ACORN invoice"
+          ]
+        ]
+      },
+      "largest_section": "main",
+      "sections": [
+        "main",
+        "Fee Payment & Service Charge Billing Deadlines",
+        "Pay or Defer to Register Deadlines for Each Session",
+        "You Registered by Deferring",
+        "You Registered Without a Deferral",
+        "Fee Payment Guidelines",
+        "How do I Calculate the Amount of Unpaid Fall Term Fees?"
+      ],
+      "content_categories": [
+        "deadline",
+        "deadlines",
+        "tuition",
+        "faculty",
+        "program"
+      ],
+      "information_types": "",
+      "content_density": 0.1631,
+      "content_quality": "high",
+      "university": "University of Toronto"
+    }
+  },
+  {
+    "page_content": "U of T News U of T ranked 21st in the world based on its reputation for teaching and research UTogether: Your guide to the U of T community Your journey starts here! There’s so much to experience on our three campuses — and UTogether is here to help you thrive in our vibrant university ecosystem. This is your roadmap to essential student, faculty and staff resources , academic and wellness supports , campus maps , where to eat , leadership messages , and more. Take a tour of this resource to discover your U of T! Explore UTogether Latest news February 28, 2025 In photos: U of T's Black History Month Luncheon 2025 February 27, 2025 A social worker experienced in conflict resolution, Faye Mishna to become U of T’s next ombudsperson February 27, 2025 U of T to confer honorary degrees on academic, business and community leaders More U of T News Upcoming events March 3 to March 7, 2025 Entrepreneurship Week 2025 February 28, 2025 Louise Langdon, Garveyism, and the Transformative Power of Black Canadian History in a Moment of Global Crisis March 3, 2025 Share Your Spark: Som Seif in conversation with Stephen Smith More U of T events U of T Celebrates The University of Toronto is home to some of the world’s top faculty, students, alumni and staff. U of T Celebrates recognizes their award-winning accomplishments. Explore U of T Celebrates Research & Innovation Geoffrey Hinton wins 2024 Nobel Prize in Physics From regional Canadian slang to the history of emoji to non-verbal autism, our new issue takes a deep dive into language – and how it affects the way we think, connect and live. Explore the issue Research Neuroscience When words won’t cooperate Psychology professor Morgan Barense aims to crack the mystery of non-speaking autism",
+    "metadata": {
+      "source": "https://www.utoronto.ca/",
+      "title": "University of Toronto",
+      "crawled_at": "2025-03-01T09:03:09.212113",
+      "word_count": 302,
+      "status_code": 200,
+      "page_type": "program_page",
+      "structured_data": {
+        "phones": [
+          "1041546173",
+          "1134326665",
+          "9153225340"
+        ],
+        "deadline_info": "February 28, 2025\nFebruary 27, 2025\nFebruary 27, 2025\nMarch 3 to March 7, 2025\nFebruary 28, 2025\nMarch 3, 2025\n"
+      },
+      "description": "The University of Toronto is a globally top-ranked public research university in Toronto, Ontario, Canada.",
+      "largest_section": "Jump to menu",
+      "sections": [
+        "main",
+        "Welcome to University of Toronto",
+        "Main menu tools",
+        "Jump to menu",
+        "Main navigation",
+        "UTogether: Your guide to the U of T community",
+        "Your journey starts here!",
+        "Latest news",
+        "Upcoming events",
+        "Main navigation repeated",
+        "Jump to menu repeated",
+        "Quick links"
+      ],
+      "content_categories": [
+        "international",
+        "student_life",
+        "programs",
+        "contact",
+        "faculty",
+        "program"
+      ],
+      "information_types": "",
+      "content_density": 0.0148,
+      "content_quality": "high",
+      "university": "University of Toronto",
+      "from_cache": true
+    }
+  },
+  {
+    "page_content": "University Fees How Much Will University Cost? The amount of tuition you pay will depend on factors such as your program and year of study, your course load and your campus. While the exact tuition fees for each academic year are typically finalized in the spring, you can take a look at the previous year’s amounts in your area of study to get an idea of how much you’ll pay in tuition. Remember that in addition to tuition, your total fees will include incidental and ancillary fees. Look up Tuition Fees for your area of study. Final tuition, fee schedules, and payment information are posted on the Student Accounts website . Incidental and Ancillary Fees Non-Academic Incidental Fees (or Incidental Fees) contribute to things like student societies, campus-based services, athletics and recreation facilities, and student health and dental plans. Many of these fees are compulsory, but you will have the option of opting out of a small proportion of them. Ancillary fees cover things like field-trip costs, or special equipment provided for coursework, as well as administrative costs such as transcript fees or library fines. Find out more about Incidental & Ancillary Fees. Other Costs of University There are a number of other costs to factor into your budget – for example, the cost of books, educational supplies, food, and residence. And international students should also factor in the University Health Insurance Plan (UHIP). Find more about other costs of attending university. To get a better idea of how much money you will need to cover tuition and fees, housing costs, food and everything else for the upcoming academic year, use our financial planning calculator to budget your costs. This is only a rough estimate on the cost of university, but should give you an idea about how much to budget. Find out more about registration steps and deadlines, including instructions on paying your fees and requesting a tuition fee deferral.",
+    "metadata": {
+      "source": "https://future.utoronto.ca/finances/fees/",
+      "title": "University Fees - Future Students. University of Toronto | University of Toronto",
+      "crawled_at": "2025-03-01T09:03:09.638970",
+      "word_count": 321,
+      "status_code": 200,
+      "page_type": "tuition_page",
+      "structured_data": {
+        "phones": [
+          "1485572115",
+          "1691727327",
+          "1732605675",
+          "1799336472"
+        ],
+        "lists": [
+          [
+            "University FeesOther Costs of University",
+            "Other Costs of University",
+            "Student AwardsAwards ProfileAdmission AwardsInternational Students",
+            "Awards Profile",
+            "Admission Awards",
+            "International Students",
+            "Financial AidOntario Financial AidCanada Financial AidUnited States of America Student AidInternational Student Aid",
+            "Ontario Financial Aid",
+            "Canada Financial Aid",
+            "United States of America Student Aid",
+            "International Student Aid"
+          ],
+          [
+            "Awards Profile",
+            "Admission Awards",
+            "International Students"
+          ],
+          [
+            "Ontario Financial Aid",
+            "Canada Financial Aid",
+            "United States of America Student Aid",
+            "International Student Aid"
+          ],
+          [
+            "How much does it cost to study at U of T?Your university fees consist of tuition, incidental and ancillary fees, and are based on several factors. In addition, you’ll want to consider other costs such as books, supplies, residence, transportation, food and other expenses.Find out more about the costs associated with university.",
+            "How do I apply for Financial Aid?If you are a Canadian citizen, permanent resident or protected person, there are many sources of financial aid available to help you cover the costs of your University of Toronto education – from OSAP and other government aid, to assistance provided by the University.Explore your options.If you are an international applicant, you should find out about your home country’s financial aid programs to see if you qualify for assistance. The University of Toronto is a publicly-funded institution and because of that cannot offer financial aid to international students.Find out more about scholarships & awards for international students here.",
+            "I’m an international applicant, can I receive financial assistance from U of T?The University of Toronto is a publicly-funded institution and because of that cannot offer financial aid to international students. If you are an international applicant, you should find out about your home country’s financial aid programs to see if you qualify for assistance.",
+            "How do I apply for OSAP?Apply online athttps://www.ontario.ca/osapSubmit your OSAP application, then print and sign the consents and declaration pages – and any other required supporting documentation – and upload to your account on the OSAP website.Follow the instructions provided to complete your online Master Student Financial Assistance Agreement (MSFAA) with the National Student Loan Service Centre.If you are a returning applicant you may not need to submit any documentation.Find more details on ourOSAP FAQ list.",
+            "How do I apply for Scholarships?Eligible high school students are automatically considered for a variety of admission scholarships when they apply to the University. There are also admissions scholarships that require a separate application, and others that require you to complete an awards profile.Note, however, that the value of scholarships is rarely sufficient to cover all costs the student will incur while attending University of Toronto.Find out more about Scholarships here.",
+            "How do I contact the Office of University Admissions and Outreach?Telephone & In-Person InquiriesWe are available for telephone and in-person inquiries.Email InquiriesConnect with us by email for:Admissions:apply.adm.utoronto.ca/register/questionsAsk a Student:apply.adm.utoronto.ca/register/askastudentContactClient Servicesfor financial aid inquires including:OSAP (Ontario Student Assistant Program) full and part-timeBSWD (Bursaries for Students with Disabilities)UTAPS (University of Toronto Advanced Planning for Students)Part-Time FinancialOOP Funding for other provinces outside of OntarioUS student aid – for United States citizens (US Federal Student Aid loan opportunities, private loans (non-government), Veteran Affairs certification requests for benefits & education tax creditYour feedback is important to us. Please take a couple of minutes to let us know how we did by completing ourUniversity Admissions and Outreach Satisfaction Survey.",
+            "Admissions:apply.adm.utoronto.ca/register/questions",
+            "Ask a Student:apply.adm.utoronto.ca/register/askastudent",
+            "OSAP (Ontario Student Assistant Program) full and part-time",
+            "BSWD (Bursaries for Students with Disabilities)",
+            "UTAPS (University of Toronto Advanced Planning for Students)",
+            "Part-Time Financial",
+            "OOP Funding for other provinces outside of Ontario",
+            "US student aid – for United States citizens (US Federal Student Aid loan opportunities, private loans (non-government), Veteran Affairs certification requests for benefits & education tax credit"
+          ],
+          [
+            "Admissions:apply.adm.utoronto.ca/register/questions",
+            "Ask a Student:apply.adm.utoronto.ca/register/askastudent"
+          ],
+          [
+            "OSAP (Ontario Student Assistant Program) full and part-time",
+            "BSWD (Bursaries for Students with Disabilities)",
+            "UTAPS (University of Toronto Advanced Planning for Students)",
+            "Part-Time Financial",
+            "OOP Funding for other provinces outside of Ontario",
+            "US student aid – for United States citizens (US Federal Student Aid loan opportunities, private loans (non-government), Veteran Affairs certification requests for benefits & education tax credit"
+          ]
+        ]
+      },
+      "largest_section": "Other Costs of University",
+      "sections": [
+        "main",
+        "Finances",
+        "How Much Will University Cost?",
+        "Incidental and Ancillary Fees",
+        "Other Costs of University"
+      ],
+      "content_categories": [
+        "international",
+        "deadline",
+        "program",
+        "tuition"
+      ],
+      "information_types": "",
+      "content_density": 0.0325,
+      "content_quality": "high",
+      "university": "University of Toronto",
+      "from_cache": true
+    }
+  },
+  {
+    "page_content": "Page not found - Student Accounts - University of Toronto Oh Dear! We appear to have misplaced the page you were looking for. Please use the included search form to find what you were looking for. Search for:",
+    "metadata": {
+      "source": "https://studentaccount.utoronto.ca/tuition-fees/current-academic-year-fees/",
+      "title": "Page not found - Student Accounts - University of Toronto",
+      "crawled_at": "2025-03-01T09:03:10.364465",
+      "word_count": 38,
+      "status_code": 404,
+      "page_type": "tuition_page",
+      "structured_data": {
+        "phones": [
+          "416-978-2190"
+        ]
+      },
+      "largest_section": "main",
+      "sections": [
+        "main",
+        "Oh Dear!"
+      ],
+      "content_categories": [
+        "tuition"
+      ],
+      "information_types": "",
+      "content_density": 0.0067,
+      "content_quality": "low",
+      "university": "University of Toronto"
+    }
+  },
+  {
+    "page_content": "Student Awards Student awards (scholarships and grants) are non-repayable monetary awards issued based on criteria such as merit, financial need, community engagement, leadership and athletic performance. What is an Award, Grant, and Scholarship? Award: An award can be a scholarship, fellowship, prize, grant or bursary. Grant: A monetary award based primarily on financial need. Sometimes “grant” and “bursary” are used interchangeably, but “grant” is the more common term used at U of T. Scholarship: A monetary award based on academic excellence alone or in combination with financial need. Thousands of non-repayable awards worth more than $100 million are available annually, based on merit, financial need, or a combination of both. Admission Awards Admission awards are for newly admitted students entering the University of Toronto in year one of their undergraduate studies. Students are automatically considered for a variety of admission awards when they apply to U of T. There are also admission awards that require students to complete a separate application or awards profile. Find out more about Admission Awards. Awards Profile The Awards Profile makes it possible for Canadian U of T applicants to be considered for admission awards based on financial need, academic merit, leadership, and other criteria. Find out more about the Awards Profile. Award Explorer The Award Explorer is a centralized, searchable database of thousands of awards from admissions to in-course and graduating awards. The database hold awards that are funded by the academic divisions, colleges, as well as awards that are centrally funded by the university as a whole. This tool can help you explore the diverse funding opportunities available to you. Most of our scholarships are awarded to multiple recipients. You can apply for as many awards as you like, and most awards can be combined with each other. Launch Award Explorer",
+    "metadata": {
+      "source": "https://future.utoronto.ca/finances/awards/",
+      "title": "Student Awards - Future Students. University of Toronto | University of Toronto",
+      "crawled_at": "2025-03-01T09:03:10.764680",
+      "word_count": 298,
+      "status_code": 200,
+      "page_type": "admission_page",
+      "structured_data": {
+        "phones": [
+          "1409952778",
+          "2057772635",
+          "1643177916"
+        ],
+        "tuition_info": "Thousands of non-repayable awards worth more than $100 million are available annually, based on merit, financial need, or a combination of both.\n",
+        "lists": [
+          [
+            "University FeesOther Costs of University",
+            "Other Costs of University",
+            "Student AwardsAwards ProfileAdmission AwardsInternational Students",
+            "Awards Profile",
+            "Admission Awards",
+            "International Students",
+            "Financial AidOntario Financial AidCanada Financial AidUnited States of America Student AidInternational Student Aid",
+            "Ontario Financial Aid",
+            "Canada Financial Aid",
+            "United States of America Student Aid",
+            "International Student Aid"
+          ],
+          [
+            "Awards Profile",
+            "Admission Awards",
+            "International Students"
+          ],
+          [
+            "Ontario Financial Aid",
+            "Canada Financial Aid",
+            "United States of America Student Aid",
+            "International Student Aid"
+          ],
+          [
+            "How much does it cost to study at U of T?Your university fees consist of tuition, incidental and ancillary fees, and are based on several factors. In addition, you’ll want to consider other costs such as books, supplies, residence, transportation, food and other expenses.Find out more about the costs associated with university.",
+            "How do I apply for Financial Aid?If you are a Canadian citizen, permanent resident or protected person, there are many sources of financial aid available to help you cover the costs of your University of Toronto education – from OSAP and other government aid, to assistance provided by the University.Explore your options.If you are an international applicant, you should find out about your home country’s financial aid programs to see if you qualify for assistance. The University of Toronto is a publicly-funded institution and because of that cannot offer financial aid to international students.Find out more about scholarships & awards for international students here.",
+            "I’m an international applicant, can I receive financial assistance from U of T?The University of Toronto is a publicly-funded institution and because of that cannot offer financial aid to international students. If you are an international applicant, you should find out about your home country’s financial aid programs to see if you qualify for assistance.",
+            "How do I apply for OSAP?Apply online athttps://www.ontario.ca/osapSubmit your OSAP application, then print and sign the consents and declaration pages – and any other required supporting documentation – and upload to your account on the OSAP website.Follow the instructions provided to complete your online Master Student Financial Assistance Agreement (MSFAA) with the National Student Loan Service Centre.If you are a returning applicant you may not need to submit any documentation.Find more details on ourOSAP FAQ list.",
+            "How do I apply for Scholarships?Eligible high school students are automatically considered for a variety of admission scholarships when they apply to the University. There are also admissions scholarships that require a separate application, and others that require you to complete an awards profile.Note, however, that the value of scholarships is rarely sufficient to cover all costs the student will incur while attending University of Toronto.Find out more about Scholarships here.",
+            "How do I contact the Office of University Admissions and Outreach?Telephone & In-Person InquiriesWe are available for telephone and in-person inquiries.Email InquiriesConnect with us by email for:Admissions:apply.adm.utoronto.ca/register/questionsAsk a Student:apply.adm.utoronto.ca/register/askastudentContactClient Servicesfor financial aid inquires including:OSAP (Ontario Student Assistant Program) full and part-timeBSWD (Bursaries for Students with Disabilities)UTAPS (University of Toronto Advanced Planning for Students)Part-Time FinancialOOP Funding for other provinces outside of OntarioUS student aid – for United States citizens (US Federal Student Aid loan opportunities, private loans (non-government), Veteran Affairs certification requests for benefits & education tax creditYour feedback is important to us. Please take a couple of minutes to let us know how we did by completing ourUniversity Admissions and Outreach Satisfaction Survey.",
+            "Admissions:apply.adm.utoronto.ca/register/questions",
+            "Ask a Student:apply.adm.utoronto.ca/register/askastudent",
+            "OSAP (Ontario Student Assistant Program) full and part-time",
+            "BSWD (Bursaries for Students with Disabilities)",
+            "UTAPS (University of Toronto Advanced Planning for Students)",
+            "Part-Time Financial",
+            "OOP Funding for other provinces outside of Ontario",
+            "US student aid – for United States citizens (US Federal Student Aid loan opportunities, private loans (non-government), Veteran Affairs certification requests for benefits & education tax credit"
+          ],
+          [
+            "Admissions:apply.adm.utoronto.ca/register/questions",
+            "Ask a Student:apply.adm.utoronto.ca/register/askastudent"
+          ],
+          [
+            "OSAP (Ontario Student Assistant Program) full and part-time",
+            "BSWD (Bursaries for Students with Disabilities)",
+            "UTAPS (University of Toronto Advanced Planning for Students)",
+            "Part-Time Financial",
+            "OOP Funding for other provinces outside of Ontario",
+            "US student aid – for United States citizens (US Federal Student Aid loan opportunities, private loans (non-government), Veteran Affairs certification requests for benefits & education tax credit"
+          ]
+        ]
+      },
+      "largest_section": "Award Explorer",
+      "sections": [
+        "main",
+        "Finances",
+        "Student Awards",
+        "What is an Award, Grant, and Scholarship?",
+        "Admission Awards",
+        "Awards Profile",
+        "Award Explorer"
+      ],
+      "content_categories": [
+        "graduate",
+        "admission",
+        "tuition"
+      ],
+      "information_types": "",
+      "content_density": 0.0299,
+      "content_quality": "high",
+      "university": "University of Toronto",
+      "from_cache": true
+    }
+  }
+]

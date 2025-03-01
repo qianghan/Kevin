@@ -1,0 +1,164 @@
+[
+  {
+    "page_content": "Student Awards Student awards (scholarships and grants) are non-repayable monetary awards issued based on criteria such as merit, financial need, community engagement, leadership and athletic performance. What is an Award, Grant, and Scholarship? Award: An award can be a scholarship, fellowship, prize, grant or bursary. Grant: A monetary award based primarily on financial need. Sometimes “grant” and “bursary” are used interchangeably, but “grant” is the more common term used at U of T. Scholarship: A monetary award based on academic excellence alone or in combination with financial need. Thousands of non-repayable awards worth more than $100 million are available annually, based on merit, financial need, or a combination of both. Admission Awards Admission awards are for newly admitted students entering the University of Toronto in year one of their undergraduate studies. Students are automatically considered for a variety of admission awards when they apply to U of T. There are also admission awards that require students to complete a separate application or awards profile. Find out more about Admission Awards. Awards Profile The Awards Profile makes it possible for Canadian U of T applicants to be considered for admission awards based on financial need, academic merit, leadership, and other criteria. Find out more about the Awards Profile. Award Explorer The Award Explorer is a centralized, searchable database of thousands of awards from admissions to in-course and graduating awards. The database hold awards that are funded by the academic divisions, colleges, as well as awards that are centrally funded by the university as a whole. This tool can help you explore the diverse funding opportunities available to you. Most of our scholarships are awarded to multiple recipients. You can apply for as many awards as you like, and most awards can be combined with each other. Launch Award Explorer",
+    "metadata": {
+      "source": "https://future.utoronto.ca/finances/awards/",
+      "title": "Student Awards - Future Students. University of Toronto | University of Toronto",
+      "crawled_at": "2025-03-01T08:52:34.749374",
+      "word_count": 298,
+      "status_code": 200,
+      "page_type": "admission_page",
+      "structured_data": {
+        "phones": [
+          "2057772635",
+          "1643177916",
+          "1409952778"
+        ],
+        "tuition_info": "Thousands of non-repayable awards worth more than $100 million are available annually, based on merit, financial need, or a combination of both.\n",
+        "lists": [
+          [
+            "University FeesOther Costs of University",
+            "Other Costs of University",
+            "Student AwardsAwards ProfileAdmission AwardsInternational Students",
+            "Awards Profile",
+            "Admission Awards",
+            "International Students",
+            "Financial AidOntario Financial AidCanada Financial AidUnited States of America Student AidInternational Student Aid",
+            "Ontario Financial Aid",
+            "Canada Financial Aid",
+            "United States of America Student Aid",
+            "International Student Aid"
+          ],
+          [
+            "Awards Profile",
+            "Admission Awards",
+            "International Students"
+          ],
+          [
+            "Ontario Financial Aid",
+            "Canada Financial Aid",
+            "United States of America Student Aid",
+            "International Student Aid"
+          ],
+          [
+            "How much does it cost to study at U of T?Your university fees consist of tuition, incidental and ancillary fees, and are based on several factors. In addition, you’ll want to consider other costs such as books, supplies, residence, transportation, food and other expenses.Find out more about the costs associated with university.",
+            "How do I apply for Financial Aid?If you are a Canadian citizen, permanent resident or protected person, there are many sources of financial aid available to help you cover the costs of your University of Toronto education – from OSAP and other government aid, to assistance provided by the University.Explore your options.If you are an international applicant, you should find out about your home country’s financial aid programs to see if you qualify for assistance. The University of Toronto is a publicly-funded institution and because of that cannot offer financial aid to international students.Find out more about scholarships & awards for international students here.",
+            "I’m an international applicant, can I receive financial assistance from U of T?The University of Toronto is a publicly-funded institution and because of that cannot offer financial aid to international students. If you are an international applicant, you should find out about your home country’s financial aid programs to see if you qualify for assistance.",
+            "How do I apply for OSAP?Apply online athttps://www.ontario.ca/osapSubmit your OSAP application, then print and sign the consents and declaration pages – and any other required supporting documentation – and upload to your account on the OSAP website.Follow the instructions provided to complete your online Master Student Financial Assistance Agreement (MSFAA) with the National Student Loan Service Centre.If you are a returning applicant you may not need to submit any documentation.Find more details on ourOSAP FAQ list.",
+            "How do I apply for Scholarships?Eligible high school students are automatically considered for a variety of admission scholarships when they apply to the University. There are also admissions scholarships that require a separate application, and others that require you to complete an awards profile.Note, however, that the value of scholarships is rarely sufficient to cover all costs the student will incur while attending University of Toronto.Find out more about Scholarships here.",
+            "How do I contact the Office of University Admissions and Outreach?Telephone & In-Person InquiriesWe are available for telephone and in-person inquiries.Email InquiriesConnect with us by email for:Admissions:apply.adm.utoronto.ca/register/questionsAsk a Student:apply.adm.utoronto.ca/register/askastudentContactClient Servicesfor financial aid inquires including:OSAP (Ontario Student Assistant Program) full and part-timeBSWD (Bursaries for Students with Disabilities)UTAPS (University of Toronto Advanced Planning for Students)Part-Time FinancialOOP Funding for other provinces outside of OntarioUS student aid – for United States citizens (US Federal Student Aid loan opportunities, private loans (non-government), Veteran Affairs certification requests for benefits & education tax creditYour feedback is important to us. Please take a couple of minutes to let us know how we did by completing ourUniversity Admissions and Outreach Satisfaction Survey.",
+            "Admissions:apply.adm.utoronto.ca/register/questions",
+            "Ask a Student:apply.adm.utoronto.ca/register/askastudent",
+            "OSAP (Ontario Student Assistant Program) full and part-time",
+            "BSWD (Bursaries for Students with Disabilities)",
+            "UTAPS (University of Toronto Advanced Planning for Students)",
+            "Part-Time Financial",
+            "OOP Funding for other provinces outside of Ontario",
+            "US student aid – for United States citizens (US Federal Student Aid loan opportunities, private loans (non-government), Veteran Affairs certification requests for benefits & education tax credit"
+          ],
+          [
+            "Admissions:apply.adm.utoronto.ca/register/questions",
+            "Ask a Student:apply.adm.utoronto.ca/register/askastudent"
+          ],
+          [
+            "OSAP (Ontario Student Assistant Program) full and part-time",
+            "BSWD (Bursaries for Students with Disabilities)",
+            "UTAPS (University of Toronto Advanced Planning for Students)",
+            "Part-Time Financial",
+            "OOP Funding for other provinces outside of Ontario",
+            "US student aid – for United States citizens (US Federal Student Aid loan opportunities, private loans (non-government), Veteran Affairs certification requests for benefits & education tax credit"
+          ]
+        ]
+      },
+      "largest_section": "Award Explorer",
+      "sections": [
+        "main",
+        "Finances",
+        "Student Awards",
+        "What is an Award, Grant, and Scholarship?",
+        "Admission Awards",
+        "Awards Profile",
+        "Award Explorer"
+      ],
+      "content_categories": [
+        "tuition",
+        "graduate",
+        "admission"
+      ],
+      "information_types": "",
+      "content_density": 0.0299,
+      "content_quality": "high",
+      "university": "University of Toronto"
+    }
+  },
+  {
+    "page_content": "404 page not found | University of Toronto Skip to main content 404 page not found We're sorry. It looks like this page has been moved or deleted. Back to homepage",
+    "metadata": {
+      "source": "https://www.utoronto.ca/financial-assistance",
+      "title": "404 page not found | University of Toronto",
+      "crawled_at": "2025-03-01T08:52:35.134444",
+      "word_count": 31,
+      "status_code": 404,
+      "page_type": "tuition_page",
+      "structured_data": {
+        "phones": [
+          "1134326665",
+          "1041546173",
+          "9153225340"
+        ]
+      },
+      "description": "We're sorry. It looks like this page was moved or deleted.",
+      "largest_section": "main",
+      "sections": [
+        "main",
+        "Main menu tools",
+        "Jump to menu",
+        "Main navigation",
+        "404 page not found",
+        "Main navigation repeated",
+        "Jump to menu repeated",
+        "Quick links"
+      ],
+      "content_categories": [
+        "tuition"
+      ],
+      "information_types": "",
+      "content_density": 0.0016,
+      "content_quality": "low",
+      "university": "University of Toronto",
+      "from_cache": true
+    }
+  },
+  {
+    "page_content": "Home - Future Students. University of Toronto | University of Toronto Your success starts here A world-renowned university in a celebrated city where knowledge meets achievement, history meets future, and ambition meets inspiration. Alumni and Links Janice Fukakusa University of Toronto BA '76 Current Industry: Business Bachelor of Arts (BA) 1976, Victoria College academics university life Sir Frederick Grant Banting University of Toronto DSC '23 Industry: Education, Medicine, Military Bachelor of Medicine (BMED) 1916 Doctor of Medicine (MD) 1922 Hon. Doctor of Science (DSC) 1923 David Onley University of Toronto LLD '09 Bachelor of Arts (BA) 1975, University of Toronto Scarborough, Hon. Doctor of Laws (Hon. LLD) 2009 visit Robert Herjavec University of Toronto BA '84 Current Industry: Business, Law Bachelor of Arts (BA) 1984, New College Chart your own path apply Mychael Danna University of Toronto BED '87 Current Industry: Entertainment Bachelor of Music (MUSBC) 1986 Bachelor of Education (BED) 1987 Jayna Hefford University of Toronto BPHE '04 Current Industry: Athletics Bachelor of Physical Health and Education (BPHE) 2004 finances Connect With Us",
+    "metadata": {
+      "source": "https://future.utoronto.ca/",
+      "title": "Home - Future Students. University of Toronto | University of Toronto",
+      "crawled_at": "2025-03-01T08:52:35.970167",
+      "word_count": 174,
+      "status_code": 200,
+      "page_type": "admission_page",
+      "structured_data": {
+        "phones": [
+          "1056975825",
+          "1146339054"
+        ]
+      },
+      "largest_section": "Alumni and Links",
+      "sections": [
+        "main",
+        "Your successstartshere",
+        "Alumni and Links"
+      ],
+      "content_categories": [
+        "contact",
+        "admission"
+      ],
+      "information_types": "",
+      "content_density": 0.0184,
+      "content_quality": "medium",
+      "university": "University of Toronto",
+      "from_cache": true
+    }
+  }
+]
