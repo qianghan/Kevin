@@ -9,7 +9,7 @@ import time
 from typing import List, Dict, Any, Optional
 from langchain.schema import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
 
 # Add parent directory to path
@@ -176,19 +176,14 @@ class DocumentProcessor:
             vectorstore.add_documents(chunked_docs)
             chunk_add_time = time.time() - chunk_add_start
             
-            # Persist changes
-            persist_start = time.time()
-            vectorstore.persist()
-            persist_time = time.time() - persist_start
-            
+            # Chroma automatically persists changes, no need to call persist()
             total_time = time.time() - start_time
             
-            logger.info(f"Documents added and vector store persisted in {total_time:.2f} seconds")
-            logger.debug(f"  - Chunking time: {chunk_add_time - (total_time - chunk_add_time):.2f}s")
+            logger.info(f"Documents added to vector store in {total_time:.2f} seconds")
+            logger.debug(f"  - Chunking time: {total_time - chunk_add_time:.2f}s")
             logger.debug(f"  - Adding time: {chunk_add_time:.2f}s")
-            logger.debug(f"  - Persist time: {persist_time:.2f}s")
             
-            doc_logger.info(f"Document addition complete: {len(chunked_docs)} chunks added in {total_time:.2f}s")
+            doc_logger.info(f"Successfully added {len(chunked_docs)} chunks to vector store")
         except Exception as e:
             logger.error(f"Error adding documents to vector store: {e}", exc_info=True)
             doc_logger.error(f"Document addition failed: {str(e)}")

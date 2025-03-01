@@ -8,10 +8,11 @@ import json
 import requests
 import yaml
 import time
-from typing import Any, Dict, List, Mapping, Optional
+from typing import Any, Dict, List, Mapping, Optional, Union
 from dotenv import load_dotenv
 from langchain.callbacks.manager import CallbackManagerForLLMRun
 from langchain.llms.base import LLM
+from pydantic import BaseModel, Field, root_validator
 
 # Add parent directory to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
@@ -25,23 +26,26 @@ load_dotenv()
 # Configure module logger
 logger = get_logger(__name__)
 
-class DeepSeekAPI(LLM):
+class DeepSeekAPI(LLM, BaseModel):
     """LangChain compatible client for the DeepSeek API."""
     
-    api_key: str
-    model_name: str = "deepseek-chat"
-    temperature: float = 0.1
-    max_tokens: int = 1000
-    top_p: float = 0.95
-    api_base: str = "https://api.deepseek.com/v1"
-    request_timeout: int = 60
-    max_retries: int = 3
-    retry_delay: int = 2
+    api_key: str = Field(default="")
+    model_name: str = Field(default="deepseek-chat")
+    temperature: float = Field(default=0.1)
+    max_tokens: int = Field(default=1000)
+    top_p: float = Field(default=0.95)
+    api_base: str = Field(default="https://api.deepseek.com/v1")
+    request_timeout: int = Field(default=60)
+    max_retries: int = Field(default=3)
+    retry_delay: int = Field(default=2)
     
-    def __init__(self, **kwargs):
-        """Initialize the DeepSeek API client."""
+    model_config = {"arbitrary_types_allowed": True}
+    
+    @root_validator(pre=True)
+    def validate_environment(cls, values: Dict) -> Dict:
+        """Validate that API key exists in environment."""
         # Load config if provided or use defaults/env vars
-        config_path = kwargs.pop("config_path", "config.yaml")
+        config_path = values.get("config_path", "config.yaml")
         
         logger.info(f"Initializing DeepSeek API client using config from {config_path}")
         
@@ -58,29 +62,27 @@ class DeepSeekAPI(LLM):
                 else:
                     logger.debug("Using API key from config file")
                 
-                kwargs.setdefault('api_key', api_key)
-                kwargs.setdefault('model_name', llm_config.get('model_name', self.model_name))
-                kwargs.setdefault('temperature', llm_config.get('temperature', self.temperature))
-                kwargs.setdefault('max_tokens', llm_config.get('max_tokens', self.max_tokens))
-                
-                # Set additional parameters from config if available
-                if 'request_timeout' in llm_config:
-                    kwargs.setdefault('request_timeout', llm_config.get('request_timeout'))
-                if 'max_retries' in llm_config:
-                    kwargs.setdefault('max_retries', llm_config.get('max_retries'))
+                # Apply config values to dictionary
+                values["api_key"] = api_key
+                values["model_name"] = llm_config.get('model_name', values.get("model_name", "deepseek-chat"))
+                values["temperature"] = llm_config.get('temperature', values.get("temperature", 0.1))
+                values["max_tokens"] = llm_config.get('max_tokens', values.get("max_tokens", 1000))
+                values["request_timeout"] = llm_config.get('request_timeout', values.get("request_timeout", 60))
+                values["max_retries"] = llm_config.get('max_retries', values.get("max_retries", 3))
+                values["retry_delay"] = llm_config.get('retry_delay', values.get("retry_delay", 2))
         else:
             # Use environment variable if no config file
             logger.warning(f"Config file {config_path} not found, using environment variables")
-            kwargs.setdefault('api_key', os.getenv('DEEPSEEK_API_KEY', ''))
-        
-        super().__init__(**kwargs)
-        
-        logger.info(f"DeepSeek API client initialized with model {self.model_name}")
-        
-        if not self.api_key:
+            values["api_key"] = os.getenv('DEEPSEEK_API_KEY', values.get("api_key", ""))
+            
+        if not values.get("api_key"):
             error_msg = "DeepSeek API key not found. Please set it in config.yaml or as DEEPSEEK_API_KEY environment variable."
             logger.critical(error_msg)
             raise ValueError(error_msg)
+            
+        logger.info(f"DeepSeek API client initialized with model {values.get('model_name')}")
+        
+        return values
     
     @property
     def _llm_type(self) -> str:
@@ -190,6 +192,55 @@ class DeepSeekAPI(LLM):
         logger.critical(error_msg)
         raise RuntimeError(error_msg)
     
+    # Custom invoke method to handle different input formats
+    def invoke(self, input_data: Union[str, Dict[str, Any]], **kwargs) -> Union[str, Dict[str, str]]:
+        """
+        Invoke the model with the given input.
+        
+        This method handles both string inputs and dictionary inputs to support
+        both LangChain v1 and v2 interfaces.
+        
+        Args:
+            input_data: Either a string prompt or a dictionary with an "input" key
+            **kwargs: Additional keyword arguments to pass to the model
+            
+        Returns:
+            Either a string response or a dictionary with an "output" key
+        """
+        try:
+            logger.debug(f"Invoke called with input type: {type(input_data)}")
+            
+            # Handle string input (LangChain v1 style)
+            if isinstance(input_data, str):
+                result = self._call(input_data, **kwargs)
+                return result
+                
+            # Handle dictionary input (LangChain v2 style)
+            elif isinstance(input_data, dict) and "input" in input_data:
+                prompt = input_data["input"]
+                result = self._call(prompt, **kwargs)
+                return {"output": result}
+                
+            # Handle other dictionary formats
+            elif isinstance(input_data, dict):
+                # Try to find a key that might contain the prompt
+                for key in ["prompt", "text", "query", "message", "content"]:
+                    if key in input_data:
+                        prompt = input_data[key]
+                        result = self._call(prompt, **kwargs)
+                        return {"output": result}
+                
+                # If we can't find a suitable key, raise an error
+                raise ValueError(f"Could not find a suitable prompt key in input: {input_data.keys()}")
+                
+            else:
+                raise ValueError(f"Unsupported input type: {type(input_data)}")
+                
+        except Exception as e:
+            logger.error(f"Error in invoke method: {str(e)}")
+            # Re-raise the exception to be handled by the caller
+            raise
+    
     def get_embedding(self, text: str) -> List[float]:
         """Get embedding for the given text using DeepSeek's embedding API."""
         api_logger.info(f"Getting embedding for text: {text[:50]}...")
@@ -201,7 +252,7 @@ class DeepSeekAPI(LLM):
         
         # Prepare request data
         data = {
-            "model": "deepseek-embedding",
+            "model": "deepseek-embed",
             "input": text
         }
         

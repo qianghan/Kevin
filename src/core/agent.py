@@ -49,10 +49,16 @@ class AgentState(TypedDict):
 
 # Initialize LLM based on configuration
 def get_llm():
-    """Get LLM based on configuration."""
-    logger.info("Initializing LLM based on configuration")
+    """Get the LLM to use for the agent."""
+    logger.info("Initializing LLM")
     
     try:
+        # Check for environment variable to force DeepSeek API usage
+        if os.getenv('USE_DEEPSEEK_ONLY', 'false').lower() in ('true', '1', 't'):
+            logger.info("USE_DEEPSEEK_ONLY is set - only using DeepSeek API")
+            return DeepSeekAPI()
+            
+        # Load configuration
         with open("config.yaml", 'r') as file:
             config = yaml.safe_load(file)
         
@@ -68,41 +74,18 @@ def get_llm():
                 return DeepSeekAPI()
             except Exception as e:
                 logger.error(f"Error initializing DeepSeek API: {str(e)}", exc_info=True)
-                
-                # Fall back to HuggingFace if configured and DeepSeek fails
-                if llm_config.get('fallback_to_huggingface', True):
-                    logger.warning("Falling back to HuggingFace model due to DeepSeek initialization failure")
-                    model_name = llm_config.get('fallback_model', "deepseek-ai/deepseek-coder-1.3b-base")
-                    logger.info(f"Initializing HuggingFace pipeline with model: {model_name}")
-                    
-                    llm_pipeline = pipeline(
-                        task="text-generation",
-                        model=model_name,
-                        max_length=llm_config.get('max_tokens', 2048),
-                        temperature=llm_config.get('temperature', 0.1),
-                        top_p=0.95,
-                        repetition_penalty=1.15
-                    )
-                    return HuggingFacePipeline(pipeline=llm_pipeline)
-                else:
-                    # Re-raise the exception if no fallback is configured
-                    logger.critical("No fallback configured and DeepSeek initialization failed")
-                    raise
+                # No fallback to HuggingFace, force DeepSeek API usage
+                logger.critical("DeepSeek API initialization failed and fallback is disabled")
+                raise RuntimeError(f"DeepSeek API must be configured properly: {str(e)}")
         else:
-            # Default to HuggingFace
-            logger.info("Provider set to use HuggingFace model directly")
-            model_name = llm_config.get('model_name', "deepseek-ai/deepseek-coder-1.3b-base")
-            logger.info(f"Initializing HuggingFace pipeline with model: {model_name}")
-            
-            llm_pipeline = pipeline(
-                task="text-generation",
-                model=model_name,
-                max_length=llm_config.get('max_tokens', 2048),
-                temperature=llm_config.get('temperature', 0.1),
-                top_p=0.95,
-                repetition_penalty=1.15
-            )
-            return HuggingFacePipeline(pipeline=llm_pipeline)
+            # Force provider to be deepseek
+            logger.warning(f"Provider '{provider}' is not supported. Only DeepSeek API is allowed. Switching to DeepSeek.")
+            try:
+                logger.info("Attempting to initialize DeepSeek API client")
+                return DeepSeekAPI()
+            except Exception as e:
+                logger.error(f"Error initializing DeepSeek API: {str(e)}", exc_info=True)
+                raise RuntimeError(f"DeepSeek API must be configured properly: {str(e)}")
     except Exception as e:
         logger.critical(f"Failed to initialize LLM: {str(e)}", exc_info=True)
         raise RuntimeError(f"Failed to initialize LLM: {str(e)}")
@@ -687,8 +670,17 @@ def decide_after_grading(state: AgentState) -> str:
 
 def should_end(state: AgentState) -> str:
     """Decide if the agent should end or continue."""
-    decision = "end" if state.get("has_answered", False) else "continue"
-    workflow_logger.info(f"End decision: {decision}")
+    # Ensure the has_answered flag is properly checked
+    has_answered = state.get("has_answered", False)
+    
+    # Additional safety check - if we have a response, assume we've answered
+    if state.get("response") and not has_answered:
+        workflow_logger.warning("Response exists but has_answered is False. Forcing has_answered to True.")
+        has_answered = True
+        state["has_answered"] = True
+    
+    decision = "end" if has_answered else "continue"
+    workflow_logger.info(f"End decision: {decision} (has_answered: {has_answered})")
     return decision
 
 # Build the graph
@@ -770,7 +762,8 @@ class UniversityAgent:
         logger.info("Initializing UniversityAgent")
         try:
             self.graph = build_agent()
-            self.graph_instance = self.graph.compile()
+            # Increase recursion limit to prevent infinite loops
+            self.graph_instance = self.graph.compile(recursion_limit=50)
             logger.info("UniversityAgent initialized successfully")
         except Exception as e:
             logger.critical(f"Failed to initialize UniversityAgent: {str(e)}", exc_info=True)

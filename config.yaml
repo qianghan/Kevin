@@ -4,6 +4,8 @@ scraping:
   timeout: 30         # Request timeout in seconds
   max_pages: 100      # Maximum pages to scrape per university
   user_agent: random  # Use random user agent or specify a string
+  max_retries: 3      # Maximum number of retries for failed requests
+  retry_delay: 2      # Initial delay between retries in seconds (doubles with each retry)
   
 # Vector database configuration
 vector_db:
@@ -13,21 +15,18 @@ vector_db:
 
 # LLM configuration
 llm:
-  provider: "deepseek"  # The LLM provider to use (deepseek, huggingface)
-  api_key: ""          # Set your DeepSeek API key here or in .env file as DEEPSEEK_API_KEY
+  provider: "deepseek"  # The LLM provider to use (only deepseek is supported)
+  api_key: "sk-a8c90a7a82884c0e994508e0608728eb"          # Set your DeepSeek API key here or in .env file as DEEPSEEK_API_KEY
   model_name: "deepseek-chat"  # DeepSeek model to use
   temperature: 0.1
   max_tokens: 1000
   request_timeout: 60   # Timeout for API requests in seconds
-  max_retries: 3        # Number of retries for failed API calls
-  retry_delay: 2        # Initial delay between retries in seconds (doubles with each retry)
-  fallback_to_huggingface: true  # Whether to fall back to HuggingFace if DeepSeek API fails
-  fallback_model: "deepseek-ai/deepseek-coder-1.3b-base"  # HuggingFace model to use as fallback
+  fallback_to_huggingface: false  # Disabled - always use DeepSeek API
 
 # Web search configuration
 web_search:
-  enabled: true
-  tavily_api_key: ""  # Set your Tavily API key here or in .env file
+  enabled: false
+  tavily_api_key: "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"  # Set your Tavily API key here or in .env file
   search_depth: "basic"  # basic or comprehensive
   max_results: 5
 
@@ -40,7 +39,7 @@ workflow:
 # Logging configuration
 logging:
   level: "INFO"       # Default log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-  console_level: "INFO"    # Console output log level
+  console_level: "DEBUG"    # Console output log level
   file_level: "DEBUG"      # File output log level
   max_file_size: 10485760  # Maximum log file size in bytes (10 MB)
   backup_count: 5          # Number of backup log files to keep
@@ -54,7 +53,7 @@ universities:
     base_url: "https://www.utoronto.ca/"
     focus_urls:
       - "https://www.utoronto.ca/academics"
-      - "https://www.utoronto.ca/admissions"
+      - "https://www.utoronto.ca/apply"
       - "https://www.adm.utoronto.ca/finances/"
       - "https://future.utoronto.ca/scholarships/"
   
@@ -262,3 +261,10 @@ information_tags:
   
   - tag: "scholarships"
     keywords: ["scholarship", "award", "grant", "bursary", "financial aid", "funding", "support"] 
+
+# Changed from class-based configuration:
+# class Config:
+#     arbitrary_types_allowed = True
+
+# To dictionary-based configuration:
+model_config = {"arbitrary_types_allowed": True} 

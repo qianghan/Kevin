@@ -40,9 +40,19 @@ def main():
     args = parser.parse_args()
     
     if args.mode == "web":
-        # Run Streamlit web interface
+        # Run Streamlit web interface using our launcher script
         print("Starting web interface...")
-        os.system("streamlit run src/web/app.py")
+        # Set environment variables to ensure DeepSeek API is used
+        os.environ['USE_DEEPSEEK_ONLY'] = '1'
+        os.environ['TORCH_WARN_ONCE'] = '1'
+        
+        # Use the launcher script
+        launcher_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "run_kevin.py")
+        if os.path.exists(launcher_path):
+            os.system(f"python {launcher_path}")
+        else:
+            # Fallback to direct streamlit run with environment variables set
+            os.system("streamlit run src/web/app.py")
     
     elif args.mode == "scrape":
         # Run web scraper
