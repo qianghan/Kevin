@@ -29,7 +29,7 @@ import sqlite3
 from langchain_core.documents import Document
 from langchain_core.vectorstores import VectorStore
 from langchain_community.vectorstores import FAISS
-from langchain_community.embeddings import HuggingFaceOnnxEmbeddings
+from langchain_community.embeddings import SentenceTransformerEmbeddings
 from langchain_community.document_loaders import (
     TextLoader,
     PyPDFLoader,
@@ -96,9 +96,9 @@ class DocumentProcessor:
         # Define the path to the FAISS index
         faiss_index_path = os.path.join(self.data_dir, "vectordb", "faiss_index")
         
-        # Use HuggingFaceOnnxEmbeddings for better semantic search
-        logger.info("Initializing HuggingFaceOnnxEmbeddings")
-        embedding_function = HuggingFaceOnnxEmbeddings(
+        # Use SentenceTransformerEmbeddings for better semantic search
+        logger.info("Initializing SentenceTransformerEmbeddings")
+        embedding_function = SentenceTransformerEmbeddings(
             model_name="all-MiniLM-L6-v2"
         )
         

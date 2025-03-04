@@ -20,8 +20,8 @@ import sqlite3
 from langchain_core.documents import Document
 from langchain_core.vectorstores import VectorStore
 from langchain_community.vectorstores import FAISS
-# Replace FakeEmbeddings with HuggingFaceOnnxEmbeddings
-from langchain_community.embeddings import HuggingFaceOnnxEmbeddings
+# Replace HuggingFaceOnnxEmbeddings with SentenceTransformerEmbeddings
+from langchain_community.embeddings import SentenceTransformerEmbeddings
 from langchain.chains import RetrievalQA
 from langchain_openai import ChatOpenAI
 
@@ -82,9 +82,9 @@ class RAGEngine:
         """Initialize the vector database."""
         logger = get_logger("rag.engine")
         try:
-            # Use HuggingFaceOnnxEmbeddings instead of FakeEmbeddings
-            logger.info("Initializing HuggingFaceOnnxEmbeddings")
-            embedding_function = HuggingFaceOnnxEmbeddings(
+            # Use SentenceTransformerEmbeddings instead
+            logger.info("Initializing SentenceTransformerEmbeddings")
+            embedding_function = SentenceTransformerEmbeddings(
                 model_name="all-MiniLM-L6-v2"
             )
             

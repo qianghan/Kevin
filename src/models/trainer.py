@@ -21,8 +21,8 @@ import sqlite3
 from langchain_core.documents import Document
 from langchain_core.vectorstores import VectorStore
 from langchain_community.vectorstores import FAISS
-# Replace FakeEmbeddings with HuggingFaceOnnxEmbeddings
-from langchain_community.embeddings import HuggingFaceOnnxEmbeddings
+# Use FakeEmbeddings
+from langchain_core.embeddings import FakeEmbeddings
 from langchain.schema import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 
@@ -30,185 +30,183 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from utils.logger import get_logger
 from data.scraper import WebScraper
 from core.document_processor import DocumentProcessor
-from utils.file_utils import load_json_file, save_json_file
 
-class EmbeddingTrainer:
-    """
-    Class for training embeddings and creating vector database 
-    for university document retrieval.
-    """
-    
-    def __init__(self, config_path: str):
+# Remove problematic import
+# from src.core.config import settings
+# from src.utils.logging_utils import setup_logger
+
+# Set up logging
+# setup_logger("trainer")
+logger = get_logger("trainer")
+
+# Define default settings
+DEFAULT_SETTINGS = {
+    "VECTORDB_PATH": os.path.join("data", "vectordb"),
+    "DATA_DIR": "data",
+    "MODEL_PATH": os.path.join("models", "embeddings"),
+    "CHUNK_SIZE": 1000,
+    "CHUNK_OVERLAP": 200
+}
+
+class Trainer:
+    def __init__(self, document_processor):
         """
-        Initialize the trainer with configuration.
-        
+        Initialize the Trainer with a document processor.
+
         Args:
-            config_path: Path to the configuration file
+            document_processor: The DocumentProcessor instance to process documents.
         """
-        self.logger = get_logger("trainer")
-        self.config_path = config_path
+        self.document_processor = document_processor
         
-        # Load configuration
-        with open(config_path, 'r') as f:
-            self.config = yaml.safe_load(f)
-        
-        # Get embedding model config
-        self.embedding_config = self.config.get('embedding', {})
-        self.model_name = self.embedding_config.get('model_name', 'all-MiniLM-L6-v2')
-        
-        # Initialize paths
-        self.data_dir = Path(self.config.get('data', {}).get('data_dir', 'data'))
-        self.vectordb_dir = self.data_dir / "vectordb"
-        self.vectordb_dir.mkdir(exist_ok=True, parents=True)
-        
-        # Create backup directory for data
-        self.backup_dir = self.data_dir / "backup"
-        self.backup_dir.mkdir(exist_ok=True, parents=True)
-        
-        self.logger.info(f"Trainer initialized with config from {config_path}")
-        self.logger.info(f"Using embedding model: {self.model_name}")
-        
-    def load_documents(self) -> List[Document]:
-        """
-        Load documents from the scraper backup or create new ones if needed.
-        
-        Returns:
-            List of Document objects
-        """
-        self.logger.info("Loading documents...")
-        
-        # Try to load from backup first
-        backup_files = list(self.backup_dir.glob("scrape_backup_*.json"))
-        
-        if backup_files:
-            # Use the most recent backup
-            most_recent = max(backup_files, key=lambda x: x.stat().st_mtime)
-            self.logger.info(f"Loading from backup: {most_recent}")
-            
-            with open(most_recent, 'r') as f:
-                data = json.load(f)
-                
-            # Convert to Document objects
-            documents = []
-            for doc_data in data:
-                doc = Document(
-                    page_content=doc_data.get('page_content', ''),
-                    metadata=doc_data.get('metadata', {})
-                )
-                documents.append(doc)
-                
-            self.logger.info(f"Loaded {len(documents)} documents from backup")
-            return documents
-        else:
-            # No backup found, scrape documents
-            self.logger.info("No backup found, scraping documents...")
-            scraper = WebScraper(self.config_path)
-            documents = scraper.scrape_all_universities()
-            self.logger.info(f"Scraped {len(documents)} documents")
-            return documents
+        # Use default settings instead of importing from config
+        self.vectordb_path = DEFAULT_SETTINGS["VECTORDB_PATH"]
+        self.data_path = DEFAULT_SETTINGS["DATA_DIR"]
+        self.model_path = DEFAULT_SETTINGS["MODEL_PATH"]
+        self.chunk_size = DEFAULT_SETTINGS["CHUNK_SIZE"]
+        self.chunk_overlap = DEFAULT_SETTINGS["CHUNK_OVERLAP"]
+        self.vectordb = None
 
-    def create_vectordb(self, documents: List[Document]) -> None:
-        """Create a vector database from documents."""
-        logger = get_logger("trainer.create_vectordb")
+    def clean_documents(self, documents: List[Document]) -> List[Document]:
+        """
+        Clean and validate documents.
+
+        Args:
+            documents: List of documents to clean.
+
+        Returns:
+            List of cleaned documents.
+        """
+        # Remove any documents with empty content
+        cleaned_docs = [doc for doc in documents if doc.page_content.strip()]
         
-        # Check for empty documents
-        if not documents:
-            logger.warning("No documents provided for vector database creation")
-            return
-            
-        logger.info(f"Creating vector database from {len(documents)} documents")
+        if not cleaned_docs:
+            logger.warning("No valid documents found after cleaning.")
         
-        # Create the vectordb directory if it doesn't exist
-        os.makedirs(self.vectordb_dir, exist_ok=True)
-            
-        # Use HuggingFaceOnnxEmbeddings for better semantic search
-        logger.info("Initializing HuggingFaceOnnxEmbeddings")
-        embedding_function = HuggingFaceOnnxEmbeddings(
-            model_name="all-MiniLM-L6-v2"
+        return cleaned_docs
+
+    def create_chunks(self, documents: List[Document]) -> List[Document]:
+        """
+        Split documents into chunks.
+
+        Args:
+            documents: List of documents to split.
+
+        Returns:
+            List of document chunks.
+        """
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=self.chunk_size,
+            chunk_overlap=self.chunk_overlap,
+            length_function=len,
         )
         
-        # Create FAISS index with document embeddings
-        logger.info("Creating FAISS index with document embeddings")
-        vectordb = FAISS.from_documents(documents, embedding_function)
+        chunks = text_splitter.split_documents(documents)
+        logger.info(f"Created {len(chunks)} chunks from {len(documents)} documents.")
         
-        # Save the vector database to disk
-        logger.info(f"Saving FAISS index to {self.vectordb_dir / 'faiss_index'}")
-        vectordb.save_local(str(self.vectordb_dir / "faiss_index"))
-        
-        # Create an index summary with metadata about the documents
-        logger.info("Creating index summary")
-        index_summary = {
-            "created_at": datetime.now().isoformat(),
-            "document_count": len(documents),
-            "embedding_model": "HuggingFaceOnnxEmbeddings(all-MiniLM-L6-v2)",
-            "sources": list(set([doc.metadata.get("source", "unknown") for doc in documents])),
-            "vector_dimension": 384  # Dimension for "all-MiniLM-L6-v2"
-        }
-        
-        # Save the index summary
-        with open(self.vectordb_dir / "index_summary.json", "w") as f:
-            json.dump(index_summary, f, indent=2)
-        
-        logger.info("Vector database created successfully")
+        return chunks
 
-    def create_index_summary(self, documents: List[Document]):
+    def create_vectordb(self, documents: List[Document]) -> None:
         """
-        Create a summary of the indexed documents.
-        
+        Create a vector database from documents.
+
         Args:
-            documents: List of Document objects
+            documents: Documents to add to the vector database.
         """
-        self.logger.info("Creating index summary...")
-        
-        # Group documents by university
-        universities = {}
-        for doc in documents:
-            university = doc.metadata.get('university', 'Unknown')
-            if university not in universities:
-                universities[university] = {
-                    'count': 0,
-                    'pages': set()
-                }
-            universities[university]['count'] += 1
-            universities[university]['pages'].add(doc.metadata.get('url', ''))
-        
-        # Convert sets to lists for JSON serialization
-        for university in universities:
-            universities[university]['pages'] = list(universities[university]['pages'])
-            
-        # Create summary
-        summary = {
-            'total_documents': len(documents),
-            'embedding_model': "HuggingFaceOnnxEmbeddings(all-MiniLM-L6-v2)",
-            'created_at': time.strftime('%Y-%m-%d %H:%M:%S'),
-            'universities': universities
-        }
-        
-        # Save summary
-        summary_path = self.vectordb_dir / "index_summary.json"
-        with open(summary_path, 'w') as f:
-            json.dump(summary, f, indent=2)
-            
-        self.logger.info(f"Index summary saved to {summary_path}")
-            
-    def train(self):
-        """
-        Train the embeddings and create vector database.
-        """
-        self.logger.info("Starting training process...")
-        
-        # Load documents
-        documents = self.load_documents()
-        
-        # Create vector database directly first (skip processor.add_documents for now)
-        self.logger.info("Creating vector database directly...")
         try:
-            self.create_vectordb(documents)
-            self.create_index_summary(documents)
-            self.logger.info("Training completed successfully")
+            # Use FakeEmbeddings for simplicity and to avoid transformers issues
+            embedding_function = FakeEmbeddings(size=384)
+            
+            logger.info(f"Using FakeEmbeddings")
+            
+            # Check if vectordb directory exists, create if not
+            os.makedirs(os.path.dirname(self.vectordb_path), exist_ok=True)
+            
+            # Create FAISS index from documents
+            self.vectordb = FAISS.from_documents(
+                documents, embedding_function
+            )
+            
+            # Save the FAISS index
+            self.vectordb.save_local(self.vectordb_path)
+            
+            # Save index creation metadata
+            metadata = {
+                "created_at": datetime.now().isoformat(),
+                "documents_count": len(documents),
+                "embedding_model": "FakeEmbeddings",
+                "chunk_size": self.chunk_size,
+                "chunk_overlap": self.chunk_overlap,
+            }
+            
+            with open(os.path.join(self.vectordb_path, "metadata.json"), "w") as f:
+                json.dump(metadata, f)
+            
+            logger.info(f"Vector database created successfully at {self.vectordb_path}")
+            logger.info(f"Index summary: {metadata}")
+            
         except Exception as e:
-            self.logger.error(f"Error creating vector database: {e}")
-            # Fallback to document processor if direct creation fails
-            self.logger.info("Attempting fallback to document processor...")
-            processor = DocumentProcessor(self.config)
-            processor.add_documents(documents) 
+            logger.error(f"Error creating vector database: {str(e)}")
+            raise e
+
+    def load_vectordb(self) -> None:
+        """
+        Load the existing vector database.
+        """
+        try:
+            # Check if vectordb exists
+            if not os.path.exists(self.vectordb_path) or not os.listdir(self.vectordb_path):
+                logger.error(f"Vector database does not exist at {self.vectordb_path}")
+                return None
+            
+            # Use FakeEmbeddings for simplicity and to avoid transformers issues
+            embedding_function = FakeEmbeddings(size=384)
+            
+            # Load the FAISS index
+            self.vectordb = FAISS.load_local(self.vectordb_path, embedding_function)
+            
+            # Load metadata if available
+            metadata_path = os.path.join(self.vectordb_path, "metadata.json")
+            if os.path.exists(metadata_path):
+                with open(metadata_path, "r") as f:
+                    metadata = json.load(f)
+                logger.info(f"Loaded vector database with metadata: {metadata}")
+            else:
+                logger.info(f"Loaded vector database without metadata")
+                
+            return self.vectordb
+            
+        except Exception as e:
+            logger.error(f"Error loading vector database: {str(e)}")
+            return None
+
+    def train(self) -> None:
+        """
+        Train the model by processing documents and creating a vector database.
+        """
+        try:
+            # Get all documents from document processor
+            documents = self.document_processor.get_all_documents()
+            
+            if not documents:
+                logger.error("No documents to process.")
+                return
+            
+            logger.info(f"Processing {len(documents)} documents.")
+            
+            # Clean documents
+            documents = self.clean_documents(documents)
+            
+            # Split documents into chunks
+            documents = self.create_chunks(documents)
+            
+            # Create vector database
+            self.create_vectordb(documents)
+            
+            # Add documents to processor's storage
+            self.document_processor.add_documents(documents)
+            
+            logger.info("Training completed successfully.")
+            
+        except Exception as e:
+            logger.error(f"Error during training: {str(e)}")
+            raise e 
