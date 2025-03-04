@@ -16,6 +16,7 @@ import traceback
 import json
 import logging
 from langchain_core.documents import Document
+import yaml
 
 # Configure logging
 def setup_logging(log_level=None):
@@ -155,10 +156,18 @@ def main():
         
         try:
             # Import trainer module
-            from models.trainer import EmbeddingTrainer
+            from models.trainer import Trainer
+            from core.document_processor import DocumentProcessor
             
-            # Initialize the trainer
-            trainer = EmbeddingTrainer(config_path)
+            # Load the config from config_path
+            with open(config_path, 'r') as f:
+                config = yaml.safe_load(f)
+            
+            # Initialize the document processor
+            doc_processor = DocumentProcessor(config)
+            
+            # Initialize the trainer with the document processor
+            trainer = Trainer(doc_processor)
             
             # Train the model
             trainer.train()

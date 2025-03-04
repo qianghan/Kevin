@@ -36,6 +36,7 @@ dependencies = [
     "langchain-openai>=0.0.2",
     "python-json-logger>=2.0.7",
     "colorlog>=6.7.0",
+    "spider_rs>=0.1.0",
 ]
 
 [project.urls]
@@ -43,7 +44,8 @@ dependencies = [
 "Bug Tracker" = "https://github.com/qianghan/Kevin/issues"
 
 [tool.setuptools]
-packages = ["src"]
+package-dir = {"" = "src"}
+packages = ["src", "src.core", "src.models", "src.utils", "src.web", "src.rag"]
 
 [project.scripts]
 kevin = "src.main:main" 

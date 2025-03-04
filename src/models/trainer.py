@@ -16,27 +16,26 @@ import glob
 from datetime import datetime
 import tempfile
 import sqlite3
-
-# Update imports - Remove ChromaDB and add FAISS
-from langchain_core.documents import Document
-from langchain_core.vectorstores import VectorStore
+import numpy as np
 from langchain_community.vectorstores import FAISS
-# Use FakeEmbeddings
-from langchain_core.embeddings import FakeEmbeddings
+from langchain_core.documents import Document
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_core.vectorstores import VectorStore
+from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain.schema import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
+from transformers import AutoTokenizer, AutoModel
+import torch
+from tqdm import tqdm
+import hashlib
+import pickle
 
 # Import related modules
-from utils.logger import get_logger
-from data.scraper import WebScraper
-from core.document_processor import DocumentProcessor
-
-# Remove problematic import
-# from src.core.config import settings
-# from src.utils.logging_utils import setup_logger
+from ..utils.logger import get_logger
+from ..data.scraper import WebScraper
+from ..core.document_processor import DocumentProcessor
 
 # Set up logging
-# setup_logger("trainer")
 logger = get_logger("trainer")
 
 # Define default settings
@@ -45,168 +44,287 @@ DEFAULT_SETTINGS = {
     "DATA_DIR": "data",
     "MODEL_PATH": os.path.join("models", "embeddings"),
     "CHUNK_SIZE": 1000,
-    "CHUNK_OVERLAP": 200
+    "CHUNK_OVERLAP": 200,
+    "EMBEDDING_MODEL": "sentence-transformers/all-MiniLM-L6-v2",
+    "BATCH_SIZE": 32,
+    "MAX_RETRIES": 3,
+    "DEVICE": "cuda" if torch.cuda.is_available() else "cpu"
 }
 
-class Trainer:
-    def __init__(self, document_processor):
-        """
-        Initialize the Trainer with a document processor.
+class CustomHuggingFaceEmbeddings:
+    """Custom embeddings class using HuggingFace models with batching and caching."""
+    
+    def __init__(self, model_name: str = DEFAULT_SETTINGS["EMBEDDING_MODEL"], 
+                 batch_size: int = DEFAULT_SETTINGS["BATCH_SIZE"],
+                 device: str = DEFAULT_SETTINGS["DEVICE"]):
+        """Initialize the embeddings model."""
+        self.model_name = model_name
+        self.batch_size = batch_size
+        self.device = device
+        self.tokenizer = None
+        self.model = None
+        self.cache = {}
+        self._load_model()
+        
+    def _load_model(self):
+        """Load the model and tokenizer."""
+        try:
+            logger.info(f"Loading model {self.model_name} on {self.device}")
+            self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+            self.model = AutoModel.from_pretrained(self.model_name).to(self.device)
+            self.model.eval()
+        except Exception as e:
+            logger.error(f"Error loading model: {e}")
+            raise
+            
+    def _get_embeddings(self, texts: List[str]) -> List[List[float]]:
+        """Get embeddings for a batch of texts."""
+        try:
+            # Check cache first
+            cache_key = hashlib.md5("".join(texts).encode()).hexdigest()
+            if cache_key in self.cache:
+                return self.cache[cache_key]
+            
+            # Tokenize texts
+            encoded = self.tokenizer(texts, padding=True, truncation=True, 
+                                  max_length=512, return_tensors="pt")
+            encoded = {k: v.to(self.device) for k, v in encoded.items()}
+            
+            # Get embeddings
+            with torch.no_grad():
+                outputs = self.model(**encoded)
+                embeddings = outputs.last_hidden_state[:, 0, :].cpu().numpy()
+            
+            # Normalize embeddings
+            embeddings = embeddings / np.linalg.norm(embeddings, axis=1, keepdims=True)
+            
+            # Cache results
+            self.cache[cache_key] = embeddings.tolist()
+            
+            return embeddings.tolist()
+            
+        except Exception as e:
+            logger.error(f"Error getting embeddings: {e}")
+            raise
+            
+    def embed_documents(self, texts: List[str]) -> List[List[float]]:
+        """Embed a list of documents."""
+        try:
+            all_embeddings = []
+            
+            # Process in batches
+            for i in tqdm(range(0, len(texts), self.batch_size), desc="Embedding documents"):
+                batch = texts[i:i + self.batch_size]
+                batch_embeddings = self._get_embeddings(batch)
+                all_embeddings.extend(batch_embeddings)
+                
+            return all_embeddings
+            
+        except Exception as e:
+            logger.error(f"Error embedding documents: {e}")
+            raise
+            
+    def embed_query(self, text: str) -> List[float]:
+        """Embed a single query."""
+        try:
+            return self._get_embeddings([text])[0]
+        except Exception as e:
+            logger.error(f"Error embedding query: {e}")
+            raise
 
+class Trainer:
+    """
+    Class for training a model, including document processing and vector database creation.
+    """
+    def __init__(self, document_processor, settings: Dict[str, Any] = None):
+        """
+        Initialize the trainer with a document processor.
+        
         Args:
-            document_processor: The DocumentProcessor instance to process documents.
+            document_processor: Instance of DocumentProcessor for handling documents
+            settings: Optional dictionary of settings to override defaults
         """
         self.document_processor = document_processor
+        self.settings = {**DEFAULT_SETTINGS, **(settings or {})}
         
-        # Use default settings instead of importing from config
-        self.vectordb_path = DEFAULT_SETTINGS["VECTORDB_PATH"]
-        self.data_path = DEFAULT_SETTINGS["DATA_DIR"]
-        self.model_path = DEFAULT_SETTINGS["MODEL_PATH"]
-        self.chunk_size = DEFAULT_SETTINGS["CHUNK_SIZE"]
-        self.chunk_overlap = DEFAULT_SETTINGS["CHUNK_OVERLAP"]
-        self.vectordb = None
-
+        # Initialize paths
+        self.vectordb_path = self.settings["VECTORDB_PATH"]
+        self.model_path = self.settings["MODEL_PATH"]
+        
+        # Create necessary directories
+        os.makedirs(self.vectordb_path, exist_ok=True)
+        os.makedirs(self.model_path, exist_ok=True)
+        
+        # Initialize embeddings
+        self.embeddings = CustomHuggingFaceEmbeddings(
+            model_name=self.settings["EMBEDDING_MODEL"],
+            batch_size=self.settings["BATCH_SIZE"],
+            device=self.settings["DEVICE"]
+        )
+        
     def clean_documents(self, documents: List[Document]) -> List[Document]:
         """
-        Clean and validate documents.
-
+        Clean the raw documents.
+        
         Args:
-            documents: List of documents to clean.
-
+            documents: List of raw documents
+            
         Returns:
-            List of cleaned documents.
+            List of cleaned documents
         """
-        # Remove any documents with empty content
-        cleaned_docs = [doc for doc in documents if doc.page_content.strip()]
+        logger.info(f"Cleaning {len(documents)} documents")
+        cleaned_docs = []
         
-        if not cleaned_docs:
-            logger.warning("No valid documents found after cleaning.")
-        
+        for doc in documents:
+            if not isinstance(doc, Document):
+                doc = Document(page_content=str(doc))
+                
+            # Clean text
+            text = doc.page_content
+            text = " ".join(text.split())  # Remove excess whitespace
+            
+            # Clean metadata
+            metadata = doc.metadata.copy()
+            metadata["cleaned_at"] = datetime.now().isoformat()
+            
+            cleaned_docs.append(Document(page_content=text, metadata=metadata))
+            
         return cleaned_docs
-
+    
     def create_chunks(self, documents: List[Document]) -> List[Document]:
         """
-        Split documents into chunks.
-
+        Create chunks from documents.
+        
         Args:
-            documents: List of documents to split.
-
+            documents: List of documents
+            
         Returns:
-            List of document chunks.
+            List of document chunks
         """
+        logger.info(f"Creating chunks from {len(documents)} documents")
+        
         text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=self.chunk_size,
-            chunk_overlap=self.chunk_overlap,
+            chunk_size=self.settings["CHUNK_SIZE"],
+            chunk_overlap=self.settings["CHUNK_OVERLAP"],
             length_function=len,
+            is_separator_regex=False,
         )
         
         chunks = text_splitter.split_documents(documents)
-        logger.info(f"Created {len(chunks)} chunks from {len(documents)} documents.")
+        logger.info(f"Created {len(chunks)} chunks")
         
         return chunks
-
-    def create_vectordb(self, documents: List[Document]) -> None:
+    
+    def create_vectordb(self, documents: List[Document]) -> VectorStore:
         """
         Create a vector database from documents.
-
+        
         Args:
-            documents: Documents to add to the vector database.
+            documents: List of documents
+            
+        Returns:
+            Vector database
         """
         try:
-            # Use FakeEmbeddings for simplicity and to avoid transformers issues
-            embedding_function = FakeEmbeddings(size=384)
+            logger.info("Creating vector database")
             
-            logger.info(f"Using FakeEmbeddings")
+            # Clean the documents
+            cleaned_docs = self.clean_documents(documents)
             
-            # Check if vectordb directory exists, create if not
-            os.makedirs(os.path.dirname(self.vectordb_path), exist_ok=True)
+            # Create chunks
+            chunks = self.create_chunks(cleaned_docs)
+            
+            if not chunks:
+                raise ValueError("No chunks found after processing documents")
             
             # Create FAISS index from documents
-            self.vectordb = FAISS.from_documents(
-                documents, embedding_function
-            )
+            logger.info(f"Creating FAISS index with {len(chunks)} chunks")
+            vectordb = FAISS.from_documents(chunks, self.embeddings)
             
-            # Save the FAISS index
-            self.vectordb.save_local(self.vectordb_path)
+            # Save the index
+            logger.info(f"Saving FAISS index to {self.vectordb_path}")
+            vectordb.save_local(self.vectordb_path)
             
-            # Save index creation metadata
+            # Save metadata about the vector database
             metadata = {
+                "chunk_size": self.settings["CHUNK_SIZE"],
+                "chunk_overlap": self.settings["CHUNK_OVERLAP"],
+                "embedding_model": self.settings["EMBEDDING_MODEL"],
+                "num_chunks": len(chunks),
                 "created_at": datetime.now().isoformat(),
-                "documents_count": len(documents),
-                "embedding_model": "FakeEmbeddings",
-                "chunk_size": self.chunk_size,
-                "chunk_overlap": self.chunk_overlap,
+                "settings": self.settings
             }
             
             with open(os.path.join(self.vectordb_path, "metadata.json"), "w") as f:
-                json.dump(metadata, f)
+                json.dump(metadata, f, indent=2)
             
-            logger.info(f"Vector database created successfully at {self.vectordb_path}")
-            logger.info(f"Index summary: {metadata}")
+            # Save embeddings cache
+            cache_path = os.path.join(self.vectordb_path, "embeddings_cache.pkl")
+            with open(cache_path, "wb") as f:
+                pickle.dump(self.embeddings.cache, f)
             
+            logger.info(f"Vector database creation complete with {len(chunks)} chunks")
+            return vectordb
+        
         except Exception as e:
-            logger.error(f"Error creating vector database: {str(e)}")
-            raise e
-
-    def load_vectordb(self) -> None:
+            logger.error(f"Error creating vector database: {e}")
+            raise
+    
+    def load_vectordb(self) -> VectorStore:
         """
-        Load the existing vector database.
+        Load a vector database.
+        
+        Returns:
+            Vector database
         """
         try:
-            # Check if vectordb exists
-            if not os.path.exists(self.vectordb_path) or not os.listdir(self.vectordb_path):
-                logger.error(f"Vector database does not exist at {self.vectordb_path}")
-                return None
+            logger.info(f"Loading vector database from {self.vectordb_path}")
             
-            # Use FakeEmbeddings for simplicity and to avoid transformers issues
-            embedding_function = FakeEmbeddings(size=384)
+            # Load metadata
+            metadata_path = os.path.join(self.vectordb_path, "metadata.json")
+            if not os.path.exists(metadata_path):
+                raise FileNotFoundError(f"Metadata file not found at {metadata_path}")
+                
+            with open(metadata_path, "r") as f:
+                metadata = json.load(f)
+            
+            # Load embeddings cache if available
+            cache_path = os.path.join(self.vectordb_path, "embeddings_cache.pkl")
+            if os.path.exists(cache_path):
+                with open(cache_path, "rb") as f:
+                    self.embeddings.cache = pickle.load(f)
             
             # Load the FAISS index
-            self.vectordb = FAISS.load_local(self.vectordb_path, embedding_function)
+            vectordb = FAISS.load_local(
+                self.vectordb_path,
+                self.embeddings,
+                allow_dangerous_deserialization=True  # We trust our own saved files
+            )
             
-            # Load metadata if available
-            metadata_path = os.path.join(self.vectordb_path, "metadata.json")
-            if os.path.exists(metadata_path):
-                with open(metadata_path, "r") as f:
-                    metadata = json.load(f)
-                logger.info(f"Loaded vector database with metadata: {metadata}")
-            else:
-                logger.info(f"Loaded vector database without metadata")
-                
-            return self.vectordb
-            
+            logger.info(f"Vector database loaded successfully")
+            return vectordb
+        
         except Exception as e:
-            logger.error(f"Error loading vector database: {str(e)}")
-            return None
-
-    def train(self) -> None:
+            logger.error(f"Error loading vector database: {e}")
+            raise
+    
+    def train(self):
         """
-        Train the model by processing documents and creating a vector database.
+        Train the model by creating a vector database.
         """
         try:
-            # Get all documents from document processor
+            logger.info("Starting training")
+            
+            # Get all documents
             documents = self.document_processor.get_all_documents()
-            
             if not documents:
-                logger.error("No documents to process.")
-                return
+                raise ValueError("No documents found for training")
             
-            logger.info(f"Processing {len(documents)} documents.")
-            
-            # Clean documents
-            documents = self.clean_documents(documents)
-            
-            # Split documents into chunks
-            documents = self.create_chunks(documents)
-            
-            # Create vector database
+            # Create the vector database
             self.create_vectordb(documents)
             
-            # Add documents to processor's storage
-            self.document_processor.add_documents(documents)
-            
-            logger.info("Training completed successfully.")
-            
+            logger.info("Training complete")
+        
         except Exception as e:
-            logger.error(f"Error during training: {str(e)}")
-            raise e 
+            logger.error(f"Error during training: {e}")
+            raise 

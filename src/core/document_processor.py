@@ -25,23 +25,17 @@ from collections import defaultdict, Counter
 from tqdm import tqdm
 import uuid
 import sqlite3
+import numpy as np
 
 from langchain_core.documents import Document
 from langchain_core.vectorstores import VectorStore
 from langchain_community.vectorstores import FAISS
-from langchain_community.embeddings import SentenceTransformerEmbeddings
-from langchain_community.document_loaders import (
-    TextLoader,
-    PyPDFLoader,
-    CSVLoader,
-    UnstructuredMarkdownLoader,
-    UnstructuredHTMLLoader,
-    UnstructuredWordDocumentLoader,
-    UnstructuredExcelLoader
-)
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-from utils.logger import get_logger
+from ..utils.logger import get_logger
+from ..models.embeddings import SimpleEmbeddings
+
+logger = logging.getLogger(__name__)
 
 class DocumentProcessor:
     """
@@ -61,7 +55,7 @@ class DocumentProcessor:
         
         # Get embedding model config
         self.embedding_config = config.get('embedding', {})
-        self.embedding_model = self.embedding_config.get('model_name', 'sentence-transformers/all-MiniLM-L6-v2')
+        self.embedding_model = self.embedding_config.get('model_name', 'all-MiniLM-L6-v2')
         self.fallback_embedding_models = self.embedding_config.get('fallback_models', [
             'all-MiniLM-L6-v2', 
             'paraphrase-MiniLM-L3-v2', 
@@ -96,10 +90,10 @@ class DocumentProcessor:
         # Define the path to the FAISS index
         faiss_index_path = os.path.join(self.data_dir, "vectordb", "faiss_index")
         
-        # Use SentenceTransformerEmbeddings for better semantic search
-        logger.info("Initializing SentenceTransformerEmbeddings")
-        embedding_function = SentenceTransformerEmbeddings(
-            model_name="all-MiniLM-L6-v2"
+        # Use HuggingFaceEmbeddings for better semantic search
+        logger.info(f"Initializing HuggingFaceEmbeddings with model {self.embedding_model}")
+        embedding_function = HuggingFaceEmbeddings(
+            model_name=self.embedding_model
         )
         
         # Check if FAISS index exists
@@ -254,6 +248,188 @@ class DocumentProcessor:
         except Exception as e:
             logger.error(f"Error adding documents to vector store: {str(e)}")
             raise e
+
+    def get_all_documents(self) -> List[Document]:
+        """
+        Get all documents from the data directory.
+        
+        Returns:
+            List of documents
+        """
+        logger = get_logger("core.document_processor")
+        documents = []
+        
+        # Define the data path to scan for documents
+        data_path = os.path.join(self.data_dir, "raw")
+        
+        # Create data path if it doesn't exist
+        os.makedirs(data_path, exist_ok=True)
+        
+        # Create a sample document if there are no documents
+        if not os.listdir(data_path):
+            logger.warning("No documents found in data directory, creating a sample document")
+            sample_content = """# Sample Document
+This is a sample document created because no documents were found in the data directory.
+You should add more documents to improve the quality of the search.
+
+## Topics
+- Canadian universities
+- Programs and courses
+- Admission requirements
+- Tuition fees
+- Campus life
+"""
+            sample_file = os.path.join(data_path, "sample.md")
+            with open(sample_file, "w") as f:
+                f.write(sample_content)
+        
+        # Define loaders for different file types
+        loaders = {
+            ".txt": self._load_text_file,
+            ".md": self._load_markdown_file,
+            ".pdf": self._load_pdf_file,
+            ".csv": self._load_csv_file,
+            ".json": self._load_json_file,
+            ".html": self._load_html_file,
+        }
+        
+        # Find all files in the data directory
+        file_count = 0
+        loaded_count = 0
+        
+        logger.info(f"Scanning directory {data_path} for documents")
+        for root, _, files in os.walk(data_path):
+            for file in files:
+                file_path = os.path.join(root, file)
+                file_count += 1
+                
+                # Get file extension
+                ext = os.path.splitext(file)[1].lower()
+                
+                if ext in loaders:
+                    try:
+                        logger.info(f"Loading {file_path}")
+                        docs = loaders[ext](file_path)
+                        
+                        # Add source metadata to each document
+                        for doc in docs:
+                            if "source" not in doc.metadata:
+                                doc.metadata["source"] = file_path
+                        
+                        documents.extend(docs)
+                        loaded_count += 1
+                        logger.info(f"Loaded {len(docs)} documents from {file_path}")
+                    except Exception as e:
+                        logger.error(f"Error loading {file_path}: {e}")
+                else:
+                    logger.warning(f"Unsupported file type: {file_path}")
+        
+        logger.info(f"Loaded {loaded_count}/{file_count} files, total documents: {len(documents)}")
+        
+        return documents
+
+    def _load_text_file(self, file_path: str) -> List[Document]:
+        """
+        Load a text file.
+        
+        Args:
+            file_path: Path to the text file
+            
+        Returns:
+            List of documents
+        """
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                text = f.read()
+            return [Document(page_content=text, metadata={"source": file_path})]
+        except Exception as e:
+            logger.error(f"Error loading text file {file_path}: {e}")
+            return []
+    
+    def _load_markdown_file(self, file_path: str) -> List[Document]:
+        """
+        Load a markdown file.
+        
+        Args:
+            file_path: Path to the markdown file
+            
+        Returns:
+            List of documents
+        """
+        # For this simple implementation, we'll treat markdown as plain text
+        return self._load_text_file(file_path)
+    
+    def _load_pdf_file(self, file_path: str) -> List[Document]:
+        """
+        Load a PDF file.
+        
+        Args:
+            file_path: Path to the PDF file
+            
+        Returns:
+            List of documents
+        """
+        try:
+            # Use a placeholder for PDF loading
+            logger.warning(f"PDF loading not fully implemented for {file_path}")
+            return [Document(page_content=f"PDF content from {file_path}", metadata={"source": file_path})]
+        except Exception as e:
+            logger.error(f"Error loading PDF file {file_path}: {e}")
+            return []
+    
+    def _load_csv_file(self, file_path: str) -> List[Document]:
+        """
+        Load a CSV file.
+        
+        Args:
+            file_path: Path to the CSV file
+            
+        Returns:
+            List of documents
+        """
+        try:
+            # Use a placeholder for CSV loading
+            logger.warning(f"CSV loading not fully implemented for {file_path}")
+            return [Document(page_content=f"CSV content from {file_path}", metadata={"source": file_path})]
+        except Exception as e:
+            logger.error(f"Error loading CSV file {file_path}: {e}")
+            return []
+    
+    def _load_json_file(self, file_path: str) -> List[Document]:
+        """
+        Load a JSON file.
+        
+        Args:
+            file_path: Path to the JSON file
+            
+        Returns:
+            List of documents
+        """
+        try:
+            # Use a placeholder for JSON loading
+            logger.warning(f"JSON loading not fully implemented for {file_path}")
+            return [Document(page_content=f"JSON content from {file_path}", metadata={"source": file_path})]
+        except Exception as e:
+            logger.error(f"Error loading JSON file {file_path}: {e}")
+            return []
+    
+    def _load_html_file(self, file_path: str) -> List[Document]:
+        """
+        Load an HTML file.
+        
+        Args:
+            file_path: Path to the HTML file
+            
+        Returns:
+            List of documents
+        """
+        try:
+            # Use a placeholder for HTML loading
+            logger.warning(f"HTML loading not fully implemented for {file_path}")
+            return [Document(page_content=f"HTML content from {file_path}", metadata={"source": file_path})]
+        except Exception as e:
+            logger.error(f"Error loading HTML file {file_path}: {e}")
+            return []
 
 if __name__ == "__main__":
     # Simple test code

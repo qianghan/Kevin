@@ -15,13 +15,14 @@ import time
 from typing import List, Dict, Any, Optional, Union, Tuple
 from pathlib import Path
 import sqlite3
+import numpy as np
 
 # Update imports - Remove ChromaDB and add FAISS
 from langchain_core.documents import Document
 from langchain_core.vectorstores import VectorStore
 from langchain_community.vectorstores import FAISS
-# Replace HuggingFaceOnnxEmbeddings with SentenceTransformerEmbeddings
-from langchain_community.embeddings import SentenceTransformerEmbeddings
+# Use HuggingFaceEmbeddings from langchain_huggingface
+from langchain_huggingface import HuggingFaceEmbeddings
 from langchain.chains import RetrievalQA
 from langchain_openai import ChatOpenAI
 
@@ -29,6 +30,16 @@ from langchain_openai import ChatOpenAI
 from utils.logger import get_logger
 from models.deepseek_client import DeepSeekAPI
 from core.document_processor import DocumentProcessor
+
+# Local imports
+from src.models.embeddings import SimpleEmbeddings
+from langchain_core.retrievers import BaseRetriever
+from langchain.chains.combine_documents import create_stuff_documents_chain
+from langchain.chains.retrieval import create_retrieval_chain
+from langchain.prompts import PromptTemplate
+from langchain_community.llms import LlamaCpp, OpenAI
+
+logger = logging.getLogger(__name__)
 
 class RAGEngine:
     """
@@ -80,61 +91,18 @@ class RAGEngine:
 
     def _initialize_vectordb(self) -> None:
         """Initialize the vector database."""
-        logger = get_logger("rag.engine")
-        try:
-            # Use SentenceTransformerEmbeddings instead
-            logger.info("Initializing SentenceTransformerEmbeddings")
-            embedding_function = SentenceTransformerEmbeddings(
-                model_name="all-MiniLM-L6-v2"
-            )
-            
-            # Load FAISS index from disk
-            faiss_index_path = str(self.vectordb_dir / "faiss_index")
-            logger.info(f"Loading FAISS index from {faiss_index_path}")
-            
-            try:
-                self.vectordb = FAISS.load_local(
-                    folder_path=faiss_index_path,
-                    embeddings=embedding_function
-                )
-                
-                # Set up retriever
-                logger.info("Setting up retriever")
-                self.retriever = self.vectordb.as_retriever(
-                    search_type="similarity",
-                    search_kwargs={"k": self.top_k}
-                )
-                
-                logger.info("Vector database initialized successfully")
-            except Exception as e:
-                logger.error(f"Error loading FAISS index: {e}")
-                # If loading fails, try creating a new one with a placeholder
-                logger.warning("Creating new placeholder FAISS index")
-                
-                # Create a new empty FAISS index with a placeholder document
-                texts = ["Placeholder document"]
-                metadatas = [{"source": "initialization"}]
-                
-                self.vectordb = FAISS.from_texts(
-                    texts=texts,
-                    embedding=embedding_function,
-                    metadatas=metadatas
-                )
-                
-                # Set up retriever
-                logger.info("Setting up retriever with placeholder index")
-                self.retriever = self.vectordb.as_retriever(
-                    search_type="similarity",
-                    search_kwargs={"k": 1}  # Use 1 since there's only one document
-                )
-                
-                # Save the placeholder index
-                self.vectordb.save_local(faiss_index_path)
-                logger.warning("Created and saved placeholder FAISS index")
-            
-        except Exception as e:
-            logger.error(f"Error initializing vector database: {e}")
-            raise
+        logger.info(f"Initializing vector database from {self.vectordb_dir}")
+        
+        # Create simple embeddings class instance (matches what's in trainer.py)
+        embedding_function = SimpleEmbeddings()
+        
+        # Load the FAISS index
+        self.vectordb = FAISS.load_local(self.vectordb_dir, embedding_function)
+        
+        # Create a retriever
+        self.retriever = self.vectordb.as_retriever(search_kwargs={"k": self.top_k})
+        
+        logger.info(f"Vector database initialized with retriever (k={self.top_k})")
     
     def _initialize_llm(self):
         """Initialize the language model for generation."""
@@ -273,4 +241,99 @@ Please provide a detailed answer with the most relevant information from the con
             
         except Exception as e:
             self.logger.error(f"Error processing query: {e}")
-            return f"Error: {e}" 
+            return f"Error: {e}"
+
+    def _initialize_chain(self) -> None:
+        """
+        Initialize the RAG chain.
+        """
+        try:
+            logger.info("Initializing RAG chain")
+            
+            # Create a prompt template
+            prompt_template = """
+            Answer the question based on the provided context. If the context doesn't contain relevant information, 
+            admit that you don't know rather than making up an answer.
+            
+            Context:
+            {context}
+            
+            Question: {input}
+            
+            Answer:
+            """
+            
+            prompt = PromptTemplate.from_template(prompt_template)
+            
+            # Create a document chain
+            doc_chain = create_stuff_documents_chain(self.llm, prompt)
+            
+            # Create a retrieval chain
+            self.chain = create_retrieval_chain(self.retriever, doc_chain)
+            
+            logger.info("RAG chain initialized")
+            
+        except Exception as e:
+            logger.error(f"Error initializing RAG chain: {e}")
+            raise e
+    
+    def query(self, query: str) -> Dict[str, Any]:
+        """
+        Query the RAG engine.
+        
+        Args:
+            query: Query string
+            
+        Returns:
+            Dictionary with response and source documents
+        """
+        try:
+            logger.info(f"Querying RAG engine: {query}")
+            
+            if not self.chain:
+                raise ValueError("RAG chain not initialized")
+            
+            # Run the chain
+            response = self.chain.invoke({"input": query})
+            
+            # Extract the answer and source documents
+            answer = response.get("answer", "")
+            source_documents = response.get("context", [])
+            
+            logger.info(f"RAG engine response: {answer[:100]}...")
+            
+            return {
+                "answer": answer,
+                "source_documents": source_documents
+            }
+            
+        except Exception as e:
+            logger.error(f"Error querying RAG engine: {e}")
+            raise e
+    
+    def get_relevant_documents(self, query: str) -> List[Document]:
+        """
+        Get relevant documents for a query without generating an answer.
+        
+        Args:
+            query: Query string
+            
+        Returns:
+            List of relevant documents
+        """
+        try:
+            logger.info(f"Getting relevant documents for: {query}")
+            
+            if not self.retriever:
+                raise ValueError("Retriever not initialized")
+            
+            # Get relevant documents
+            documents = self.retriever.get_relevant_documents(query)
+            
+            logger.info(f"Found {len(documents)} relevant documents")
+            
+            return documents
+            
+        except Exception as e:
+            logger.error(f"Error getting relevant documents: {e}")
+            raise e 
