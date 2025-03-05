@@ -26,10 +26,10 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain.chains import RetrievalQA
 from langchain_openai import ChatOpenAI
 
-# Import related modules
-from utils.logger import get_logger
-from models.deepseek_client import DeepSeekAPI
-from core.document_processor import DocumentProcessor
+# Import related modules with correct paths
+from src.utils.logger import get_logger
+from src.models.deepseek_client import DeepSeekAPI
+from src.core.document_processor import DocumentProcessor
 
 # Local imports
 from src.models.embeddings import SimpleEmbeddings
@@ -93,16 +93,37 @@ class RAGEngine:
         """Initialize the vector database."""
         logger.info(f"Initializing vector database from {self.vectordb_dir}")
         
-        # Create simple embeddings class instance (matches what's in trainer.py)
-        embedding_function = SimpleEmbeddings()
-        
-        # Load the FAISS index
-        self.vectordb = FAISS.load_local(self.vectordb_dir, embedding_function)
-        
-        # Create a retriever
-        self.retriever = self.vectordb.as_retriever(search_kwargs={"k": self.top_k})
-        
-        logger.info(f"Vector database initialized with retriever (k={self.top_k})")
+        try:
+            # Create embeddings instance
+            embedding_function = SimpleEmbeddings()
+            
+            # Load the FAISS index
+            self.vectordb = FAISS.load_local(self.vectordb_dir, embedding_function)
+            
+            # Create a retriever with improved search parameters
+            self.retriever = self.vectordb.as_retriever(
+                search_type="similarity",
+                search_kwargs={
+                    "k": self.top_k,
+                    "score_threshold": 0.5,  # Only return results with similarity score > 0.5
+                    "fetch_k": self.top_k * 2  # Fetch more candidates for better filtering
+                }
+            )
+            
+            logger.info(f"Vector database initialized successfully with retriever (k={self.top_k})")
+            
+            # Verify the database is working
+            test_query = "test"
+            test_docs = self.retriever.get_relevant_documents(test_query)
+            if test_docs:
+                logger.info(f"Vector database verification successful. Found {len(test_docs)} test documents.")
+            else:
+                logger.warning("Vector database verification: No test documents found.")
+                
+        except Exception as e:
+            logger.error(f"Error initializing vector database: {e}")
+            self.has_vectordb = False
+            raise
     
     def _initialize_llm(self):
         """Initialize the language model for generation."""
@@ -128,11 +149,20 @@ class RAGEngine:
             self.logger.error("Vector database not available")
             return []
         
-        # Search for similar documents
-        docs = self.vectordb.similarity_search(query, k=k)
-        
-        self.logger.info(f"Retrieved {len(docs)} documents")
-        return docs
+        try:
+            # Use the retriever to get relevant documents
+            docs = self.retriever.get_relevant_documents(query)
+            
+            # Log retrieval results
+            self.logger.info(f"Retrieved {len(docs)} documents")
+            for i, doc in enumerate(docs):
+                self.logger.debug(f"Document {i+1}: {doc.metadata.get('source', 'Unknown source')}")
+            
+            return docs
+            
+        except Exception as e:
+            self.logger.error(f"Error retrieving documents: {e}")
+            return []
         
     def generate_answer(self, query: str, docs: List[Document]) -> str:
         """
@@ -147,24 +177,39 @@ class RAGEngine:
         """
         self.logger.info(f"Generating answer for query: {query}")
         
-        # Create context from documents
-        context = "\n\n".join([doc.page_content for doc in docs])
-        
-        # Create a prompt for the LLM
-        prompt = f"""Answer the following question based on the provided context. 
-If the context doesn't contain relevant information, acknowledge that you don't know.
+        try:
+            # Create context from documents with metadata
+            context_parts = []
+            for doc in docs:
+                # Add source information if available
+                source = doc.metadata.get('source', 'Unknown source')
+                content = doc.page_content
+                context_parts.append(f"Source: {source}\n{content}")
+            
+            context = "\n\n".join(context_parts)
+            
+            # Create a more detailed prompt for the LLM
+            prompt = f"""You are a helpful assistant specializing in Canadian university information.
+Answer the following question based on the provided context. If the context doesn't contain relevant information, 
+acknowledge that you don't know. Use the source information to provide context-aware answers.
 
 Context:
 {context}
 
 Question: {query}
 
-Please provide a detailed answer with the most relevant information from the context:"""
-        
-        # Generate answer using invoke instead of completion
-        answer = self.llm.invoke(prompt)
-        
-        return answer
+Please provide a detailed answer with the most relevant information from the context. Include specific details and cite sources when possible:"""
+            
+            # Generate answer using the LLM
+            answer = self.llm.invoke(prompt)
+            
+            # Log the generated answer
+            self.logger.info("Successfully generated answer")
+            return answer
+            
+        except Exception as e:
+            self.logger.error(f"Error generating answer: {e}")
+            return f"I apologize, but I encountered an error while generating the answer: {str(e)}"
         
     def interactive_session(self):
         """Start an interactive question-answering session."""

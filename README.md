@@ -22,6 +22,135 @@ This project implements a modular, extensible information retrieval system with:
 - **Web Search**: Retrieves up-to-date information when needed through Tavily API
 - **Comprehensive Logging**: Detailed logging system for tracking agent operations
 
+## System Architecture
+
+The Kevin system is built around three core components that work together in a pipeline:
+
+### Component Overview
+
+1. **Scrape Component**
+   - Crawls Canadian university websites to gather information
+   - Processes HTML content into clean text documents
+   - Saves documents to the `data/raw` directory for training
+
+2. **Train Component**
+   - Loads documents created by the scrape component
+   - Cleans and chunks documents into smaller segments
+   - Creates embeddings using HuggingFace models
+   - Builds a FAISS vector database for efficient retrieval
+   - Saves the vector database to `data/vectordb`
+
+3. **RAG Component**
+   - Loads the vector database created during training
+   - Embeds user queries for semantic matching
+   - Retrieves relevant documents based on query similarity
+   - Generates accurate answers using retrieved context
+   - Provides detailed, factual responses to user queries
+
+### Pipeline Flow
+
+```
+┌────────────┐      ┌────────────┐      ┌────────────┐
+│            │      │            │      │            │
+│   Scrape   │─────▶│   Train    │─────▶│    RAG     │
+│ Component  │      │ Component  │      │ Component  │
+│            │      │            │      │            │
+└────────────┘      └────────────┘      └────────────┘
+     │                    │                   │
+     ▼                    ▼                   ▼
+┌────────────┐      ┌────────────┐      ┌────────────┐
+│            │      │            │      │            │
+│  Raw Data  │─────▶│   Vector   │─────▶│  Response  │
+│            │      │  Database  │      │ Generation │
+│            │      │            │      │            │
+└────────────┘      └────────────┘      └────────────┘
+```
+
+### Detailed Data Flow
+
+```
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                                  Scrape Component                             │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  ┌─────────────┐         ┌─────────────┐         ┌─────────────────────┐    │
+│  │             │         │             │         │                     │    │
+│  │  WebScraper │────────▶│ HTML Parser │────────▶│ Document Generator  │    │
+│  │             │         │             │         │                     │    │
+│  └─────────────┘         └─────────────┘         └─────────────────────┘    │
+│                                                            │                 │
+└────────────────────────────────────────────────────────────┼─────────────────┘
+                                                             │
+                                                             ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                                  Train Component                              │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  ┌─────────────────┐      ┌─────────────┐      ┌──────────────────────┐     │
+│  │                 │      │             │      │                      │     │
+│  │ Document Reader │─────▶│ Text Chunker│─────▶│ Embedding Generator  │     │
+│  │                 │      │             │      │                      │     │
+│  └─────────────────┘      └─────────────┘      └──────────────────────┘     │
+│                                                           │                  │
+│                                                           │                  │
+│  ┌─────────────────┐                                      │                  │
+│  │                 │                                      │                  │
+│  │  FAISS Vector   │◀─────────────────────────────────────┘                  │
+│  │    Database     │                                                         │
+│  │                 │                                                         │
+│  └─────────────────┘                                                         │
+│         │                                                                    │
+└─────────┼────────────────────────────────────────────────────────────────────┘
+          │
+          ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                                   RAG Component                               │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  ┌─────────────┐      ┌─────────────────┐      ┌─────────────────┐          │
+│  │             │      │                 │      │                 │          │
+│  │ Query Input │─────▶│ Query Embedding │─────▶│ Vector Retrieval│          │
+│  │             │      │                 │      │                 │          │
+│  └─────────────┘      └─────────────────┘      └─────────────────┘          │
+│                                                        │                     │
+│                                                        │                     │
+│  ┌─────────────────┐      ┌─────────────────┐         │                     │
+│  │                 │      │                 │         │                     │
+│  │ Response Output │◀─────│ Answer Generator│◀────────┘                     │
+│  │                 │      │                 │                               │
+│  └─────────────────┘      └─────────────────┘                               │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
+### File Structure and Data Storage
+
+- **Scraper Output**: `data/raw/*.{txt,html,md}` - Raw document files with metadata
+- **Training Output**: `data/vectordb/` - FAISS index files and metadata
+- **RAG Input/Output**: Uses vectordb for retrieval and provides answers via CLI or API
+
+### Integration Points
+
+1. **Scraper to Training**: 
+   - The scraper saves documents to `data/raw`
+   - The `DocumentProcessor` in the training component loads these documents using loaders for different file types
+
+2. **Training to RAG**:
+   - Training creates a FAISS vector database in `data/vectordb`
+   - The RAG engine loads this database during initialization
+   - Both components use compatible embedding models to ensure proper retrieval
+
+### Key Classes and Responsibilities
+
+- **WebScraper**: Manages the entire scraping process for university websites
+- **DocumentProcessor**: Handles document loading, cleaning, and database operations
+- **Trainer**: Orchestrates the embedding and vector database creation process
+- **CustomHuggingFaceEmbeddings**: Creates high-quality embeddings for documents
+- **RAGEngine**: Manages retrieval and answer generation
+- **SimpleEmbeddings**: Provides consistent embedding functionality for testing
+
+Each component can be run independently through the command line interface, but they're designed to work together seamlessly in sequence.
+
 ## Project Structure
 
 ```
@@ -167,24 +296,34 @@ documents = search_web(
 
 ### Command Line Interface
 
-The application provides a convenient command-line interface:
+The application provides a convenient command-line interface with different modes that correspond to the three main components:
 
 ```bash
+# 1. SCRAPE: Collect data from university websites
+kevin --mode scrape                           # Scrape all universities in config
+kevin --mode scrape --university "University of Toronto"  # Scrape specific university
+kevin --mode scrape --max-pages 100           # Limit pages per university
+
+# 2. TRAIN: Process documents and create vector database
+kevin --mode train                            # Process all documents and create/update the vector database
+kevin --mode train --force                    # Rebuild vector database from scratch
+
+# 3. RAG: Run the RAG engine to answer questions
+kevin --mode rag                              # Start interactive RAG session
+kevin --mode query --query "What are the admission requirements for McGill University?"  # One-off query
+
+# OTHER OPTIONS:
 # Start the web interface
 kevin --mode web
 
-# Run the web scraper to collect data
-kevin --mode scrape
-
-# Process a query directly
-kevin --mode query --query "What are the admission requirements for McGill University?"
-
 # Enable web search for a query
 kevin --mode query --query "What are the latest COVID policies at UBC?" --web-search
-
-# Update the vector database with fresh content
-kevin --mode train
 ```
+
+A typical workflow would involve running these commands in sequence:
+1. First scrape university websites to collect raw data
+2. Then train the system to create a vector database
+3. Finally use the RAG mode to answer questions using the collected knowledge
 
 ### Web Interface
 

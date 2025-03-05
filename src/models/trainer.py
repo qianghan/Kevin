@@ -29,6 +29,8 @@ import torch
 from tqdm import tqdm
 import hashlib
 import pickle
+import concurrent.futures
+from contextlib import nullcontext
 
 # Import related modules
 from src.utils.logger import get_logger
@@ -43,12 +45,17 @@ DEFAULT_SETTINGS = {
     "VECTORDB_PATH": os.path.join("data", "vectordb"),
     "DATA_DIR": "data",
     "MODEL_PATH": os.path.join("models", "embeddings"),
-    "CHUNK_SIZE": 1000,
-    "CHUNK_OVERLAP": 200,
+    "CHUNK_SIZE": 1500,
+    "CHUNK_OVERLAP": 150,
     "EMBEDDING_MODEL": "sentence-transformers/all-MiniLM-L6-v2",
-    "BATCH_SIZE": 32,
+    "BATCH_SIZE": 64,
     "MAX_RETRIES": 3,
-    "DEVICE": "cuda" if torch.cuda.is_available() else "cpu"
+    "DEVICE": "cuda" if torch.cuda.is_available() else "cpu",
+    "CHECKPOINT_INTERVAL": 500,
+    "MAX_WORKERS": 4,
+    "CACHE_DIR": os.path.join("data", "cache"),
+    "USE_CACHE": True,
+    "CLEAR_CACHE_AFTER_BATCH": True
 }
 
 class CustomHuggingFaceEmbeddings:
@@ -73,33 +80,46 @@ class CustomHuggingFaceEmbeddings:
             self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
             self.model = AutoModel.from_pretrained(self.model_name).to(self.device)
             self.model.eval()
+            
+            # Enable memory efficient attention if available
+            if hasattr(self.model, 'enable_memory_efficient_attention'):
+                self.model.enable_memory_efficient_attention()
+                
         except Exception as e:
             logger.error(f"Error loading model: {e}")
             raise
             
     def _get_embeddings(self, texts: List[str]) -> List[List[float]]:
-        """Get embeddings for a batch of texts."""
+        """Get embeddings for a batch of texts with optimized caching."""
         try:
             # Check cache first
             cache_key = hashlib.md5("".join(texts).encode()).hexdigest()
             if cache_key in self.cache:
                 return self.cache[cache_key]
             
-            # Tokenize texts
-            encoded = self.tokenizer(texts, padding=True, truncation=True, 
-                                  max_length=512, return_tensors="pt")
+            # Tokenize texts with optimized settings
+            encoded = self.tokenizer(
+                texts, 
+                padding=True, 
+                truncation=True, 
+                max_length=512, 
+                return_tensors="pt",
+                return_attention_mask=True
+            )
             encoded = {k: v.to(self.device) for k, v in encoded.items()}
             
-            # Get embeddings
+            # Get embeddings with memory optimization
             with torch.no_grad():
-                outputs = self.model(**encoded)
-                embeddings = outputs.last_hidden_state[:, 0, :].cpu().numpy()
+                with torch.cuda.amp.autocast() if self.device == "cuda" else nullcontext():
+                    outputs = self.model(**encoded)
+                    embeddings = outputs.last_hidden_state[:, 0, :].cpu().numpy()
             
             # Normalize embeddings
             embeddings = embeddings / np.linalg.norm(embeddings, axis=1, keepdims=True)
             
-            # Cache results
-            self.cache[cache_key] = embeddings.tolist()
+            # Cache results if enabled
+            if DEFAULT_SETTINGS["USE_CACHE"]:
+                self.cache[cache_key] = embeddings.tolist()
             
             return embeddings.tolist()
             
@@ -108,16 +128,20 @@ class CustomHuggingFaceEmbeddings:
             raise
             
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
-        """Embed a list of documents."""
+        """Embed a list of documents with optimized batching."""
         try:
             all_embeddings = []
             
-            # Process in batches
+            # Process in optimized batches
             for i in tqdm(range(0, len(texts), self.batch_size), desc="Embedding documents"):
                 batch = texts[i:i + self.batch_size]
                 batch_embeddings = self._get_embeddings(batch)
                 all_embeddings.extend(batch_embeddings)
                 
+                # Clear GPU cache if using CUDA
+                if self.device == "cuda":
+                    torch.cuda.empty_cache()
+            
             return all_embeddings
             
         except Exception as e:
@@ -131,6 +155,20 @@ class CustomHuggingFaceEmbeddings:
         except Exception as e:
             logger.error(f"Error embedding query: {e}")
             raise
+            
+    def __call__(self, text: str) -> List[float]:
+        """Make the embeddings class callable.
+        
+        This allows the class to be used directly as an embedding function
+        when passed to FAISS or other vector stores.
+        
+        Args:
+            text: Text to embed
+            
+        Returns:
+            Embedding for the text
+        """
+        return self.embed_query(text)
 
 class Trainer:
     """
@@ -193,7 +231,7 @@ class Trainer:
     
     def create_chunks(self, documents: List[Document]) -> List[Document]:
         """
-        Create chunks from documents.
+        Create chunks from documents using parallel processing.
         
         Args:
             documents: List of documents
@@ -203,6 +241,13 @@ class Trainer:
         """
         logger.info(f"Creating chunks from {len(documents)} documents")
         
+        # Validate documents before processing
+        for doc in documents:
+            if doc.page_content is None:
+                raise ValueError("Document contains None content")
+            if not doc.page_content or len(doc.page_content.strip()) == 0:
+                raise ValueError("Document contains empty content")
+        
         text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=self.settings["CHUNK_SIZE"],
             chunk_overlap=self.settings["CHUNK_OVERLAP"],
@@ -210,14 +255,35 @@ class Trainer:
             is_separator_regex=False,
         )
         
-        chunks = text_splitter.split_documents(documents)
-        logger.info(f"Created {len(chunks)} chunks")
+        # Create chunks in parallel
+        chunks = []
+        with concurrent.futures.ThreadPoolExecutor(max_workers=self.settings["MAX_WORKERS"]) as executor:
+            # Submit chunking tasks
+            future_to_doc = {
+                executor.submit(text_splitter.split_documents, [doc]): doc 
+                for doc in documents
+            }
+            
+            # Process results as they complete
+            with tqdm(total=len(documents), desc="Creating chunks") as pbar:
+                for future in concurrent.futures.as_completed(future_to_doc):
+                    doc = future_to_doc[future]
+                    try:
+                        doc_chunks = future.result()
+                        chunks.extend(doc_chunks)
+                        pbar.update(1)
+                    except Exception as e:
+                        logger.error(f"Error chunking document: {e}")
+                        pbar.update(1)
+                        # Re-raise the exception to propagate it
+                        raise ValueError(f"Error chunking document: {e}")
         
+        logger.info(f"Created {len(chunks)} chunks")
         return chunks
     
     def create_vectordb(self, documents: List[Document]) -> VectorStore:
         """
-        Create a vector database from documents.
+        Create a vector database from documents with checkpointing.
         
         Args:
             documents: List of documents
@@ -237,11 +303,36 @@ class Trainer:
             if not chunks:
                 raise ValueError("No chunks found after processing documents")
             
-            # Create FAISS index from documents
+            # Initialize FAISS index
             logger.info(f"Creating FAISS index with {len(chunks)} chunks")
-            vectordb = FAISS.from_documents(chunks, self.embeddings)
             
-            # Save the index
+            # Process chunks in batches with checkpointing
+            batch_size = self.settings["BATCH_SIZE"]
+            total_chunks = len(chunks)
+            processed_chunks = []
+            
+            for i in tqdm(range(0, total_chunks, batch_size), desc="Processing chunks"):
+                batch = chunks[i:i + batch_size]
+                
+                # Create or load FAISS index
+                if i == 0:
+                    vectordb = FAISS.from_documents(batch, self.embeddings)
+                else:
+                    vectordb.add_documents(batch)
+                
+                processed_chunks.extend(batch)
+                
+                # Save checkpoint if needed
+                if (i + batch_size) % self.settings["CHECKPOINT_INTERVAL"] == 0:
+                    checkpoint_path = os.path.join(self.vectordb_path, f"checkpoint_{i + batch_size}")
+                    vectordb.save_local(checkpoint_path)
+                    logger.info(f"Saved checkpoint at {i + batch_size} chunks")
+                
+                # Clear cache if configured
+                if self.settings["CLEAR_CACHE_AFTER_BATCH"]:
+                    self.embeddings.cache.clear()
+            
+            # Save the final index
             logger.info(f"Saving FAISS index to {self.vectordb_path}")
             vectordb.save_local(self.vectordb_path)
             
@@ -258,10 +349,11 @@ class Trainer:
             with open(os.path.join(self.vectordb_path, "metadata.json"), "w") as f:
                 json.dump(metadata, f, indent=2)
             
-            # Save embeddings cache
-            cache_path = os.path.join(self.vectordb_path, "embeddings_cache.pkl")
-            with open(cache_path, "wb") as f:
-                pickle.dump(self.embeddings.cache, f)
+            # Save embeddings cache if enabled
+            if self.settings["USE_CACHE"]:
+                cache_path = os.path.join(self.vectordb_path, "embeddings_cache.pkl")
+                with open(cache_path, "wb") as f:
+                    pickle.dump(self.embeddings.cache, f)
             
             logger.info(f"Vector database creation complete with {len(chunks)} chunks")
             return vectordb

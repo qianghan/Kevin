@@ -1,6 +1,8 @@
 import numpy as np
 import logging
 from langchain_core.embeddings import Embeddings
+import hashlib
+from typing import List
 
 logger = logging.getLogger(__name__)
 
@@ -9,17 +11,43 @@ class SimpleEmbeddings(Embeddings):
     A simple embedding class that creates deterministic embeddings based on text content.
     This is used for testing purposes when more complex embedding models are not available.
     """
-    def __init__(self, dimension=10):
+    def __init__(self, dimension=384):  # Increased dimension for better representation
         """
         Initialize the SimpleEmbeddings class.
         
         Args:
-            dimension: Dimension of the embeddings (default: 10)
+            dimension: Dimension of the embeddings (default: 384)
         """
         self.dimension = dimension
         logger.info(f"Initialized SimpleEmbeddings with dimension {dimension}")
     
-    def embed_documents(self, texts):
+    def _create_embedding(self, text: str) -> np.ndarray:
+        """
+        Create a deterministic embedding for a text.
+        
+        Args:
+            text: Text to create embedding for
+            
+        Returns:
+            Embedding vector
+        """
+        # Create a more robust hash of the text
+        text_hash = hashlib.sha256(text.encode()).hexdigest()
+        
+        # Use the hash to create a deterministic seed
+        seed = int(text_hash[:8], 16) % 10000
+        
+        # Set random seed for reproducibility
+        np.random.seed(seed)
+        
+        # Create embedding with better distribution
+        embedding = np.random.normal(0, 1, self.dimension)
+        # Normalize the embedding
+        embedding = embedding / np.linalg.norm(embedding)
+        
+        return embedding.astype(np.float32)
+    
+    def embed_documents(self, texts: List[str]) -> List[List[float]]:
         """
         Create embeddings for a list of texts.
         
@@ -29,18 +57,17 @@ class SimpleEmbeddings(Embeddings):
         Returns:
             List of embeddings
         """
-        # Create deterministic embeddings based on the text content
-        # This ensures the same text always gets the same embedding
-        embeddings = []
-        for text in texts:
-            # Create a seed from the hash of the text
-            seed = hash(text) % 10000
-            np.random.seed(seed)
-            # Create an embedding with the specified dimension
-            embeddings.append(np.random.rand(self.dimension).astype(np.float32))
-        return embeddings
+        logger.debug(f"Creating embeddings for {len(texts)} documents")
+        
+        try:
+            embeddings = [self._create_embedding(text).tolist() for text in texts]
+            logger.debug(f"Successfully created {len(embeddings)} embeddings")
+            return embeddings
+        except Exception as e:
+            logger.error(f"Error creating document embeddings: {e}")
+            raise
     
-    def embed_query(self, text):
+    def embed_query(self, text: str) -> List[float]:
         """
         Create an embedding for a query text.
         
@@ -50,7 +77,12 @@ class SimpleEmbeddings(Embeddings):
         Returns:
             Embedding for the query
         """
-        # Create a deterministic embedding for a query
-        seed = hash(text) % 10000
-        np.random.seed(seed)
-        return np.random.rand(self.dimension).astype(np.float32) 
+        logger.debug(f"Creating embedding for query: {text[:50]}...")
+        
+        try:
+            embedding = self._create_embedding(text).tolist()
+            logger.debug("Successfully created query embedding")
+            return embedding
+        except Exception as e:
+            logger.error(f"Error creating query embedding: {e}")
+            raise 

@@ -13,6 +13,9 @@ import hashlib
 import requests
 import uuid
 import threading
+import asyncio
+import aiohttp
+import aiofiles
 from typing import List, Dict, Set, Any, Optional, Tuple, Callable, Union
 from bs4 import BeautifulSoup
 from langchain.schema import Document
@@ -26,6 +29,7 @@ import logging
 import random
 import string
 import traceback
+import psutil
 
 # Add parent directory to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
@@ -1147,304 +1151,244 @@ def _normalize_string(text: str) -> str:
     
     return text
 
-class WebScraper:
-    """Main web scraper class for university websites."""
+class CacheManager:
+    """Cache manager for scraped content."""
     
-    def __init__(self, config_path: str, max_pages: int = None, quiet: bool = False):
-        """
-        Initialize the web scraper with the given configuration.
-        
-        Args:
-            config_path: Path to configuration file
-            max_pages: Maximum pages to scrape per university
-            quiet: Whether to suppress INFO level logs
-        """
-        try:
-            self.config_path = config_path
-            with open(config_path, 'r') as f:
-                self.config = yaml.safe_load(f)
-                
-            # Initialize attributes
-            max_pages_config = max_pages or self.config['scraping'].get('max_pages', 100)
-            # Ensure max_pages is an integer
-            if isinstance(max_pages_config, dict):
-                logger.warning(f"max_pages is a dictionary: {max_pages_config}. Using default value 100.")
-                self.max_pages = 100
-            else:
-                try:
-                    self.max_pages = int(max_pages_config)
-                except (TypeError, ValueError):
-                    logger.warning(f"Invalid max_pages value: {max_pages_config}. Using default value 100.")
-                    self.max_pages = 100
-                    
-            self.quiet = quiet
-            self.failed_urls = {}
-            
-            # Setup cache directory
-            self.cache_dir = os.path.join(os.path.dirname(config_path), self.config['scraping'].get('cache_dir', 'cache'))
-            os.makedirs(self.cache_dir, exist_ok=True)
-            
-            # Get content types if specified
-            self.content_types = self.config['scraping'].get('content_types', [])
-            
-            # Timeout for requests
-            self.timeout = self.config['scraping'].get('timeout', 30)
-            
-            # Setup block patterns
-            self.block_patterns = self.config['scraping'].get('block_patterns', [])
-            
-            # Setup spider configuration
-            self.spider_config = self.config['scraping'].get('spider_config', {})
-            self.spider_config['max_pages'] = self.max_pages  # Use the validated max_pages value
-            self.spider_config['quiet'] = quiet  # Add quiet flag to spider config
-            
-        except Exception as e:
-            logger.error(f"Error initializing WebScraper: {e}")
-            logger.error(traceback.format_exc())
-            raise
-            
-    def scrape_university(self, university_config: Dict[str, Any], mode: str = "cache_first") -> List[Document]:
-        """
-        Scrape a specific university based on configuration.
-        
-        Args:
-            university_config: University configuration dictionary
-            mode: Scraping mode (cache_first, force_scrape, mock)
-            
-        Returns:
-            List of Document objects
-        """
-        # Check if we're in quiet mode
-        quiet_mode = self.spider_config.get('quiet', False)
-        
-        university_name = university_config.get('name', 'Unknown University')
-        if not quiet_mode:
-            logger.info(f"Starting scrape for university: {university_name}")
-        
-        # Create cache directory for university
-        cache_dir = os.path.join(self.cache_dir, _normalize_string(university_name))
+    def __init__(self, cache_dir: str, cache_duration: int):
+        self.cache_dir = cache_dir
+        self.cache_duration = cache_duration
         os.makedirs(cache_dir, exist_ok=True)
         
-        # Create data/raw directory for saving documents
-        raw_dir = os.path.join("data", "raw")
-        os.makedirs(raw_dir, exist_ok=True)
+    def get_cache_key(self, url: str) -> str:
+        """Generate a cache key for a URL."""
+        return hashlib.md5(url.encode()).hexdigest()
         
-        # Extract base URL and focus URLs for the university
-        base_url = university_config.get('base_url', None)
-        if not base_url:
-            if not quiet_mode:
-                logger.warning(f"No base URL found for {university_name}, skipping")
-            return []
+    async def get_cached_content(self, url: str) -> Optional[Dict[str, Any]]:
+        """Get cached content if available and not expired."""
+        cache_key = self.get_cache_key(url)
+        cache_file = os.path.join(self.cache_dir, f"{cache_key}.json")
         
-        # Get focus URLs (specific URLs to crawl)
-        focus_urls = []
-        if 'focus_urls' in university_config and university_config['focus_urls']:
-            focus_urls = university_config['focus_urls']
-            if not quiet_mode:
-                logger.info(f"Using {len(focus_urls)} focus URLs for {university_name}")
+        if os.path.exists(cache_file):
+            async with aiofiles.open(cache_file, 'r') as f:
+                data = json.loads(await f.read())
+                if time.time() - data['timestamp'] < self.cache_duration:
+                    return data['content']
+        return None
         
-        # Add block patterns from university config
-        block_patterns = list(self.block_patterns)
-        if 'block_patterns' in university_config and university_config['block_patterns']:
-            block_patterns.extend(university_config['block_patterns'])
+    async def cache_content(self, url: str, content: Dict[str, Any]):
+        """Cache content with timestamp."""
+        cache_key = self.get_cache_key(url)
+        cache_file = os.path.join(self.cache_dir, f"{cache_key}.json")
         
-        # Create university-specific config for the spider
-        university_config_copy = university_config.copy()
-        university_config_copy.update({
-            'university_name': university_name,
-            'spider_config': self.spider_config.copy(),
-            'block_patterns': block_patterns,
-            'max_pages': self.max_pages,  # Set max pages from WebScraper (already validated)
-            'quiet': quiet_mode,  # Pass quiet mode to the spider
-        })
+        data = {
+            'url': url,
+            'content': content,
+            'timestamp': time.time()
+        }
         
-        # Add content types to spider config if set
-        if self.content_types:
-            university_config_copy['content_types'] = self.content_types
+        async with aiofiles.open(cache_file, 'w') as f:
+            await f.write(json.dumps(data))
+
+class MemoryManager:
+    """Manage memory usage during scraping."""
+    
+    def __init__(self, max_memory_mb: int = 1024):
+        self.max_memory = max_memory_mb * 1024 * 1024  # Convert to bytes
+        self.current_memory = 0
         
-        # Initialize the spider
-        spider = UniversitySpider(university_config_copy, cache_dir)
+    def check_memory(self):
+        """Check if memory usage is within limits."""
+        process = psutil.Process()
+        memory_info = process.memory_info()
+        return memory_info.rss < self.max_memory
         
-        # Extract content from scraped pages
-        documents = []
-        try:
-            # Create a content extractor
-            content_extractor = UniversityContentExtractor()
-            
-            # Start the crawl
-            if not quiet_mode:
-                logger.info(f"Starting crawl for {university_name} with base URL: {base_url}")
-            
-            # Wrap the content extraction function to pass to the crawler
-            def process_content(result, source_url):
-                return self._extract_content_from_spider_result(result, university_name, content_extractor)
-            
-            # Run the crawl and get documents
-            documents = spider.crawl(base_url, focus_urls, process_content)
-            
-            # Save documents to data/raw directory
-            university_dir = os.path.join(raw_dir, _normalize_string(university_name))
-            os.makedirs(university_dir, exist_ok=True)
-            
-            for i, doc in enumerate(documents):
-                # Create a filename from the URL
-                url = doc.metadata.get('source', '')
-                if not url:
-                    continue
-                    
-                # Extract the last part of the URL and clean it
-                filename = url.split('/')[-1]
-                if not filename or len(filename) < 5:  # If filename is too short or empty
-                    filename = f"page_{i+1}.txt"
-                else:
-                    # Clean the filename
-                    filename = re.sub(r'[^\w\-_.]', '_', filename)
-                    if not filename.endswith('.txt'):
-                        filename += '.txt'
-                
-                # Save the document
-                filepath = os.path.join(university_dir, filename)
-                try:
-                    with open(filepath, 'w', encoding='utf-8') as f:
-                        f.write(doc.page_content)
-                    if not quiet_mode:
-                        logger.debug(f"Saved document to {filepath}")
-                except Exception as e:
-                    if not quiet_mode:
-                        logger.error(f"Error saving document to {filepath}: {e}")
-            
-            # Log results
-            failed_urls_count = len(spider.failed_urls)
-            if not quiet_mode:
-                logger.info(f"Crawl for {university_name} completed. Collected {len(documents)} pages.")
-                if failed_urls_count > 0:
-                    logger.warning(f"Failed to crawl {failed_urls_count} URLs for {university_name}")
-            
-            # Track the failed URLs for later analysis
-            self.failed_urls.update(spider.failed_urls)
-            
-            return documents
-            
-        except Exception as e:
-            logger.error(f"Error scraping {university_name}: {e}")
-            logger.error(traceback.format_exc())
-            return []
-            
-    def _extract_content_from_spider_result(self, result, university_name, extractor=None):
-        """
-        Extract and process content from a spider result.
-        
-        Args:
-            result: The raw result from the spider crawl
-            university_name: Name of the university being scraped
-            extractor: Optional content extractor instance
-            
-        Returns:
-            Tuple of (content, metadata)
-        """
-        try:
-            # Extract basic content
-            content = result.get('text', '')
-            title = result.get('title', '')
-            url = result.get('url', '')
-            
-            # Skip if content is too short
-            if not content or len(content) < 100:
-                if not self.quiet:
-                    logger.debug(f"Skipping {url} - content too short ({len(content) if content else 0} chars)")
-                return '', {}
-            
-            # Extract metadata
-            metadata = {
-                'source': url,
-                'title': title,
-                'content_type': result.get('content_type', ''),
-                'status_code': result.get('status_code', 0),
-                'headers': result.get('headers', {}),
-                'university': university_name
-            }
-            
-            # Add timestamp
-            metadata['scraped_at'] = datetime.now().isoformat()
-            
-            # If extractor is provided, use it for additional processing
-            if extractor:
-                # Categorize content
-                categories = extractor.categorize_content(content, url)
-                if categories:
-                    metadata['content_categories'] = categories
-                
-                # Extract structured data if HTML is available
-                if 'html' in result:
-                    structured_data = extractor.extract_structured_data(result['html'], url)
-                    if structured_data:
-                        metadata['structured_data'] = structured_data
-                
-                # Extract content by section
-                if 'html' in result:
-                    sections = extractor.extract_content_by_section(result['html'])
-                    if sections:
-                        metadata['sections'] = list(sections.keys())
-            
-            return content, metadata
-            
-        except Exception as e:
-            if not self.quiet:
-                logger.error(f"Error extracting content: {e}")
-            return '', {}
-            
-    def scrape_all_universities(self) -> List[Document]:
-        """
-        Scrape all universities defined in the configuration.
-        
-        Returns:
-            List of Document objects
-        """
-        all_documents = []
-        
-        # Create a master progress bar for all universities
-        total_universities = len(self.config['universities'])
-        
-        # Only show detailed message if not in quiet mode
-        if not self.quiet:
-            logger.info(f"Starting scrape of {total_universities} universities")
-        
-        # Display progress bar
-        master_pbar = tqdm(
-            total=total_universities, 
-            desc="Universities Processed", 
-            position=0, 
-            leave=True,
-            bar_format='{l_bar}{bar:30}{r_bar}{bar:-30b}'
+    def clear_memory(self):
+        """Clear memory by removing unnecessary data."""
+        import gc
+        gc.collect()
+
+class AsyncWebScraper:
+    """Asynchronous web scraper for better performance."""
+    
+    def __init__(self, config: Dict[str, Any]):
+        self.config = config
+        self.session = None
+        self.semaphore = asyncio.Semaphore(config.get("MAX_CONCURRENT_REQUESTS", 10))
+        self.cache_manager = CacheManager(
+            config.get("CACHE_DIR", "data/cache"),
+            config.get("CACHE_DURATION", 3600)
+        )
+        self.memory_manager = MemoryManager(
+            config.get("MAX_MEMORY_MB", 1024)
         )
         
-        # Track total documents scraped
-        total_docs_scraped = 0
+    async def __aenter__(self):
+        self.session = aiohttp.ClientSession()
+        return self
         
-        # Process each university
-        for university in self.config['universities']:
-            university_name = university.get('name', 'Unknown University')
-            master_pbar.set_description(f"Processing: {university_name}")
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        if self.session:
+            await self.session.close()
             
-            # Scrape the university
-            documents = self.scrape_university(university)
+    async def fetch_url(self, url: str) -> Dict[str, Any]:
+        """Fetch a URL with rate limiting and retries."""
+        # Check cache first
+        cached_content = await self.cache_manager.get_cached_content(url)
+        if cached_content:
+            return cached_content
+
+        async with self.semaphore:
+            for attempt in range(self.config.get("MAX_RETRIES", 3)):
+                try:
+                    async with self.session.get(url, timeout=self.config.get("REQUEST_TIMEOUT", 30)) as response:
+                        if response.status == 200:
+                            content = await response.text()
+                            result = {
+                                "url": url,
+                                "content": content,
+                                "status_code": response.status,
+                                "headers": dict(response.headers)
+                            }
+                            # Cache the result
+                            await self.cache_manager.cache_content(url, result)
+                            return result
+                        await asyncio.sleep(self.config.get("DELAY_BETWEEN_REQUESTS", 0.5))
+                except Exception as e:
+                    if attempt == self.config.get("MAX_RETRIES", 3) - 1:
+                        raise
+                    await asyncio.sleep(self.config.get("DELAY_BETWEEN_REQUESTS", 0.5))
+            return None
+
+    async def process_urls(self, urls: List[str]) -> List[Dict[str, Any]]:
+        """Process multiple URLs concurrently."""
+        tasks = [self.fetch_url(url) for url in urls]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        return [r for r in results if r is not None]
+
+class BatchProcessor:
+    """Process documents in batches for better memory management."""
+    
+    def __init__(self, batch_size: int):
+        self.batch_size = batch_size
+        self.current_batch = []
+        
+    async def process_batch(self, documents: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Process a batch of documents."""
+        processed_docs = []
+        for doc in documents:
+            if doc and isinstance(doc, dict):
+                processed_doc = await self.process_document(doc)
+                if processed_doc:
+                    processed_docs.append(processed_doc)
+        return processed_docs
+        
+    async def process_document(self, doc: Dict[str, Any]) -> Dict[str, Any]:
+        """Process a single document."""
+        try:
+            # Extract content using BeautifulSoup
+            soup = BeautifulSoup(doc['content'], 'html.parser')
             
-            # Track documents
-            docs_count = len(documents)
-            all_documents.extend(documents)
-            total_docs_scraped += docs_count
+            # Remove script and style elements
+            for script in soup(["script", "style"]):
+                script.decompose()
+                
+            # Get text content
+            text = soup.get_text()
             
-            # Update progress bar
-            master_pbar.update(1)
-            master_pbar.set_description(f"Universities: {master_pbar.n}/{total_universities} (Total docs: {total_docs_scraped})")
+            # Clean up text
+            lines = (line.strip() for line in text.splitlines())
+            chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
+            text = ' '.join(chunk for chunk in chunks if chunk)
+            
+            return {
+                'url': doc['url'],
+                'content': text,
+                'metadata': {
+                    'status_code': doc.get('status_code'),
+                    'headers': doc.get('headers'),
+                    'timestamp': datetime.now().isoformat()
+                }
+            }
+        except Exception as e:
+            logger.error(f"Error processing document {doc.get('url', 'unknown')}: {str(e)}")
+            return None
+
+class WebScraper:
+    """Main web scraper class that coordinates the scraping process."""
+    
+    def __init__(self, config_path: str, max_pages: int = 100, quiet_mode: bool = False):
+        self.config = self._load_config(config_path)
+        self.max_pages = max_pages
+        self.quiet_mode = quiet_mode
+        self.async_scraper = None
+        self.batch_processor = BatchProcessor(self.config.get("BATCH_SIZE", 50))
         
-        # Close progress bar
-        master_pbar.close()
+    def _load_config(self, config_path: str) -> Dict[str, Any]:
+        """Load configuration from YAML file."""
+        import yaml
+        with open(config_path, 'r') as f:
+            config = yaml.safe_load(f)
+        return config.get('scraping', {})
         
-        # Only show detailed message if not in quiet mode
-        if not self.quiet:
-            logger.info(f"Scraping complete! Total documents scraped: {len(all_documents)}")
+    async def scrape_university(self, university_config: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Scrape a university website with optimizations."""
+        async with AsyncWebScraper(self.config) as scraper:
+            # Initialize memory manager
+            memory_manager = MemoryManager(self.config.get("MAX_MEMORY_MB", 1024))
+            
+            # Get URLs to scrape
+            urls = self._get_urls_to_scrape(university_config)
+            
+            # Process URLs in batches
+            documents = []
+            for i in range(0, len(urls), self.config.get("BATCH_SIZE", 50)):
+                # Check if we've reached max_pages
+                if len(documents) >= self.max_pages:
+                    break
+                    
+                # Calculate remaining pages to scrape
+                remaining_pages = self.max_pages - len(documents)
+                batch_size = min(self.config.get("BATCH_SIZE", 50), remaining_pages)
+                batch_urls = urls[i:i + batch_size]
+                
+                # Check memory usage
+                if not memory_manager.check_memory():
+                    memory_manager.clear_memory()
+                
+                # Process batch
+                batch_results = await scraper.process_urls(batch_urls)
+                processed_batch = await self.batch_processor.process_batch(batch_results)
+                documents.extend(processed_batch)
+            
+            return documents[:self.max_pages]  # Ensure we don't exceed max_pages
+            
+    def _get_urls_to_scrape(self, university_config: Dict[str, Any]) -> List[str]:
+        """Get list of URLs to scrape from university config."""
+        urls = []
+        base_url = university_config.get('base_url')
+        focus_urls = university_config.get('focus_urls', [])
         
+        # Add base URL if it exists
+        if base_url:
+            urls.append(base_url)
+            
+        # Add focus URLs
+        urls.extend(focus_urls)
+        
+        return urls
+        
+    async def scrape_all_universities(self) -> List[Dict[str, Any]]:
+        """Scrape all universities in the configuration."""
+        all_documents = []
+        universities = self.config.get('universities', [])
+        
+        for university in universities:
+            try:
+                documents = await self.scrape_university(university)
+                all_documents.extend(documents)
+            except Exception as e:
+                logger.error(f"Error scraping university {university.get('name', 'unknown')}: {str(e)}")
+                
         return all_documents
 
 if __name__ == "__main__":
@@ -1464,7 +1408,6 @@ if __name__ == "__main__":
     # Apply command line overrides
     if args.max_pages:
         scraper.max_pages = args.max_pages
-        scraper.spider_config['max_pages'] = args.max_pages
     
     if args.no_cache:
         scraper.cache_enabled = False
@@ -1472,7 +1415,6 @@ if __name__ == "__main__":
     
     if args.js:
         scraper.enable_javascript = True
-        scraper.spider_config['js_enabled'] = True
     
     # Scrape specific university or all
     start_time = time.time()

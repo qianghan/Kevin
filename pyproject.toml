@@ -1,5 +1,15 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-v --tb=short"
+asyncio_mode = "strict"
+asyncio_default_fixture_loop_scope = "function"
+
+[tool.pytest.ini_options.markers]
+asyncio = "mark test as async"
+
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
+requires = ["setuptools>=42", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -37,6 +47,10 @@ dependencies = [
     "python-json-logger>=2.0.7",
     "colorlog>=6.7.0",
     "spider_rs>=0.1.0",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.25.0",
+    "pytest-mock>=3.12.0",
+    "pytest-cov>=4.1.0",
 ]
 
 [project.urls]
@@ -48,4 +62,19 @@ package-dir = {"" = "src"}
 packages = ["src", "src.core", "src.models", "src.utils", "src.web", "src.rag"]
 
 [project.scripts]
-kevin = "src.main:main" 
+kevin = "src.main:main"
+
+[tool.coverage.run]
+source = ["src"]
+omit = ["tests/*"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if self.debug:",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "pass",
+    "raise ImportError",
+] 
