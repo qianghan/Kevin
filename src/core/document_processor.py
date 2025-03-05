@@ -32,8 +32,8 @@ from langchain_core.vectorstores import VectorStore
 from langchain_community.vectorstores import FAISS
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-from ..utils.logger import get_logger
-from ..models.embeddings import SimpleEmbeddings
+from src.utils.logger import get_logger
+from src.models.embeddings import SimpleEmbeddings
 
 logger = logging.getLogger(__name__)
 
@@ -300,6 +300,10 @@ You should add more documents to improve the quality of the search.
         logger.info(f"Scanning directory {data_path} for documents")
         for root, _, files in os.walk(data_path):
             for file in files:
+                # Skip hidden files
+                if file.startswith('.'):
+                    continue
+                    
                 file_path = os.path.join(root, file)
                 file_count += 1
                 

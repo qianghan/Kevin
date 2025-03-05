@@ -169,4 +169,31 @@ run_*.py
 !run_kevin.py
 
 # Specific to this project
-kevin/ 
+kevin/
+
+# Scrape data and cache
+data/cache/
+data/raw/
+data/vectordb/
+data/stats/
+data/backup/
+data/._*
+*.cache
+*.cache.json
+scrape_cache/
+scrape_data/
+temp/
+tmp/
+
+# Scrape logs
+logs/scrape/
+logs/crawler/
+*.crawl.log
+*.scrape.log
+
+# Temporary files
+*.tmp
+*.temp
+*~
+.DS_Store
+Thumbs.db 

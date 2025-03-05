@@ -31,9 +31,9 @@ import hashlib
 import pickle
 
 # Import related modules
-from ..utils.logger import get_logger
-from ..data.scraper import WebScraper
-from ..core.document_processor import DocumentProcessor
+from src.utils.logger import get_logger
+from src.data.scraper import WebScraper
+from src.core.document_processor import DocumentProcessor
 
 # Set up logging
 logger = get_logger("trainer")

@@ -1225,6 +1225,10 @@ class WebScraper:
         cache_dir = os.path.join(self.cache_dir, _normalize_string(university_name))
         os.makedirs(cache_dir, exist_ok=True)
         
+        # Create data/raw directory for saving documents
+        raw_dir = os.path.join("data", "raw")
+        os.makedirs(raw_dir, exist_ok=True)
+        
         # Extract base URL and focus URLs for the university
         base_url = university_config.get('base_url', None)
         if not base_url:
@@ -1277,6 +1281,37 @@ class WebScraper:
             
             # Run the crawl and get documents
             documents = spider.crawl(base_url, focus_urls, process_content)
+            
+            # Save documents to data/raw directory
+            university_dir = os.path.join(raw_dir, _normalize_string(university_name))
+            os.makedirs(university_dir, exist_ok=True)
+            
+            for i, doc in enumerate(documents):
+                # Create a filename from the URL
+                url = doc.metadata.get('source', '')
+                if not url:
+                    continue
+                    
+                # Extract the last part of the URL and clean it
+                filename = url.split('/')[-1]
+                if not filename or len(filename) < 5:  # If filename is too short or empty
+                    filename = f"page_{i+1}.txt"
+                else:
+                    # Clean the filename
+                    filename = re.sub(r'[^\w\-_.]', '_', filename)
+                    if not filename.endswith('.txt'):
+                        filename += '.txt'
+                
+                # Save the document
+                filepath = os.path.join(university_dir, filename)
+                try:
+                    with open(filepath, 'w', encoding='utf-8') as f:
+                        f.write(doc.page_content)
+                    if not quiet_mode:
+                        logger.debug(f"Saved document to {filepath}")
+                except Exception as e:
+                    if not quiet_mode:
+                        logger.error(f"Error saving document to {filepath}: {e}")
             
             # Log results
             failed_urls_count = len(spider.failed_urls)
