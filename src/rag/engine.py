@@ -71,15 +71,15 @@ class RAGEngine:
         # Set top K parameter for retriever
         self.top_k = self.config.get('retrieval', {}).get('top_k', 5)
         
-        # Check if vector database exists
-        faiss_index_path = self.vectordb_dir / "faiss_index"
-        if not faiss_index_path.exists():
-            self.logger.warning(f"FAISS index not found at {faiss_index_path}")
+        # Check if vector database exists by looking for the index.faiss file
+        index_file_path = self.vectordb_dir / "index.faiss"
+        if not index_file_path.exists():
+            self.logger.warning(f"Vector database not found at {self.vectordb_dir}")
             self.logger.warning("Please run the 'train' mode first to create the vector database")
             self.has_vectordb = False
         else:
             self.has_vectordb = True
-            self.logger.info(f"Found FAISS index at {faiss_index_path}")
+            self.logger.info(f"Found vector database at {self.vectordb_dir}")
             
             # Initialize vector database
             self._initialize_vectordb()
@@ -94,31 +94,55 @@ class RAGEngine:
         logger.info(f"Initializing vector database from {self.vectordb_dir}")
         
         try:
-            # Create embeddings instance
-            embedding_function = SimpleEmbeddings()
+            # Load metadata to determine which embedding model was used during training
+            metadata_path = self.vectordb_dir / "metadata.json"
+            if metadata_path.exists():
+                with open(metadata_path, 'r') as f:
+                    metadata = json.load(f)
+                embedding_model = metadata.get('embedding_model', 'sentence-transformers/all-MiniLM-L6-v2')
+                logger.info(f"Using embedding model from metadata: {embedding_model}")
+                
+                # Create embeddings instance matching the one used in training
+                try:
+                    embedding_function = HuggingFaceEmbeddings(model_name=embedding_model)
+                    logger.info(f"Successfully loaded HuggingFace embedding model: {embedding_model}")
+                except Exception as e:
+                    logger.warning(f"Could not load HuggingFace embeddings: {e}. Falling back to SimpleEmbeddings.")
+                    embedding_function = SimpleEmbeddings()
+            else:
+                logger.warning("No metadata.json found. Using SimpleEmbeddings as fallback.")
+                embedding_function = SimpleEmbeddings()
             
             # Load the FAISS index
-            self.vectordb = FAISS.load_local(self.vectordb_dir, embedding_function)
+            self.vectordb = FAISS.load_local(
+                self.vectordb_dir, 
+                embedding_function,
+                allow_dangerous_deserialization=True  # We trust our own saved files
+            )
             
             # Create a retriever with improved search parameters
             self.retriever = self.vectordb.as_retriever(
                 search_type="similarity",
                 search_kwargs={
                     "k": self.top_k,
-                    "score_threshold": 0.5,  # Only return results with similarity score > 0.5
-                    "fetch_k": self.top_k * 2  # Fetch more candidates for better filtering
+                    "score_threshold": 0.2,  # Lower threshold to find more matches
+                    "fetch_k": self.top_k * 3  # Fetch more candidates for better filtering
                 }
             )
             
             logger.info(f"Vector database initialized successfully with retriever (k={self.top_k})")
             
-            # Verify the database is working
-            test_query = "test"
-            test_docs = self.retriever.get_relevant_documents(test_query)
-            if test_docs:
-                logger.info(f"Vector database verification successful. Found {len(test_docs)} test documents.")
-            else:
-                logger.warning("Vector database verification: No test documents found.")
+            # Verify the database is working using direct similarity search
+            test_query = "university"
+            try:
+                test_docs = self.vectordb.similarity_search(test_query, k=1)
+                if test_docs:
+                    logger.info(f"Vector database verification successful. Found {len(test_docs)} test documents.")
+                    logger.debug(f"Sample document: {test_docs[0].page_content[:100]}...")
+                else:
+                    logger.warning("Vector database verification: No test documents found.")
+            except Exception as e:
+                logger.warning(f"Vector database verification failed: {e}")
                 
         except Exception as e:
             logger.error(f"Error initializing vector database: {e}")
@@ -150,8 +174,13 @@ class RAGEngine:
             return []
         
         try:
-            # Use the retriever to get relevant documents
-            docs = self.retriever.get_relevant_documents(query)
+            # Use direct vector similarity search instead of the retriever
+            # This bypasses any potential issues with the retriever configuration
+            docs = self.vectordb.similarity_search(
+                query, 
+                k=k,
+                distance_threshold=None  # No threshold filtering to ensure we get results
+            )
             
             # Log retrieval results
             self.logger.info(f"Retrieved {len(docs)} documents")
