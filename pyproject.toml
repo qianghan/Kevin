@@ -77,10 +77,10 @@ dev = [
 
 [tool.setuptools]
 package-dir = {"" = "src"}
-packages = ["src", "src.core", "src.models", "src.utils", "src.web", "src.rag"]
+packages = {find = {where = ["src"], exclude = []}}
 
 [project.scripts]
-kevin = "src.main:main"
+kevin = "main:main"
 
 [tool.coverage.run]
 source = ["src"]
