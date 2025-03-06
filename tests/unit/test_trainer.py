@@ -54,18 +54,16 @@ def trainer(temp_dir, sample_documents):
     """Create a Trainer instance for testing."""
     settings = {
         "VECTORDB_PATH": os.path.join(temp_dir, "vectordb"),
-        "MODEL_PATH": os.path.join(temp_dir, "models"),
         "CHUNK_SIZE": 500,  # Smaller chunks for testing
         "CHUNK_OVERLAP": 50,
         "BATCH_SIZE": 2,
-        "DEVICE": "cpu",  # Use CPU for testing
-        "MAX_WORKERS": 2,  # Fewer workers for testing
-        "CHECKPOINT_INTERVAL": 2,
-        "USE_CACHE": True,
-        "CLEAR_CACHE_AFTER_BATCH": True
+        "USE_CACHE": True
     }
     
+    # Create a mock document processor
     doc_processor = MockDocumentProcessor(sample_documents)
+    
+    # Initialize trainer
     return Trainer(doc_processor, settings)
 
 def test_empty_documents(trainer):

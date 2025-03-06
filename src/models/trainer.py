@@ -44,7 +44,6 @@ logger = get_logger("trainer")
 DEFAULT_SETTINGS = {
     "VECTORDB_PATH": os.path.join("data", "vectordb"),
     "DATA_DIR": "data",
-    "MODEL_PATH": os.path.join("models", "embeddings"),
     "CHUNK_SIZE": 1500,
     "CHUNK_OVERLAP": 150,
     "EMBEDDING_MODEL": "sentence-transformers/all-MiniLM-L6-v2",
@@ -77,8 +76,8 @@ class CustomHuggingFaceEmbeddings:
         """Load the model and tokenizer."""
         try:
             logger.info(f"Loading model {self.model_name} on {self.device}")
-            self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
-            self.model = AutoModel.from_pretrained(self.model_name).to(self.device)
+            self.tokenizer = AutoTokenizer.from_pretrained(self.model_name, force_download=False)
+            self.model = AutoModel.from_pretrained(self.model_name, force_download=False).to(self.device)
             self.model.eval()
             
             # Enable memory efficient attention if available
@@ -187,11 +186,9 @@ class Trainer:
         
         # Initialize paths
         self.vectordb_path = self.settings["VECTORDB_PATH"]
-        self.model_path = self.settings["MODEL_PATH"]
         
         # Create necessary directories
         os.makedirs(self.vectordb_path, exist_ok=True)
-        os.makedirs(self.model_path, exist_ok=True)
         
         # Initialize embeddings
         self.embeddings = CustomHuggingFaceEmbeddings(
