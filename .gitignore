@@ -196,4 +196,17 @@ logs/crawler/
 *.temp
 *~
 .DS_Store
-Thumbs.db 
+Thumbs.db
+
+# Specific large files causing issues
+kevin/lib/python3.10/site-packages/pyarrow/libarrow.1900.dylib
+kevin/lib/python3.10/site-packages/torch/lib/libtorch_cpu.dylib
+chroma_db/chroma.sqlite3
+
+# Additional directories to ignore
+kevin/lib/
+**/site-packages/
+**/torch/lib/
+**/pyarrow/
+**/chroma_db/
+chroma_db/ 
