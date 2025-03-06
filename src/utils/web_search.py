@@ -1,21 +1,26 @@
 """
-Web search utility for retrieving up-to-date information.
+Web search utilities using the Tavily API.
 """
 
 import os
 import sys
+import json
+import requests
 import yaml
 import time
+import random
+import urllib.parse
 from typing import List, Dict, Any, Optional
 from dotenv import load_dotenv
 from langchain.schema import Document
 from tavily import TavilyClient
+from fake_useragent import UserAgent
 
 # Add parent directory to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
 # Import project modules
-from src.utils.logger import get_logger, api_logger
+from utils.logger import get_logger, api_logger
 
 # Load environment variables
 load_dotenv()

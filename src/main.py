@@ -59,8 +59,10 @@ def setup_logging(log_level=None):
 # Initialize logger with default configuration
 logger = setup_logging()
 
-# Add src to path so we can import our modules
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+# Add parent directory to Python path so our modules can be found
+parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if parent_dir not in sys.path:
+    sys.path.insert(0, parent_dir)
 
 # Load environment variables
 load_dotenv()

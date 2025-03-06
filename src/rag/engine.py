@@ -27,12 +27,12 @@ from langchain.chains import RetrievalQA
 from langchain_openai import ChatOpenAI
 
 # Import related modules with correct paths
-from src.utils.logger import get_logger
-from src.models.deepseek_client import DeepSeekAPI
-from src.core.document_processor import DocumentProcessor
+from utils.logger import get_logger
+from models.deepseek_client import DeepSeekAPI
+from core.document_processor import DocumentProcessor
 
 # Local imports
-from src.models.embeddings import SimpleEmbeddings
+from models.embeddings import SimpleEmbeddings
 from langchain_core.retrievers import BaseRetriever
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain.chains.retrieval import create_retrieval_chain
@@ -125,8 +125,9 @@ class RAGEngine:
                 search_type="similarity",
                 search_kwargs={
                     "k": self.top_k,
-                    "score_threshold": 0.2,  # Lower threshold to find more matches
-                    "fetch_k": self.top_k * 3  # Fetch more candidates for better filtering
+                    "score_threshold": 0.15,  # Lower threshold to find more diverse matches
+                    "fetch_k": self.top_k * 4,  # Fetch even more candidates for better filtering
+                    "filter": None  # No filtering to ensure comprehensive results
                 }
             )
             
@@ -217,17 +218,27 @@ class RAGEngine:
             
             context = "\n\n".join(context_parts)
             
-            # Create a more detailed prompt for the LLM
-            prompt = f"""You are a helpful assistant specializing in Canadian university information.
-Answer the following question based on the provided context. If the context doesn't contain relevant information, 
-acknowledge that you don't know. Use the source information to provide context-aware answers.
+            # Create a more detailed prompt for the LLM tailored for university consultation
+            prompt = f"""You are an experienced professional consultant specializing in Canadian university information, with extensive knowledge about admissions, programs, financial aid, campus life, and other aspects of higher education in Canada.
+
+You're speaking with a student or parent who is seeking guidance about Canadian universities. Your goal is to provide accurate, helpful, and nuanced advice that addresses their specific needs.
+
+Based on the following information sources, please answer the query in a professional yet approachable manner. Format important details like deadlines, requirements, or costs in a way that's easy to understand.
 
 Context:
 {context}
 
 Question: {query}
 
-Please provide a detailed answer with the most relevant information from the context. Include specific details and cite sources when possible:"""
+In your response:
+1. Directly address their specific question first
+2. Provide relevant details, statistics, or requirements if available
+3. Note any important deadlines or processes they should be aware of
+4. Suggest additional considerations they might not have thought of
+5. Cite your sources when possible (e.g., "According to UBC's website...")
+6. If the information is incomplete or outdated, acknowledge this and suggest where they might find the most current information
+
+If the context doesn't contain information to answer the question properly, be transparent about this limitation rather than making assumptions. You may suggest what information they should look for and where."""
             
             # Generate answer using the LLM
             answer = self.llm.invoke(prompt)
