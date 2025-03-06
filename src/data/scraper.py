@@ -1,5 +1,5 @@
 """
-Web scraper for Canadian university websites using spider-py (Python bindings for spider-rs).
+Web scraper for Canadian university websites using a requests-based crawler.
 Enhanced for better efficiency, performance, and data quality.
 """
 
@@ -40,12 +40,7 @@ from src.utils.logger import get_logger, scraper_logger
 # Set up logger
 logger = get_logger(__name__)
 
-# Flag to track if spider module is available
-SPIDER_AVAILABLE = False
-SPIDER_MODULE_NAME = None
-SPIDER_RS_ATTRIBUTES = []
-
-# Add SimpleRequestsCrawler as a fallback when no spider module is available
+# Add SimpleRequestsCrawler as the primary web scraper
 class SimpleRequestsCrawler:
     """Simplified web crawler using requests."""
     
@@ -274,219 +269,38 @@ class SimpleRequestsCrawler:
             logger.error(f"Error extracting text: {e}")
             return ""
 
-# Update the spider_rs import logic
-try:
-    # Try importing spider_rs for the simpler Website API
-    import spider_rs
-    from spider_rs import Website
-    print("Successfully imported spider_rs with Website API")
-    SPIDER_AVAILABLE = True
-    SPIDER_MODULE_NAME = 'spider_rs'
-    
-    # Define a function to create a website crawler using the simple spider_rs API
-    def create_spider(config):
-        # We'll use the simple Website class when available
-        # It doesn't take a config dict directly, so we'll handle the conversion
-        start_url = config.get('start_url')
-        if not start_url:
-            # Fix: Ensure max_pages is properly handled when creating SimpleRequestsCrawler
-            if isinstance(config, dict) and 'max_pages' in config:
-                max_pages_config = config.get('max_pages')
-                if isinstance(max_pages_config, dict):
-                    logger.warning(f"max_pages is a dictionary: {max_pages_config}. Using default value 100.")
-                    config['max_pages'] = 100
-                else:
-                    try:
-                        config['max_pages'] = int(max_pages_config)
-                    except (TypeError, ValueError):
-                        logger.warning(f"Invalid max_pages value: {max_pages_config}. Using default value 100.")
-                        config['max_pages'] = 100
-            return SimpleRequestsCrawler(config)
-            
-        try:
-            # Create a Website instance - the Website class in spider_rs doesn't have fluent API methods
-            # Instead we need to pass any configuration we need as constructor arguments
-            # or access attributes directly
-            website = Website(start_url)
-            
-            # Wrap this in a compatible interface
-            class WebsiteWrapper:
-                def __init__(self, website, config):
-                    self.website = website
-                    self.config = config
-                    self.failed_urls = {}
-                
-                def crawl(self, url=None, progress_bar=None):
-                    """Crawl the website and return list of results."""
-                    logger.info(f"WebsiteWrapper: Starting crawl from {url}")
-                    if url is None:
-                        url = self.config.get("start_url", "")
-                        
-                    if not url:
-                        raise ValueError("No URL provided for crawl")
-                    
-                    # Configure website for this crawl
-                    max_depth = int(self.config.get("max_depth", 2))
-                    
-                    # Fix: Ensure max_pages is an integer
-                    max_pages_config = self.config.get("max_pages", 100)
-                    if isinstance(max_pages_config, dict):
-                        logger.warning(f"max_pages is a dictionary: {max_pages_config}. Using default value 100.")
-                        max_pages = 100
-                    else:
-                        try:
-                            max_pages = int(max_pages_config)
-                        except (TypeError, ValueError):
-                            logger.warning(f"Invalid max_pages value: {max_pages_config}. Using default value 100.")
-                            max_pages = 100
-                    
-                    logger.info(f"WebsiteWrapper: max_depth={max_depth}, max_pages={max_pages}")
-                    
-                    # Add stealth to avoid bot detection
-                    self.website.stealth = self.config.get("stealth", True)
-                    
-                    # Set spider options
-                    options = {
-                        "respect_robots_txt": self.config.get("respect_robots_txt", True),
-                        "max_pages": max_pages,
-                        "max_depth": max_depth,
-                        "headless": True
-                    }
-                    
-                    # Get allowed domains if any
-                    if "allowed_domains" in self.config:
-                        options["allowed_domains"] = self.config["allowed_domains"]
-                    
-                    # Use blacklist if provided
-                    if "blacklist_urls" in self.config:
-                        options["blacklist_urls"] = self.config["blacklist_urls"]
-                    
-                    # Set other optional parameters
-                    for param in ["timeout", "headers", "proxies", "cookies", "delay"]:
-                        if param in self.config:
-                            options[param] = self.config[param]
-                    
-                    # Perform the crawl
-                    self.website.crawl(url, **options)
-                    crawled_pages = self.website.pages
-                    
-                    # Count total pages scraped
-                    pages_count = len(crawled_pages)
-                    
-                    # Format results similar to SimpleRequestsCrawler
-                    results = []
-                    for i, page in enumerate(crawled_pages):
-                        if page.status_code >= 400:
-                            self.failed_urls[page.url] = {
-                                'error': f"HTTP error {page.status_code}",
-                                'error_type': 'http_error',
-                                'timestamp': datetime.now().isoformat()
-                            }
-                            continue
-                            
-                        result = {
-                            "url": page.url,
-                            "status_code": page.status_code,
-                            "title": page.title,
-                            "text": page.text,
-                            "html": page.html,
-                            "headers": page.headers,
-                            "links": page.links
-                        }
-                        results.append(result)
-                        
-                        # Update progress bar
-                        if progress_bar:
-                            progress_bar.update(1)
-                            # Update progress bar description with current count and percentage
-                            if isinstance(pages_count, int) and pages_count > 0:
-                                progress_percentage = int((i+1) / pages_count * 100)
-                                progress_bar.set_description(f"Crawling {i+1}/{pages_count} pages: {progress_percentage}%")
-                        
-                        # Print occasional progress updates
-                        if (i+1) % 10 == 0:
-                            print(f"Currently scraped {i+1} pages", end="\r")
-                    
-                    logger.info(f"WebsiteWrapper: Crawl completed. Scraped {len(results)} pages.")
-                    return results
-                
-                def get(self, url):
-                    """Get a single URL."""
-                    try:
-                        # In the real spider_rs API, there might not be a get_page method
-                        # We need to check if it exists and use a fallback method if not
-                        # Trying direct attribute first
-                        if hasattr(self.website, 'get_page'):
-                            page = self.website.get_page(url)
-                            return {
-                                "url": page.get("url", url),
-                                "status_code": page.get("status_code", 200),
-                                "title": page.get("title", ""),
-                                "text": page.get("text", ""),
-                                "html": page.get("html", ""),
-                                "headers": page.get("headers", {}),
-                                "content_type": page.get("content_type", "")
-                            }
-                        else:
-                            # Fallback to SimpleRequestsCrawler
-                            fallback = SimpleRequestsCrawler(self.config)
-                            return fallback.get(url)
-                    except Exception as e:
-                        print(f"Error in Website.get_page(): {e}")
-                        # Fallback to SimpleRequestsCrawler
-                        fallback = SimpleRequestsCrawler(self.config)
-                        return fallback.get(url)
-            
-            # Create and return the wrapper
-            return WebsiteWrapper(website, config)
-        except Exception as e:
-            print(f"Error creating spider with Website API: {e}")
-            return SimpleRequestsCrawler(config)
-            
-except ImportError:
-    # Try other possible package names for fallbacks
+# Update the spider import logic - remove all spider-rs code and only use SimpleRequestsCrawler
+def create_spider(config):
+    """Create a crawler instance with the given configuration."""
+    # Always use SimpleRequestsCrawler
     try:
-        import spider
-        SPIDER_AVAILABLE = True
-        SPIDER_MODULE_NAME = 'spider'
-        
-        # Define a function to create a spider using the available API
-        def create_spider(config):
-            try:
-                return spider.Spider(config)
-            except Exception as e:
-                print(f"Error creating spider with spider API: {e}")
-                return SimpleRequestsCrawler(config)
-                
-    except ImportError:
-        # Fall back to SimpleRequestsCrawler
-        print("No spider libraries found, using SimpleRequestsCrawler")
-        SPIDER_AVAILABLE = True  # We'll still mark this as available because we have the fallback
-        SPIDER_MODULE_NAME = "requests_fallback"
-        
-        def create_spider(config):
-            return SimpleRequestsCrawler(config)
-            
-except Exception as e:
-    # Catch-all for any other errors during the import process
-    print(f"Error setting up web scraping system: {e}")
-    print("Falling back to SimpleRequestsCrawler")
-    
-    SPIDER_AVAILABLE = True  # We'll mark this as available because we have the fallback
-    SPIDER_MODULE_NAME = "requests_fallback"
-    
-    def create_spider(config):
+        # Ensure max_pages is properly handled
+        if isinstance(config, dict) and 'max_pages' in config:
+            max_pages_config = config.get('max_pages')
+            if isinstance(max_pages_config, dict):
+                logger.warning(f"max_pages is a dictionary: {max_pages_config}. Using default value 100.")
+                config['max_pages'] = 100
+            else:
+                try:
+                    config['max_pages'] = int(max_pages_config)
+                except (TypeError, ValueError):
+                    logger.warning(f"Invalid max_pages value: {max_pages_config}. Using default value 100.")
+                    config['max_pages'] = 100
         return SimpleRequestsCrawler(config)
+    except Exception as e:
+        logger.error(f"Error creating crawler: {e}")
+        # Return a default configuration if there's an error
+        return SimpleRequestsCrawler({'max_pages': 100})
 
-# Log the status of spider module
-logger.info(f"Web scraping using {SPIDER_MODULE_NAME}")
-print(f"Web scraping using {SPIDER_MODULE_NAME}")
+# Log the status
+logger.info("Web scraping using SimpleRequestsCrawler")
+print("Web scraping using SimpleRequestsCrawler")
 
 class UniversitySpider:
-    """Enhanced web crawler for university websites using spider-py."""
+    """Enhanced web crawler for university websites using requests-based crawler."""
     
     def __init__(self, config: Dict[str, Any], cache_dir: str = None):
-        """Initialize the spider with configuration."""
+        """Initialize the crawler with configuration."""
         self.config = config
         self.visited_urls: Set[str] = set()
         self.failed_urls: Dict[str, Dict[str, Any]] = {}
@@ -632,8 +446,8 @@ class UniversitySpider:
             focus_urls = [base_url]
             self._log(f"[MAIN-{crawl_id}] No focus URLs provided, using base_url: {base_url}", quiet_mode)
             
-        # Configure spider settings
-        crawler_config = dict(self.config.get('spider_config', {}))
+        # Configure crawler settings
+        crawler_config = dict(self.config.get('crawler_config', {}))
         allowed_domains = [urlparse(base_url).netloc]
         crawler_config["allowed_domains"] = allowed_domains
         self._log(f"[MAIN-{crawl_id}] Allowed domains: {allowed_domains}", quiet_mode)
@@ -646,7 +460,7 @@ class UniversitySpider:
         if not quiet_mode:
             logger.debug(f"[MAIN-{crawl_id}] Added {len(block_patterns)} block patterns")
         
-        # Initialize spider with smart settings
+        # Initialize crawler with smart settings
         crawler_config.update({
             "smart_crawl": True,  # Enable smart crawling mode for better content discovery
             "stealth": True,  # Enable stealth mode to avoid bot detection
@@ -751,18 +565,17 @@ class UniversitySpider:
         schedule_next_heartbeat()
         
         try:
-            # Fix: Define content_processor function if missing
-            if not hasattr(self, 'extract_content_from_spider_result'):
-                # Define a basic content processor function
-                def extract_content_from_spider_result(result, url):
-                    """Extract and process content from a spider result.
+            if not hasattr(self, 'extract_content_from_crawler_result'):
+                # Define extraction method for crawler results
+                def extract_content_from_crawler_result(result, url):
+                    """Extract and process content from a crawler result.
                     
                     Args:
-                        result: The raw result from the spider crawl
-                        url: The URL of the page
-                        
+                        result: The raw result from the crawler
+                        url: URL of the crawled page
+                    
                     Returns:
-                        Tuple of (content, metadata)
+                        tuple of (content, metadata)
                     """
                     try:
                         # Extract basic content
@@ -793,13 +606,13 @@ class UniversitySpider:
                         logger.error(f"Error extracting content from {url}: {e}")
                         return '', {}
                     
-                self.extract_content_from_spider_result = extract_content_from_spider_result
+                # Store the function as an instance method
+                self.extract_content_from_crawler_result = extract_content_from_crawler_result
             
-            # Initialize the crawler with our configuration
             # Using the create_spider function defined in this file
             
-            # Setup spider configuration
-            spider_config = {
+            # Setup crawler configuration
+            crawler_config = {
                 'max_depth': self.max_depth,
                 'timeout': self.timeout,
                 'max_retries': self.max_retries,
@@ -815,7 +628,7 @@ class UniversitySpider:
             }
             
             # Create the crawler
-            crawler = create_spider(spider_config)
+            crawler = create_spider(crawler_config)
             
             # Initialize documents list
             documents = []
@@ -829,7 +642,7 @@ class UniversitySpider:
                     
                     # Process the results
                     for result in results:
-                        content, metadata = self.extract_content_from_spider_result(result, result.get('url', ''))
+                        content, metadata = self.extract_content_from_crawler_result(result, result.get('url', ''))
                         if content and len(content) > 100:
                             metadata['university'] = university_name
                             doc = Document(page_content=content, metadata=metadata)

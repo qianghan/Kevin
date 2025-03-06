@@ -60,12 +60,15 @@ def temp_vectordb_dir():
     vectordb_dir = Path(temp_dir) / "vectordb"
     vectordb_dir.mkdir(exist_ok=True)
     
-    # Create the faiss_index directory (not just a file)
-    faiss_index_dir = vectordb_dir / "faiss_index"
-    faiss_index_dir.mkdir(exist_ok=True)
+    # Create a mock index file directly in the vectordb directory
+    (vectordb_dir / "index.faiss").touch()
     
-    # Add a mock index file
-    (faiss_index_dir / "index.faiss").touch()
+    # Create a metadata.json file with embedding model information
+    metadata = {
+        "embedding_model": "sentence-transformers/all-MiniLM-L6-v2"
+    }
+    with open(vectordb_dir / "metadata.json", 'w') as f:
+        json.dump(metadata, f)
     
     yield vectordb_dir
     
@@ -114,27 +117,20 @@ async def test_rag_engine_initialization(mock_config, temp_vectordb_dir):
     # Create a temporary config file
     with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
         import yaml
+        # Set the data_dir directly to the temp_vectordb_dir's parent
+        mock_config['data'] = {'data_dir': str(temp_vectordb_dir.parent)}
         yaml.dump(mock_config, f)
         config_path = f.name
     
     try:
         # Initialize RAG engine with proper path handling
-        with patch('src.rag.engine.Path') as mock_path, \
-             patch('src.rag.engine.FAISS'):
-            
-            # Use return_value to ensure the same path is returned every time
-            mock_path.return_value.exists.return_value = True
-            mock_path.return_value = temp_vectordb_dir
-            
+        with patch('src.rag.engine.FAISS'):
             engine = RAGEngine(config_path)
-            
-            # Force has_vectordb to True for testing
-            engine.has_vectordb = True
             
             # Verify initialization
             assert engine.has_vectordb is True
-            assert engine.top_k == 3
-            assert engine.embedding_model == 'test-model'
+            assert engine.config_path == config_path
+            assert engine.top_k == mock_config['retrieval']['top_k']
             
     finally:
         # Cleanup
@@ -146,29 +142,26 @@ async def test_rag_engine_document_retrieval(mock_config, temp_vectordb_dir, moc
     # Create a temporary config file
     with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
         import yaml
+        # Set the data_dir directly to the temp_vectordb_dir's parent
+        mock_config['data'] = {'data_dir': str(temp_vectordb_dir.parent)}
         yaml.dump(mock_config, f)
         config_path = f.name
     
     try:
         # Initialize RAG engine with mocked components
-        with patch('src.rag.engine.Path') as mock_path, \
-             patch('src.rag.engine.FAISS') as mock_faiss, \
+        with patch('src.rag.engine.FAISS') as mock_faiss, \
              patch('src.rag.engine.DeepSeekAPI', return_value=mock_llm):
             
-            # Mock paths and existence checks
-            mock_path.return_value.exists.return_value = True
-            mock_path.return_value = temp_vectordb_dir
-            
-            # Create and configure the mock retriever
-            mock_retriever = MagicMock()
-            mock_retriever.get_relevant_documents.return_value = TEST_DOCUMENTS
-            mock_faiss.load_local.return_value.as_retriever.return_value = mock_retriever
+            # Create and configure the mock database
+            mock_db = MagicMock()
+            mock_db.similarity_search.return_value = TEST_DOCUMENTS
+            mock_faiss.load_local.return_value = mock_db
             
             engine = RAGEngine(config_path)
             
             # Force vectordb to be available
             engine.has_vectordb = True
-            engine.retriever = mock_retriever
+            engine.vectordb = mock_db
             
             # Test document retrieval
             docs = engine.retrieve_documents(TEST_QUERY)
@@ -225,32 +218,29 @@ async def test_rag_engine_process_query(mock_config, temp_vectordb_dir, mock_llm
     # Create a temporary config file
     with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
         import yaml
+        # Set the data_dir directly to the temp_vectordb_dir's parent
+        mock_config['data'] = {'data_dir': str(temp_vectordb_dir.parent)}
         yaml.dump(mock_config, f)
         config_path = f.name
     
     try:
         # Initialize RAG engine with mocked components
-        with patch('src.rag.engine.Path') as mock_path, \
-             patch('src.rag.engine.FAISS') as mock_faiss, \
+        with patch('src.rag.engine.FAISS') as mock_faiss, \
              patch('src.rag.engine.DeepSeekAPI', return_value=mock_llm):
             
-            # Mock paths and existence checks
-            mock_path.return_value.exists.return_value = True
-            mock_path.return_value = temp_vectordb_dir
-            
-            # Create and configure the mock retriever
-            mock_retriever = MagicMock()
-            mock_retriever.get_relevant_documents.return_value = TEST_DOCUMENTS
-            mock_faiss.load_local.return_value.as_retriever.return_value = mock_retriever
+            # Create and configure the mock database
+            mock_db = MagicMock()
+            mock_db.similarity_search.return_value = TEST_DOCUMENTS
+            mock_faiss.load_local.return_value = mock_db
             
             engine = RAGEngine(config_path)
             
-            # Force vectordb to be available and set the components
+            # Force vectordb to be available
             engine.has_vectordb = True
-            engine.retriever = mock_retriever
+            engine.vectordb = mock_db
             engine.llm = mock_llm
             
-            # Test query processing
+            # Test query processing - process_query is not async
             response = engine.process_query(TEST_QUERY)
             
             # Verify results
@@ -301,6 +291,8 @@ async def test_rag_engine_interactive_session(mock_config, temp_vectordb_dir, mo
     # Create a temporary config file
     with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
         import yaml
+        # Set the data_dir directly to the temp_vectordb_dir's parent
+        mock_config['data'] = {'data_dir': str(temp_vectordb_dir.parent)}
         yaml.dump(mock_config, f)
         config_path = f.name
     
@@ -314,24 +306,19 @@ async def test_rag_engine_interactive_session(mock_config, temp_vectordb_dir, mo
         monkeypatch.setattr('builtins.print', lambda *args: printed_messages.append(' '.join(str(a) for a in args)))
         
         # Initialize RAG engine with mocked components
-        with patch('src.rag.engine.Path') as mock_path, \
-             patch('src.rag.engine.FAISS') as mock_faiss, \
+        with patch('src.rag.engine.FAISS') as mock_faiss, \
              patch('src.rag.engine.DeepSeekAPI', return_value=mock_llm):
             
-            # Mock paths and existence checks
-            mock_path.return_value.exists.return_value = True
-            mock_path.return_value = temp_vectordb_dir
-            
-            # Create and configure the mock retriever
-            mock_retriever = MagicMock()
-            mock_retriever.get_relevant_documents.return_value = TEST_DOCUMENTS
-            mock_faiss.load_local.return_value.as_retriever.return_value = mock_retriever
+            # Create and configure the mock database
+            mock_db = MagicMock()
+            mock_db.similarity_search.return_value = TEST_DOCUMENTS
+            mock_faiss.load_local.return_value = mock_db
             
             engine = RAGEngine(config_path)
             
-            # Force vectordb to be available and set the components
+            # Force vectordb to be available
             engine.has_vectordb = True
-            engine.retriever = mock_retriever
+            engine.vectordb = mock_db
             engine.llm = mock_llm
             
             # Test interactive session

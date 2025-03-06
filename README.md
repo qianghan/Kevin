@@ -15,7 +15,7 @@ This project implements a modular, extensible information retrieval system with:
 ## Features
 
 - **Web Scraping**: Collects information from top Canadian university websites and provincial application portals
-- **Vector Database**: Stores and retrieves information efficiently using ChromaDB with semantic search
+- **Vector Database**: Stores and retrieves information efficiently using FAISS vector storage with semantic search
 - **LangGraph Agent**: Advanced conversational flow with document retrieval, grading, and hallucination checking
 - **DeepSeek API**: Integration with DeepSeek's powerful LLM for high-quality responses
 - **Streamlit Interface**: User-friendly web interface for interacting with the agent
