@@ -14,7 +14,13 @@ from langchain.schema import Document
 from langchain.prompts import PromptTemplate
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, FunctionMessage
 from langchain_community.llms.huggingface_pipeline import HuggingFacePipeline
-from transformers import pipeline
+# Conditionally import transformers only if not using DeepSeek only
+if not os.environ.get('USE_DEEPSEEK_ONLY') == '1':
+    try:
+        from transformers import pipeline
+    except UnicodeDecodeError as e:
+        print(f"Error importing transformers: {e}")
+        print("Continuing without transformers support")
 from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import ToolNode
 from dotenv import load_dotenv
@@ -181,79 +187,112 @@ def router(state: AgentState) -> AgentState:
 # Node for retrieving from vector store
 def retrieve_from_vectorstore(state: AgentState) -> AgentState:
     """Retrieve relevant documents from the vector store."""
-    workflow_logger.info("Executing vector store retrieval node")
+    query = state["query"]
+    thinking_steps = state.get("thinking_steps", [])
+    
+    retrieve_start = time.time()
+    thinking_steps.append({
+        "step": "vector_retrieval_start",
+        "time": time.strftime("%H:%M:%S"),
+        "description": "Beginning document retrieval from knowledge base",
+        "details": {
+            "query": query,
+            "timestamp": time.time()
+        }
+    })
     
     try:
-        # Get the query
-        query = state["query"]
-        logger.info(f"Retrieving documents for query: {query}")
+        docs = []
+        try:
+            # Create document processor instance
+            doc_processor = DocumentProcessor()
+            
+            # Get similarity search method
+            similarity_search = getattr(doc_processor.get_vectorstore(), "similarity_search_with_score", None)
+            if similarity_search:
+                search_results = similarity_search(query, k=6)
+                
+                # Filter results based on similarity score
+                docs = [doc for doc, score in search_results if score < 1.2]
+                
+                # Add a thinking step for search results
+                score_details = [{"document": doc.metadata.get("source", "Unknown"), "score": f"{score:.4f}"} for doc, score in search_results]
+                thinking_steps.append({
+                    "step": "similarity_search_results",
+                    "time": time.strftime("%H:%M:%S"),
+                    "description": f"Found {len(search_results)} documents, keeping {len(docs)} relevant ones",
+                    "details": {
+                        "search_results": score_details,
+                        "timestamp": time.time()
+                    }
+                })
+            else:
+                docs = doc_processor.get_vectorstore().similarity_search(query, k=5)
+                thinking_steps.append({
+                    "step": "search_results",
+                    "time": time.strftime("%H:%M:%S"),
+                    "description": f"Retrieved {len(docs)} documents from knowledge base",
+                    "details": {
+                        "document_count": len(docs),
+                        "timestamp": time.time()
+                    }
+                })
+        except Exception as e:
+            # Fallback to alternative method
+            docs = []
+            thinking_steps.append({
+                "step": "search_error",
+                "time": time.strftime("%H:%M:%S"),
+                "description": "Error in primary search method, using fallback",
+                "details": {
+                    "error": str(e),
+                    "timestamp": time.time()
+                }
+            })
         
-        # Initialize document processor
-        processor = DocumentProcessor()
+        # Add retrieved documents to state
+        state["documents"] = docs
         
-        # Search for relevant documents
-        start_time = time.time()
-        documents = processor.search_documents(query, k=5)
-        elapsed_time = time.time() - start_time
+        # Add a thinking step for completion
+        retrieve_time = time.time() - retrieve_start
+        thinking_steps.append({
+            "step": "vector_retrieval_complete",
+            "time": time.strftime("%H:%M:%S"),
+            "description": "Document retrieval complete",
+            "details": {
+                "document_count": len(docs),
+                "time_taken": f"{retrieve_time:.2f}s",
+                "timestamp": time.time()
+            }
+        })
         
-        logger.info(f"Retrieved {len(documents)} documents in {elapsed_time:.2f} seconds")
-        workflow_logger.info(f"Vector search retrieved {len(documents)} documents")
-        
-        # Add documents to state
-        state["documents"] = documents
-        
-        # Log document sources
-        sources = []
-        for i, doc in enumerate(documents):
+        # Document preview for debugging
+        preview = []
+        for i, doc in enumerate(docs[:3]):  # Only show first 3 docs
             source = doc.metadata.get("source", "Unknown")
-            title = doc.metadata.get("title", "Unknown title")
-            logger.debug(f"Document {i+1} source: {source}")
-            sources.append({"title": title, "source": source})
+            content_preview = doc.page_content[:100] + "..." if len(doc.page_content) > 100 else doc.page_content
+            preview.append(f"{i+1}. {source}: {content_preview}")
         
-        # Add thinking step
-        if "thinking_steps" in state:
-            thinking = {
-                "step": "vector_search",
-                "time": time.strftime("%H:%M:%S"),
-                "description": f"Searching knowledge base for: {query}",
-                "details": {
-                    "documents_found": len(documents),
-                    "time_taken": f"{elapsed_time:.2f}s",
-                    "sources": sources[:3]  # Just include the first 3 sources to keep it manageable
-                }
-            }
-            state["thinking_steps"].append(thinking)
+        # Log retrieved documents
+        workflow_logger.info(f"Retrieved {len(docs)} documents: {'; '.join(preview)}")
         
-        # Add system message about retrieval
-        state["messages"].append(
-            SystemMessage(
-                content=f"I've retrieved {len(documents)} documents from my knowledge base that might help answer the query."
-            )
-        )
     except Exception as e:
-        logger.error(f"Error in vector store retrieval: {str(e)}", exc_info=True)
-        workflow_logger.error(f"Failed to retrieve documents from vector store: {str(e)}")
+        # Log the error
+        workflow_logger.error(f"Error retrieving documents: {e}")
         
-        # Add error to thinking steps
-        if "thinking_steps" in state:
-            thinking = {
-                "step": "vector_search_error",
-                "time": time.strftime("%H:%M:%S"),
-                "description": "Error searching knowledge base",
-                "details": {
-                    "error": str(e)
-                }
+        # Add error thinking step
+        thinking_steps.append({
+            "step": "retrieval_error",
+            "time": time.strftime("%H:%M:%S"),
+            "description": "Error retrieving documents",
+            "details": {
+                "error": str(e),
+                "timestamp": time.time()
             }
-            state["thinking_steps"].append(thinking)
-        
-        # Handle error gracefully
-        state["documents"] = []
-        state["messages"].append(
-            SystemMessage(
-                content=f"I encountered an issue retrieving information from my knowledge base. I'll try to answer based on what I know."
-            )
-        )
+        })
     
+    # Update thinking steps
+    state["thinking_steps"] = thinking_steps
     return state
 
 # Node for web search
@@ -337,134 +376,175 @@ def perform_web_search(state: AgentState) -> AgentState:
 
 # Generate answer based on available documents
 def generate_answer(state: AgentState) -> AgentState:
-    """Generate an answer based on retrieved documents."""
-    workflow_logger.info("Executing answer generation node")
+    """Generate an answer based on the retrieved documents."""
+    query = state["query"]
+    documents = state.get("documents", [])
+    thinking_steps = state.get("thinking_steps", [])
+    
+    # Start thinking step
+    generate_start = time.time()
+    thinking_steps.append({
+        "step": "generation_start",
+        "time": time.strftime("%H:%M:%S"),
+        "description": "Starting answer generation",
+        "details": {
+            "document_count": len(documents),
+            "timestamp": time.time()
+        }
+    })
     
     try:
-        # Get configuration
-        with open("config.yaml", 'r') as file:
-            config = yaml.safe_load(file)
-        
-        # Get the query
-        query = state["query"]
-        logger.info(f"Generating answer for query: {query}")
-        
-        # Calculate search time if we were timing
-        if "search_starttime" in state:
-            search_time = time.time() - state["search_starttime"]
-            logger.info(f"Search completed in {search_time:.2f} seconds")
-        
-        # Determine which documents to use
-        if "documents" in state and state["documents"]:
-            # Use vector store documents if available
-            documents = state["documents"]
-            source_type = "knowledge base"
-            logger.info(f"Using {len(documents)} documents from knowledge base")
-        elif "web_documents" in state and state["web_documents"]:
-            # Fall back to web search documents
-            documents = state["web_documents"]
-            source_type = "web search"
-            logger.info(f"Using {len(documents)} documents from web search")
-        else:
-            # No documents available
-            documents = []
-            source_type = "limited information"
-            logger.warning("No documents available for answer generation")
-        
-        # Add thinking step
-        if "thinking_steps" in state:
-            thinking = {
-                "step": "answer_generation",
-                "time": time.strftime("%H:%M:%S"),
-                "description": "Generating answer from documents",
-                "details": {
-                    "query": query,
-                    "document_source": source_type,
-                    "document_count": len(documents),
-                    "document_titles": [doc.metadata.get("title", "Unknown") for doc in documents[:3]]
-                }
-            }
-            state["thinking_steps"].append(thinking)
-        
-        workflow_logger.info(f"Generating answer using {source_type} with {len(documents)} documents")
-        
-        # Prepare context from documents
-        context = ""
-        for i, doc in enumerate(documents[:5]):  # Limit to 5 documents for performance
-            source = doc.metadata.get("source", "Unknown source")
-            title = doc.metadata.get("title", "No title")
-            context += f"Document {i+1} (from {title}):\n{doc.page_content}\n\n"
-        
-        # Create system prompt
-        system_prompt = """You are a helpful assistant specializing in Canadian university information. 
-You provide accurate information to students about programs, admissions, tuition, and scholarships at Canadian universities.
-
-You have access to information from {source_type}. Use this information to provide helpful, accurate answers.
-If the information isn't in the provided context, say that you don't have that specific information.
-Always cite your sources when providing information.
-
-IMPORTANT: Only provide information that is EXPLICITLY stated in the context below. DO NOT add any details, numbers, 
-or facts not directly mentioned in the context. If the information isn't in the context, clearly state that.
-
-Context information:
-{context}
-
-User query: {query}
-"""
-        
         # Get LLM
         llm = get_llm()
         
-        # Format the prompt with context and query
-        formatted_prompt = system_prompt.format(context=context, query=query, source_type=source_type)
+        # Prepare documents for the context
+        if documents:
+            # Log the number of documents being used
+            workflow_logger.info(f"Generating answer based on {len(documents)} documents")
+            
+            # Add thinking step for document preparation
+            thinking_steps.append({
+                "step": "context_preparation",
+                "time": time.strftime("%H:%M:%S"),
+                "description": "Preparing document context",
+                "details": {
+                    "document_count": len(documents),
+                    "sources": [doc.metadata.get("source", "Unknown") for doc in documents],
+                    "timestamp": time.time()
+                }
+            })
+            
+            # Prepare document context
+            context = "\n\n---\n\n".join([doc.page_content for doc in documents])
+        else:
+            # No documents found
+            context = "No relevant documents found in the knowledge base."
+            workflow_logger.warning("No documents available for context")
+            
+            thinking_steps.append({
+                "step": "no_context",
+                "time": time.strftime("%H:%M:%S"),
+                "description": "No relevant documents found for context",
+                "details": {
+                    "timestamp": time.time()
+                }
+            })
+        
+        # Create the prompt with custom instructions
+        prompt_template = """
+        You are Kevin, a professional consultant specialized in Canadian university education. 
+        You provide accurate, comprehensive, and helpful information about Canadian universities, 
+        including admissions, programs, tuition, scholarships, campus life, and more.
+        
+        Use the following context to answer the question. If the context doesn't contain relevant 
+        information to fully answer the question, acknowledge the limitations of your knowledge 
+        and suggest what additional information might be helpful.
+        
+        Context:
+        {context}
+        
+        Question: {question}
+        
+        Your answer should be:
+        1. Comprehensive yet concise
+        2. Structured with clear sections when appropriate
+        3. Professional and helpful in tone
+        4. Accurate and based only on the provided context
+        
+        Answer:
+        """
+        
+        # Add thinking step for prompt creation
+        thinking_steps.append({
+            "step": "prompt_creation",
+            "time": time.strftime("%H:%M:%S"),
+            "description": "Created prompt for answer generation",
+            "details": {
+                "context_length": len(context),
+                "timestamp": time.time()
+            }
+        })
+        
+        # Create and format the prompt
+        prompt = PromptTemplate(
+            template=prompt_template,
+            input_variables=["context", "question"]
+        )
+        
+        # Format the prompt with our variables
+        formatted_prompt = prompt.format(context=context, question=query)
         
         # Generate answer
-        logger.debug("Generating answer using LLM")
-        start_time = time.time()
-        answer = llm.invoke(formatted_prompt)
-        elapsed_time = time.time() - start_time
-        
-        answer_preview = answer[:100] + "..." if len(answer) > 100 else answer
-        logger.info(f"Generated answer in {elapsed_time:.2f}s: {answer_preview}")
-        
-        # Add thinking step for answer
-        if "thinking_steps" in state:
-            thinking = {
-                "step": "answer_completed",
-                "time": time.strftime("%H:%M:%S"),
-                "description": "Answer generation complete",
-                "details": {
-                    "time_taken": f"{elapsed_time:.2f}s",
-                    "answer_length": len(answer),
-                    "answer_preview": answer_preview
-                }
+        workflow_logger.info("Generating answer with LLM")
+        thinking_steps.append({
+            "step": "llm_generation",
+            "time": time.strftime("%H:%M:%S"),
+            "description": "Sending query to language model",
+            "details": {
+                "model": getattr(llm, "model_name", "unknown"),
+                "timestamp": time.time()
             }
-            state["thinking_steps"].append(thinking)
+        })
         
-        # Save answer to state
+        # Invoke LLM
+        answer = llm.invoke(formatted_prompt)
+        
+        # Measure generation time
+        generate_time = time.time() - generate_start
+        
+        # Add thinking step for answer generation
+        thinking_steps.append({
+            "step": "answer_generated",
+            "time": time.strftime("%H:%M:%S"),
+            "description": "Answer successfully generated",
+            "details": {
+                "answer_length": len(answer),
+                "time_taken": f"{generate_time:.2f}s",
+                "timestamp": time.time()
+            }
+        })
+        
+        # Create an AI message with the answer
+        ai_message = AIMessage(content=answer)
+        
+        # Update state with the answer and thinking steps
+        state["messages"].append(ai_message)
+        state["thinking_steps"] = thinking_steps
+        state["has_answered"] = True
         state["response"] = answer
         
-        workflow_logger.info(f"Answer generation successful (length: {len(answer)} chars)")
+        # Log completion
+        workflow_logger.info(f"Answer generated in {generate_time:.2f}s")
+        
+        return state
+        
     except Exception as e:
-        logger.error(f"Error in answer generation: {str(e)}", exc_info=True)
-        workflow_logger.error(f"Answer generation failed: {str(e)}")
+        # Log error
+        workflow_logger.error(f"Error generating answer: {e}")
         
-        # Add error to thinking steps
-        if "thinking_steps" in state:
-            thinking = {
-                "step": "answer_generation_error",
-                "time": time.strftime("%H:%M:%S"),
-                "description": "Error generating answer",
-                "details": {
-                    "error": str(e)
-                }
+        # Add error thinking step
+        thinking_steps.append({
+            "step": "generation_error",
+            "time": time.strftime("%H:%M:%S"),
+            "description": "Error generating answer",
+            "details": {
+                "error": str(e),
+                "error_type": type(e).__name__,
+                "timestamp": time.time()
             }
-            state["thinking_steps"].append(thinking)
+        })
         
-        # Set a generic response in case of error
-        state["response"] = "I apologize, but I encountered an issue while generating an answer to your question. Please try asking again or rephrasing your question."
+        # Create an error message
+        error_message = f"I apologize, but I encountered an error while generating your answer: {str(e)}"
+        ai_message = AIMessage(content=error_message)
         
-    return state
+        # Update state with error
+        state["messages"].append(ai_message)
+        state["thinking_steps"] = thinking_steps
+        state["has_answered"] = True
+        state["response"] = error_message
+        
+        return state
 
 # Finalize the response and update messaging
 def finalize_response(state: AgentState) -> AgentState:
@@ -650,7 +730,8 @@ class UniversityAgent:
                         "description": "Starting query processing",
                         "details": {
                             "query": question,
-                            "web_search_requested": use_web_search
+                            "web_search_requested": use_web_search,
+                            "timestamp": time.time()
                         }
                     }
                 ]
@@ -659,6 +740,15 @@ class UniversityAgent:
             # Log whether web search is explicitly requested
             if use_web_search:
                 logger.info(f"[{query_id}] Web search explicitly requested")
+                # Add a thinking step for web search request
+                state["thinking_steps"].append({
+                    "step": "web_search_requested",
+                    "time": time.strftime("%H:%M:%S"),
+                    "description": "Web search explicitly requested by user",
+                    "details": {
+                        "timestamp": time.time()
+                    }
+                })
             
             # Run the graph
             workflow_logger.info(f"[{query_id}] Executing agent graph")
@@ -676,6 +766,19 @@ class UniversityAgent:
                     
                     elapsed_time = time.time() - start_time
                     workflow_logger.info(f"[{query_id}] Query completed in {elapsed_time:.2f} seconds")
+                    
+                    # Add a final thinking step for completion
+                    if "thinking_steps" in result:
+                        result["thinking_steps"].append({
+                            "step": "completion",
+                            "time": time.strftime("%H:%M:%S"),
+                            "description": "Response generation complete",
+                            "details": {
+                                "elapsed_time": f"{elapsed_time:.2f}s",
+                                "answer_length": len(answer),
+                                "timestamp": time.time()
+                            }
+                        })
                     break
             
             if not answer:
@@ -707,7 +810,7 @@ class UniversityAgent:
             logger.error(f"[{query_id}] Error processing query: {error_detail}")
             workflow_logger.error(f"[{query_id}] Query failed in {elapsed_time:.2f}s: {str(e)}")
             
-            # Create minimal thinking steps for error
+            # Create more detailed thinking steps for error
             thinking_steps = [
                 {
                     "step": "initialization",
@@ -715,7 +818,8 @@ class UniversityAgent:
                     "description": "Starting query processing",
                     "details": {
                         "query": question,
-                        "web_search_requested": use_web_search
+                        "web_search_requested": use_web_search,
+                        "timestamp": time.time()
                     }
                 },
                 {
@@ -724,7 +828,9 @@ class UniversityAgent:
                     "description": "Error processing query",
                     "details": {
                         "error": str(e),
-                        "time_taken": f"{elapsed_time:.2f}s"
+                        "error_type": type(e).__name__,
+                        "time_taken": f"{elapsed_time:.2f}s",
+                        "timestamp": time.time()
                     }
                 }
             ]

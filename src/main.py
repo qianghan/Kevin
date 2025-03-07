@@ -81,8 +81,8 @@ def get_parser():
     parser.add_argument('--quiet', '-q', action='store_true', help='Suppress INFO logs, show only warnings and errors')
 
     # Add mode argument
-    parser.add_argument('mode', choices=['scrape', 'train', 'rag'], 
-                        help='Mode of operation: scrape data, train model, or run RAG system')
+    parser.add_argument('mode', choices=['scrape', 'train', 'rag', 'web'], 
+                        help='Mode of operation: scrape data, train model, run RAG system, or start web interface')
 
     return parser
 
@@ -196,6 +196,53 @@ def main():
             
         except Exception as e:
             logger.error(f"Error during RAG session: {e}")
+            logger.error(traceback.format_exc())
+            sys.exit(1)
+    
+    elif args.mode == 'web':
+        logger.info("🌐 Starting web interface...")
+        
+        try:
+            # Import and run the web app
+            import streamlit
+            # Don't re-import these modules as they're already imported at the top level
+            # import sys
+            # import os
+            
+            # Get the path to the web app
+            web_app_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web", "app.py")
+            
+            # Check if the file exists
+            if not os.path.exists(web_app_path):
+                logger.error(f"Web app file not found: {web_app_path}")
+                sys.exit(1)
+                
+            logger.info(f"Starting Streamlit server for {web_app_path}")
+            
+            # Store the original sys.argv
+            original_argv = sys.argv.copy()
+            
+            # Set the argv for streamlit to run the app
+            sys.argv = ["streamlit", "run", web_app_path]
+            
+            try:
+                # Try to use the streamlit CLI
+                from streamlit.web import cli as stcli
+                stcli.main()
+            except ImportError:
+                # Fall back to older streamlit API
+                try:
+                    streamlit._is_running_with_streamlit = True
+                    streamlit.web.bootstrap.run(web_app_path, "", [], flag_options={})
+                except:
+                    # Last resort: use os.system to run streamlit
+                    os.system(f"streamlit run {web_app_path}")
+            
+            # Restore the original sys.argv
+            sys.argv = original_argv
+            
+        except Exception as e:
+            logger.error(f"Error starting web interface: {e}")
             logger.error(traceback.format_exc())
             sys.exit(1)
         
