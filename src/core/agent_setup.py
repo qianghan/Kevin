@@ -70,5 +70,17 @@ def initialize_test_agent():
     
     chain = LLMChain(llm=fake_llm, prompt=prompt, output_key="output")
     
+    # Mock invoke method to match the format of the real agent
+    def mock_invoke(query):
+        result = chain.invoke({"input": query})
+        # Include empty thinking steps to match the real agent's format
+        return {
+            "output": result["output"],
+            "thinking": []
+        }
+    
+    # Add the invoke method to the chain
+    chain.invoke = mock_invoke
+    
     logger.info("Initialized test agent with fake responses")
     return chain 

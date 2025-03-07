@@ -1,285 +1,445 @@
+#!/usr/bin/env python3
 """
-Document processor module for chunking, embedding, and storing documents.
+Document processor for handling university documents.
 """
 
 import os
+import re
 import sys
+import json
 import yaml
 import time
-from typing import List, Dict, Any, Optional
-from langchain.schema import Document
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.embeddings import HuggingFaceEmbeddings
-from langchain_chroma import Chroma
+import copy
+import logging
+import random
+import hashlib
+import tempfile
+import glob
+import shutil
+import platform
+import concurrent.futures
+from pathlib import Path
+from typing import List, Dict, Any, Optional, Tuple, Set, Union
+from datetime import datetime
+from collections import defaultdict, Counter
+from tqdm import tqdm
+import uuid
+import sqlite3
+import numpy as np
 
-# Add parent directory to path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+from langchain_core.documents import Document
+from langchain_core.vectorstores import VectorStore
+from langchain_community.vectorstores import FAISS
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-# Import project modules
-from src.utils.logger import get_logger, doc_logger
+from src.utils.logger import get_logger
+from src.models.embeddings import SimpleEmbeddings
 
-# Configure module logger
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 class DocumentProcessor:
-    """Process documents for RAG: chunk, embed, and store."""
+    """
+    Class for processing university documents, chunking them, and 
+    storing them in a vector database.
+    """
     
-    def __init__(self, config_path: str = "config.yaml"):
-        """Initialize the document processor with configuration."""
-        logger.info("Initializing DocumentProcessor")
+    def __init__(self, config: Dict[str, Any]):
+        """
+        Initialize the document processor with config.
         
-        try:
-            with open(config_path, 'r') as file:
-                self.config = yaml.safe_load(file)
-            logger.debug(f"Configuration loaded from {config_path}")
-        except Exception as e:
-            logger.error(f"Error loading configuration from {config_path}: {e}", exc_info=True)
-            # Set default configuration
-            self.config = {
-                'vector_db': {
-                    'collection_name': 'canadian_universities',
-                    'persist_directory': './chroma_db',
-                    'embedding_model': 'sentence-transformers/all-MiniLM-L6-v2'
-                }
-            }
-            logger.warning("Using default configuration due to config loading error")
+        Args:
+            config: Configuration dictionary
+        """
+        self.logger = get_logger("document_processor")
+        self.config = config
         
-        # Vector DB configuration
-        self.collection_name = self.config['vector_db'].get('collection_name', 'canadian_universities')
-        self.persist_directory = self.config['vector_db'].get('persist_directory', './chroma_db')
-        self.embedding_model_name = self.config['vector_db'].get('embedding_model', 'sentence-transformers/all-MiniLM-L6-v2')
+        # Get embedding model config
+        self.embedding_config = config.get('embedding', {})
+        self.embedding_model = self.embedding_config.get('model_name', 'all-MiniLM-L6-v2')
+        self.fallback_embedding_models = self.embedding_config.get('fallback_models', [
+            'all-MiniLM-L6-v2', 
+            'paraphrase-MiniLM-L3-v2', 
+            'all-mpnet-base-v2'
+        ])
         
-        # Ensure persist directory exists
-        os.makedirs(self.persist_directory, exist_ok=True)
-        logger.debug(f"Persistent directory ensured: {self.persist_directory}")
+        # Get chunking config
+        self.chunking_config = config.get('chunking', {})
+        self.chunk_size = self.chunking_config.get('chunk_size', 1000)
+        self.chunk_overlap = self.chunking_config.get('chunk_overlap', 200)
         
-        # Initialize embeddings
-        logger.info(f"Initializing embedding model: {self.embedding_model_name}")
-        try:
-            self.embeddings = HuggingFaceEmbeddings(model_name=self.embedding_model_name)
-            logger.info("Embedding model initialized successfully")
-        except Exception as e:
-            logger.critical(f"Failed to initialize embedding model: {e}", exc_info=True)
-            raise RuntimeError(f"Failed to initialize embedding model: {e}")
+        # Initialize paths
+        self.data_dir = Path(config.get('data', {}).get('data_dir', 'data'))
+        self.vectordb_dir = self.data_dir / "vectordb"
+        
+        # Ensure directories exist
+        self.data_dir.mkdir(exist_ok=True, parents=True)
+        self.vectordb_dir.mkdir(exist_ok=True, parents=True)
         
         # Initialize text splitter for chunking
         self.text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=1000,
-            chunk_overlap=200,
+            chunk_size=self.chunk_size,
+            chunk_overlap=self.chunk_overlap,
             length_function=len,
             separators=["\n\n", "\n", ". ", " ", ""]
         )
-        logger.debug("Text splitter initialized with chunk size 1000 and overlap 200")
+            
+    def get_or_create_vectorstore(self, documents: Optional[List[Document]] = None) -> FAISS:
+        """Get an existing vector store or create a new one with the provided documents."""
+        logger = get_logger("doc_processor.vectorstore")
         
-        # Initialize vector store
-        self.vectorstore = None
-        logger.info("DocumentProcessor initialized successfully")
-    
+        # Define the path to the FAISS index
+        faiss_index_path = os.path.join(self.data_dir, "vectordb", "faiss_index")
+        
+        # Use HuggingFaceEmbeddings for better semantic search
+        logger.info(f"Initializing HuggingFaceEmbeddings with model {self.embedding_model}")
+        embedding_function = HuggingFaceEmbeddings(
+            model_name=self.embedding_model
+        )
+        
+        # Check if FAISS index exists
+        if os.path.exists(faiss_index_path):
+            try:
+                logger.info(f"Loading existing FAISS index from {faiss_index_path}")
+                return FAISS.load_local(faiss_index_path, embedding_function)
+            except Exception as e:
+                logger.error(f"Error loading existing FAISS index: {e}")
+                logger.info("Will create a new FAISS index")
+        
+        # Require documents to create a new vectorstore
+        if not documents:
+            raise ValueError("Documents must be provided to create a new vector store")
+        
+        # Create the vectordb directory if it doesn't exist
+        os.makedirs(os.path.join(self.data_dir, "vectordb"), exist_ok=True)
+        
+        # Create a new FAISS index
+        logger.info(f"Creating new FAISS index from {len(documents)} documents")
+        vectorstore = FAISS.from_documents(documents, embedding_function)
+        
+        # Save the index
+        vectorstore.save_local(faiss_index_path)
+        logger.info(f"FAISS index saved to {faiss_index_path}")
+        
+        return vectorstore
+                
     def chunk_documents(self, documents: List[Document]) -> List[Document]:
-        """Split documents into smaller chunks for better retrieval."""
+        """
+        Split documents into smaller chunks for better retrieval.
+        
+        Args:
+            documents: List of documents to chunk
+            
+        Returns:
+            List of chunked documents
+        """
+        logger = get_logger("core.document_processor")
         logger.info(f"Chunking {len(documents)} documents")
-        doc_logger.info(f"Starting document chunking process for {len(documents)} documents")
         
         start_time = time.time()
-        chunked_documents = []
+        chunked_docs = []
         
-        for i, doc in enumerate(documents):
-            try:
-                chunks = self.text_splitter.split_documents([doc])
-                chunked_documents.extend(chunks)
+        # Stats tracking
+        total_chunks = 0
+        successful = 0
+        failed = 0
+        
+        # Progress bar for chunking
+        with tqdm(total=len(documents), desc="Chunking documents") as pbar:
+            for i, doc in enumerate(documents):
+                try:
+                    # Skip empty documents
+                    if not doc.page_content or len(doc.page_content.strip()) == 0:
+                        logger.warning(f"Skipping empty document")
+                        pbar.update(1)
+                        continue
+                    
+                    # Chunk the document
+                    chunks = self.text_splitter.split_documents([doc])
+                    
+                    # Add to our collection
+                    chunked_docs.extend(chunks)
+                    total_chunks += len(chunks)
+                    successful += 1
+                    
+                    pbar.set_postfix({"Chunks": total_chunks, "Success": successful})
+                except Exception as e:
+                    logger.error(f"Error chunking document: {e}")
+                    failed += 1
                 
-                # Log progress for larger document sets
-                if (i + 1) % 20 == 0 or i == len(documents) - 1:
-                    logger.debug(f"Processed {i+1}/{len(documents)} documents")
-            except Exception as e:
-                source = doc.metadata.get("source", "unknown source")
-                logger.error(f"Error chunking document from {source}: {e}")
-                # Continue with next document
+                pbar.update(1)
         
         elapsed_time = time.time() - start_time
-        logger.info(f"Split {len(documents)} documents into {len(chunked_documents)} chunks in {elapsed_time:.2f} seconds")
-        doc_logger.info(f"Document chunking complete: {len(chunked_documents)} chunks created")
+        logger.info(f"Chunked {successful}/{len(documents)} documents into {total_chunks} chunks in {elapsed_time:.2f}s")
         
-        return chunked_documents
-    
-    def get_or_create_vectorstore(self) -> Chroma:
-        """Get existing vector store or create a new one."""
-        if self.vectorstore:
-            return self.vectorstore
-        
-        # Check if vector store exists
-        if os.path.exists(self.persist_directory) and len(os.listdir(self.persist_directory)) > 0:
-            logger.info(f"Loading existing vector store from {self.persist_directory}")
-            try:
-                self.vectorstore = Chroma(
-                    collection_name=self.collection_name,
-                    embedding_function=self.embeddings,
-                    persist_directory=self.persist_directory
-                )
+        return chunked_docs
                 
-                # Get collection stats if available
-                collection_size = 0
-                try:
-                    collection = self.vectorstore._collection
-                    collection_size = collection.count()
-                    logger.info(f"Vector store loaded with {collection_size} documents")
-                except:
-                    logger.debug("Could not retrieve collection size")
-                
-                doc_logger.info(f"Loaded existing vector store with {collection_size} documents")
-            except Exception as e:
-                logger.error(f"Error loading vector store: {e}", exc_info=True)
-                # Create new vector store as fallback
-                logger.warning("Creating new vector store due to loading error")
-                self.vectorstore = Chroma(
-                    collection_name=self.collection_name,
-                    embedding_function=self.embeddings,
-                    persist_directory=self.persist_directory
-                )
-        else:
-            logger.info(f"Creating new vector store at {self.persist_directory}")
-            self.vectorstore = Chroma(
-                collection_name=self.collection_name,
-                embedding_function=self.embeddings,
-                persist_directory=self.persist_directory
-            )
-            doc_logger.info(f"Created new vector store at {self.persist_directory}")
-        
-        return self.vectorstore
-    
     def add_documents(self, documents: List[Document]) -> None:
-        """Add documents to the vector store."""
+        """
+        Add documents to the vector database.
+        
+        Args:
+            documents: List of documents to add
+        """
+        logger = get_logger("core.document_processor")
+        
         if not documents:
-            logger.warning("No documents provided to add_documents")
-            return
-            
-        logger.info(f"Adding {len(documents)} documents to vector store")
-        doc_logger.info(f"Starting document addition process for {len(documents)} documents")
-        
-        start_time = time.time()
-        
-        # Chunk documents
-        chunked_docs = self.chunk_documents(documents)
-        
-        if not chunked_docs:
-            logger.warning("No chunks were created from the documents")
-            doc_logger.warning("Document addition aborted: No chunks created")
+            logger.warning("No documents to add to vector database")
             return
         
-        # Get vector store
         try:
-            vectorstore = self.get_or_create_vectorstore()
+            # Get or create the vector database
+            vectorstore = self.get_or_create_vectorstore(documents)
             
-            # Add documents to vector store
-            chunk_add_start = time.time()
-            logger.info(f"Adding {len(chunked_docs)} chunks to vector store")
-            vectorstore.add_documents(chunked_docs)
-            chunk_add_time = time.time() - chunk_add_start
+            # Add documents to the vector database
+            logger.info(f"Adding {len(documents)} documents to vector database")
             
-            # Persist changes
-            persist_start = time.time()
-            vectorstore.persist()
-            persist_time = time.time() - persist_start
+            # Add documents in batches to avoid memory issues
+            batch_size = 100
+            total_added = 0
             
-            total_time = time.time() - start_time
+            # Progress bar for adding documents
+            with tqdm(total=len(documents), desc="Adding documents to vector store") as pbar:
+                for i in range(0, len(documents), batch_size):
+                    batch = documents[i:i+batch_size]
+                    try:
+                        # Extract texts and metadatas from documents
+                        texts = [doc.page_content for doc in batch]
+                        metadatas = [doc.metadata for doc in batch]
+                        
+                        # Add batch to FAISS index
+                        vectorstore.add_texts(
+                            texts=texts,
+                            metadatas=metadatas
+                        )
+                        
+                        total_added += len(batch)
+                        logger.info(f"Added batch of {len(batch)} documents (total: {total_added}/{len(documents)})")
+                    except Exception as e:
+                        logger.error(f"Error adding batch to vector database: {str(e)}")
+                        # Try smaller batches if a batch fails
+                        smaller_batch_size = 10
+                        logger.info(f"Trying smaller batch size of {smaller_batch_size}")
+                        for j in range(i, min(i+batch_size, len(documents)), smaller_batch_size):
+                            smaller_batch = documents[j:j+smaller_batch_size]
+                            try:
+                                # Extract texts and metadatas from documents
+                                texts = [doc.page_content for doc in smaller_batch]
+                                metadatas = [doc.metadata for doc in smaller_batch]
+                                
+                                # Add smaller batch to FAISS index
+                                vectorstore.add_texts(
+                                    texts=texts,
+                                    metadatas=metadatas
+                                )
+                                total_added += len(smaller_batch)
+                                logger.info(f"Added smaller batch of {len(smaller_batch)} documents")
+                            except Exception as e2:
+                                logger.error(f"Error adding smaller batch: {str(e2)}")
+                    
+                    pbar.update(len(batch))
             
-            logger.info(f"Documents added and vector store persisted in {total_time:.2f} seconds")
-            logger.debug(f"  - Chunking time: {chunk_add_time - (total_time - chunk_add_time):.2f}s")
-            logger.debug(f"  - Adding time: {chunk_add_time:.2f}s")
-            logger.debug(f"  - Persist time: {persist_time:.2f}s")
+            # Save the updated index
+            faiss_index_path = str(self.vectordb_dir / "faiss_index")
+            logger.info(f"Saving updated FAISS index to {faiss_index_path}")
+            vectorstore.save_local(faiss_index_path)
             
-            doc_logger.info(f"Document addition complete: {len(chunked_docs)} chunks added in {total_time:.2f}s")
+            logger.info(f"Successfully added {total_added} documents to vector database")
+            
         except Exception as e:
-            logger.error(f"Error adding documents to vector store: {e}", exc_info=True)
-            doc_logger.error(f"Document addition failed: {str(e)}")
-            raise
-    
-    def search_documents(self, query: str, k: int = 5, filter: Optional[Dict[str, Any]] = None) -> List[Document]:
-        """Search for documents similar to query."""
-        logger.info(f"Searching for documents matching query: '{query}'")
-        doc_logger.info(f"Vector search request: k={k}, filter={filter is not None}")
+            logger.error(f"Error adding documents to vector store: {str(e)}")
+            raise e
+
+    def get_all_documents(self) -> List[Document]:
+        """
+        Get all documents from the data directory.
         
-        start_time = time.time()
+        Returns:
+            List of documents
+        """
+        logger = get_logger("core.document_processor")
+        documents = []
         
+        # Define the data path to scan for documents
+        data_path = os.path.join(self.data_dir, "raw")
+        
+        # Create data path if it doesn't exist
+        os.makedirs(data_path, exist_ok=True)
+        
+        # Create a sample document if there are no documents
+        if not os.listdir(data_path):
+            logger.warning("No documents found in data directory, creating a sample document")
+            sample_content = """# Sample Document
+This is a sample document created because no documents were found in the data directory.
+You should add more documents to improve the quality of the search.
+
+## Topics
+- Canadian universities
+- Programs and courses
+- Admission requirements
+- Tuition fees
+- Campus life
+"""
+            sample_file = os.path.join(data_path, "sample.md")
+            with open(sample_file, "w") as f:
+                f.write(sample_content)
+        
+        # Define loaders for different file types
+        loaders = {
+            ".txt": self._load_text_file,
+            ".md": self._load_markdown_file,
+            ".pdf": self._load_pdf_file,
+            ".csv": self._load_csv_file,
+            ".json": self._load_json_file,
+            ".html": self._load_html_file,
+        }
+        
+        # Find all files in the data directory
+        file_count = 0
+        loaded_count = 0
+        
+        logger.info(f"Scanning directory {data_path} for documents")
+        for root, _, files in os.walk(data_path):
+            for file in files:
+                # Skip hidden files
+                if file.startswith('.'):
+                    continue
+                    
+                file_path = os.path.join(root, file)
+                file_count += 1
+                
+                # Get file extension
+                ext = os.path.splitext(file)[1].lower()
+                
+                if ext in loaders:
+                    try:
+                        logger.info(f"Loading {file_path}")
+                        docs = loaders[ext](file_path)
+                        
+                        # Add source metadata to each document
+                        for doc in docs:
+                            if "source" not in doc.metadata:
+                                doc.metadata["source"] = file_path
+                        
+                        documents.extend(docs)
+                        loaded_count += 1
+                        logger.info(f"Loaded {len(docs)} documents from {file_path}")
+                    except Exception as e:
+                        logger.error(f"Error loading {file_path}: {e}")
+                else:
+                    logger.warning(f"Unsupported file type: {file_path}")
+        
+        logger.info(f"Loaded {loaded_count}/{file_count} files, total documents: {len(documents)}")
+        
+        return documents
+
+    def _load_text_file(self, file_path: str) -> List[Document]:
+        """
+        Load a text file.
+        
+        Args:
+            file_path: Path to the text file
+            
+        Returns:
+            List of documents
+        """
         try:
-            vectorstore = self.get_or_create_vectorstore()
-            
-            # Execute search
-            if filter:
-                logger.debug(f"Searching with filter: {filter}")
-                results = vectorstore.similarity_search(query, k=k, filter=filter)
-            else:
-                results = vectorstore.similarity_search(query, k=k)
-            
-            elapsed_time = time.time() - start_time
-            
-            # Log search results and timing
-            logger.info(f"Retrieved {len(results)} results in {elapsed_time:.2f}s")
-            
-            # Log metadata about the results
-            for i, doc in enumerate(results):
-                source = doc.metadata.get("source", "Unknown")
-                logger.debug(f"Result {i+1}: {source}")
-            
-            doc_logger.info(f"Vector search complete: {len(results)} results in {elapsed_time:.2f}s")
-            return results
+            with open(file_path, "r", encoding="utf-8") as f:
+                text = f.read()
+            return [Document(page_content=text, metadata={"source": file_path})]
         except Exception as e:
-            logger.error(f"Error searching documents: {e}", exc_info=True)
-            doc_logger.error(f"Vector search failed: {str(e)}")
-            # Return empty results on error
+            logger.error(f"Error loading text file {file_path}: {e}")
             return []
     
-    def get_retriever(self, search_kwargs: Optional[Dict[str, Any]] = None):
-        """Get a retriever for the vector store."""
-        logger.info("Creating retriever from vector store")
+    def _load_markdown_file(self, file_path: str) -> List[Document]:
+        """
+        Load a markdown file.
         
-        try:
-            vectorstore = self.get_or_create_vectorstore()
+        Args:
+            file_path: Path to the markdown file
             
-            if search_kwargs:
-                logger.debug(f"Creating retriever with search arguments: {search_kwargs}")
-                return vectorstore.as_retriever(search_kwargs=search_kwargs)
-            else:
-                return vectorstore.as_retriever()
+        Returns:
+            List of documents
+        """
+        # For this simple implementation, we'll treat markdown as plain text
+        return self._load_text_file(file_path)
+    
+    def _load_pdf_file(self, file_path: str) -> List[Document]:
+        """
+        Load a PDF file.
+        
+        Args:
+            file_path: Path to the PDF file
+            
+        Returns:
+            List of documents
+        """
+        try:
+            # Use a placeholder for PDF loading
+            logger.warning(f"PDF loading not fully implemented for {file_path}")
+            return [Document(page_content=f"PDF content from {file_path}", metadata={"source": file_path})]
         except Exception as e:
-            logger.error(f"Error creating retriever: {e}", exc_info=True)
-            raise
+            logger.error(f"Error loading PDF file {file_path}: {e}")
+            return []
+    
+    def _load_csv_file(self, file_path: str) -> List[Document]:
+        """
+        Load a CSV file.
+        
+        Args:
+            file_path: Path to the CSV file
+            
+        Returns:
+            List of documents
+        """
+        try:
+            # Use a placeholder for CSV loading
+            logger.warning(f"CSV loading not fully implemented for {file_path}")
+            return [Document(page_content=f"CSV content from {file_path}", metadata={"source": file_path})]
+        except Exception as e:
+            logger.error(f"Error loading CSV file {file_path}: {e}")
+            return []
+    
+    def _load_json_file(self, file_path: str) -> List[Document]:
+        """
+        Load a JSON file.
+        
+        Args:
+            file_path: Path to the JSON file
+            
+        Returns:
+            List of documents
+        """
+        try:
+            # Use a placeholder for JSON loading
+            logger.warning(f"JSON loading not fully implemented for {file_path}")
+            return [Document(page_content=f"JSON content from {file_path}", metadata={"source": file_path})]
+        except Exception as e:
+            logger.error(f"Error loading JSON file {file_path}: {e}")
+            return []
+    
+    def _load_html_file(self, file_path: str) -> List[Document]:
+        """
+        Load an HTML file.
+        
+        Args:
+            file_path: Path to the HTML file
+            
+        Returns:
+            List of documents
+        """
+        try:
+            # Use a placeholder for HTML loading
+            logger.warning(f"HTML loading not fully implemented for {file_path}")
+            return [Document(page_content=f"HTML content from {file_path}", metadata={"source": file_path})]
+        except Exception as e:
+            logger.error(f"Error loading HTML file {file_path}: {e}")
+            return []
 
 if __name__ == "__main__":
-    # Example usage
-    from scraper import WebScraper
+    # Simple test code
+    with open('config.yaml', 'r') as f:
+        config = yaml.safe_load(f)
     
-    logger.info("Running document processor example")
-    
-    try:
-        # Scrape documents
-        logger.info("Initializing web scraper")
-        scraper = WebScraper()
-        
-        logger.info("Scraping university websites")
-        documents = scraper.scrape_all_universities()
-        logger.info(f"Scraped {len(documents)} documents")
-        
-        # Process and store documents
-        logger.info("Initializing document processor")
-        processor = DocumentProcessor()
-        
-        logger.info("Adding documents to vector store")
-        processor.add_documents(documents)
-        
-        # Example search
-        logger.info("Performing example search")
-        results = processor.search_documents("scholarship requirements for international students")
-        
-        logger.info(f"Retrieved {len(results)} results")
-        for i, doc in enumerate(results):
-            print(f"Result {i+1}:")
-            print(f"Source: {doc.metadata.get('source')}")
-            print(f"Title: {doc.metadata.get('title')}")
-            print(f"Content snippet: {doc.page_content[:200]}...")
-            print("-" * 80)
-        
-        logger.info("Document processor example completed successfully")
-    except Exception as e:
-        logger.error(f"Error in document processor example: {e}", exc_info=True)
-        print(f"Error: {e}") 
+    processor = DocumentProcessor(config)
+    test_doc = Document(page_content="This is a test document.", metadata={"source": "test"})
+    processor.add_documents([test_doc]) 

@@ -1,0 +1,2 @@
+[console_scripts]
+kevin = src.main:main

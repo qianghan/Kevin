@@ -1,68 +1,108 @@
 # Configuration for Canadian university website scraping
 scraping:
-  max_depth: 3        # Maximum link depth for crawling
-  timeout: 30         # Request timeout in seconds
-  max_pages: 100      # Maximum pages to scrape per university
-  user_agent: random  # Use random user agent or specify a string
+  max_depth: 3
+  timeout: 30
+  max_pages: 100
+  user_agent: random
+  max_retries: 3
+  retry_delay: 2
+  # Add advanced timeout and debugging settings
+  max_crawl_duration: 600
+  max_url_processing_time: 120
+  enable_emergency_exit: true
+  enable_verbose_logging: false
+  watchdog_interval: 30
+  activity_timeout: 180
+  # Block patterns for social media and other unwanted domains
+  block_patterns:
+    - "facebook.com"
+    - "twitter.com"
+    - "instagram.com"
+    - "linkedin.com"
+    - "youtube.com"
+    - "tiktok.com"
+    - "pinterest.com"
+    - "reddit.com"
+    - "snapchat.com"
+  # Problem URL handling
+  skip_problematic_urls: true
+  problematic_domains:
+    - "mcmastercce.ca"
+    - "www.mcmastercce.ca"
+  ssl_verification: false
+  # Scraper agent settings
+  headers:
+    Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8"
+    Accept-Language: "en-US,en;q=0.5"
+    Accept-Encoding: "gzip, deflate, br"
+    Connection: "keep-alive"
+    Upgrade-Insecure-Requests: "1"
   
 # Vector database configuration
 vector_db:
   collection_name: "canadian_universities"
-  persist_directory: "./chroma_db"
+  persist_directory: "./data/vectordb"
   embedding_model: "sentence-transformers/all-MiniLM-L6-v2"
 
 # LLM configuration
 llm:
-  provider: "deepseek"  # The LLM provider to use (deepseek, huggingface)
-  api_key: ""          # Set your DeepSeek API key here or in .env file as DEEPSEEK_API_KEY
-  model_name: "deepseek-chat"  # DeepSeek model to use
-  temperature: 0.1
-  max_tokens: 1000
-  request_timeout: 60   # Timeout for API requests in seconds
-  max_retries: 3        # Number of retries for failed API calls
-  retry_delay: 2        # Initial delay between retries in seconds (doubles with each retry)
-  fallback_to_huggingface: true  # Whether to fall back to HuggingFace if DeepSeek API fails
-  fallback_model: "deepseek-ai/deepseek-coder-1.3b-base"  # HuggingFace model to use as fallback
+  provider: "deepseek"
+  api_key: "sk-a8c90a7a82884c0e994508e0608728eb"
+  model_name: "deepseek-chat"
+  temperature: 0.3
+  max_tokens: 1200
+  request_timeout: 45
+  use_cache: true
+  max_retries: 3
+  retry_delay: 2
+  fallback_to_huggingface: false
+  top_p: 0.88
+  presence_penalty: 0.1
+  frequency_penalty: 0.2
 
 # Web search configuration
 web_search:
   enabled: true
-  tavily_api_key: ""  # Set your Tavily API key here or in .env file
-  search_depth: "basic"  # basic or comprehensive
-  max_results: 5
+  tavily_api_key: "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"
+  search_depth: "basic"
+  max_results: 3
 
 # Workflow settings
 workflow:
-  relevance_threshold: 0.7  # Threshold for document relevance (0-1)
-  hallucination_threshold: 0.8  # Threshold for hallucination detection (0-1)
-  include_web_results_in_rag: true  # Whether to add web search results to RAG store
+  relevance_threshold: 0.6
+  hallucination_threshold: 0.7
+  include_web_results_in_rag: false
 
 # Logging configuration
 logging:
-  level: "INFO"       # Default log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-  console_level: "INFO"    # Console output log level
-  file_level: "DEBUG"      # File output log level
-  max_file_size: 10485760  # Maximum log file size in bytes (10 MB)
-  backup_count: 5          # Number of backup log files to keep
-  log_api_calls: true      # Whether to log API calls (may contain sensitive data)
-  log_dir: "./logs"        # Directory to store log files
+  level: "INFO"
+  console_level: "DEBUG"
+  file_level: "INFO"
+  max_file_size: 10485760
+  backup_count: 5
+  log_api_calls: true
+  log_dir: "./logs"
 
 # University websites to scrape
 universities:
-  # Ontario Universities
   - name: "University of Toronto"
     base_url: "https://www.utoronto.ca/"
     focus_urls:
-      - "https://www.utoronto.ca/academics"
-      - "https://www.utoronto.ca/admissions"
-      - "https://www.adm.utoronto.ca/finances/"
-      - "https://future.utoronto.ca/scholarships/"
+      - "https://future.utoronto.ca/finances/fees/"
+      - "https://future.utoronto.ca/finances/"
+      - "https://future.utoronto.ca/finances/financial-aid/"
+      - "https://future.utoronto.ca/finances/awards/"
+      - "https://planningandbudget.utoronto.ca/tuition-fee-schedules/"
+      - "https://studentaccount.utoronto.ca/tuition-fees/current-academic-year-fees/"
+      - "https://studentaccount.utoronto.ca/tuition-fees/fee-payment-service-charge-billing-deadlines/"
+      - "https://www.utoronto.ca/academics/international-student-fees"
+      - "https://www.utoronto.ca/academics/domestic-student-fees"
   
   - name: "McMaster University"
     base_url: "https://www.mcmaster.ca/"
     focus_urls:
       - "https://www.mcmaster.ca/academics/"
-      - "https://future.mcmaster.ca/admission/"
+      - "https://future.mcmaster.ca/admissions/"
       - "https://registrar.mcmaster.ca/tuition-fees/"
       - "https://sfas.mcmaster.ca/scholarships/"
 
@@ -71,7 +111,7 @@ universities:
     focus_urls:
       - "https://uwaterloo.ca/future-students/programs"
       - "https://uwaterloo.ca/future-students/admissions"
-      - "https://uwaterloo.ca/finance/student-financial-services"
+      - "https://uwaterloo.ca/student-financial-services"
       - "https://uwaterloo.ca/student-awards-financial-aid/"
 
   - name: "Western University"
@@ -86,7 +126,7 @@ universities:
     base_url: "https://www.queensu.ca/"
     focus_urls:
       - "https://www.queensu.ca/academics/"
-      - "https://www.queensu.ca/admission/"
+      - "https://www.queensu.ca/future-students"
       - "https://www.queensu.ca/registrar/tuition-fees"
       - "https://www.queensu.ca/studentawards/"
 
@@ -113,7 +153,7 @@ universities:
       - "https://admissions.carleton.ca/"
       - "https://carleton.ca/studentaccounts/tuition-fees/"
       - "https://carleton.ca/awards/"
-  
+
   # British Columbia Universities
   - name: "University of British Columbia"
     base_url: "https://www.ubc.ca/"
@@ -126,11 +166,11 @@ universities:
   - name: "Simon Fraser University"
     base_url: "https://www.sfu.ca/"
     focus_urls:
-      - "https://www.sfu.ca/programs.html"
-      - "https://www.sfu.ca/admission.html"
-      - "https://www.sfu.ca/students/financialaid/costs.html"
-      - "https://www.sfu.ca/students/financialaid/entrance.html"
-  
+      - "https://www.sfu.ca/programs"
+      - "https://www.sfu.ca/admission"
+      - "https://www.sfu.ca/students/financialaid/costs"
+      - "https://www.sfu.ca/students/financialaid/entrance"
+
   - name: "University of Victoria"
     base_url: "https://www.uvic.ca/"
     focus_urls:
@@ -138,16 +178,16 @@ universities:
       - "https://www.uvic.ca/undergraduate/admissions/"
       - "https://www.uvic.ca/registrar/students/financials/"
       - "https://www.uvic.ca/registrar/students/financials/financial-aid/"
-  
+
   # Quebec Universities
   - name: "McGill University"
     base_url: "https://www.mcgill.ca/"
     focus_urls:
       - "https://www.mcgill.ca/undergraduate-admissions/"
       - "https://www.mcgill.ca/undergraduate-admissions/apply"
-      - "https://www.mcgill.ca/student-accounts/tuition-charges/fallwinter-term-tuition-and-fees"
+      - "https://www.mcgill.ca/student-accounts/tuition-charges"
       - "https://www.mcgill.ca/studentaid/scholarships-aid"
-  
+
   - name: "Université de Montréal"
     base_url: "https://www.umontreal.ca/"
     focus_urls:
@@ -155,7 +195,7 @@ universities:
       - "https://admission.umontreal.ca/admission/"
       - "https://registraire.umontreal.ca/droits-de-scolarite/"
       - "https://bourses.umontreal.ca/"
-  
+
   - name: "Laval University"
     base_url: "https://www.ulaval.ca/"
     focus_urls:
@@ -163,7 +203,7 @@ universities:
       - "https://www.ulaval.ca/admission"
       - "https://www.ulaval.ca/etudes/droits-de-scolarite"
       - "https://www.bbaf.ulaval.ca/"
-  
+
   - name: "Université du Québec"
     base_url: "https://www.uquebec.ca/"
     focus_urls:
@@ -171,15 +211,15 @@ universities:
       - "https://www.uquebec.ca/reseau/fr/futurs-etudiants/admission"
       - "https://www.uquebec.ca/reseau/fr/futurs-etudiants/couts-des-etudes"
       - "https://www.uquebec.ca/reseau/fr/futurs-etudiants/bourses"
-  
+
   # Alberta Universities
   - name: "University of Alberta"
     base_url: "https://www.ualberta.ca/"
     focus_urls:
-      - "https://www.ualberta.ca/admissions/index.html"
-      - "https://www.ualberta.ca/admissions/undergraduate/tuition-and-scholarships/index.html"
-      - "https://www.ualberta.ca/registrar/scholarships-awards-financial-support/index.html"
-  
+      - "https://www.ualberta.ca/admissions"
+      - "https://www.ualberta.ca/admissions/undergraduate/tuition-and-scholarships"
+      - "https://www.ualberta.ca/registrar/scholarships-awards-financial-support"
+
   - name: "University of Calgary"
     base_url: "https://www.ucalgary.ca/"
     focus_urls:
@@ -187,16 +227,16 @@ universities:
       - "https://www.ucalgary.ca/future-students/undergraduate/apply"
       - "https://www.ucalgary.ca/registrar/finances/tuition-and-fees"
       - "https://www.ucalgary.ca/registrar/finances/awards-scholarships-and-bursaries"
-  
+
   # Other Major Universities
   - name: "Dalhousie University"
     base_url: "https://www.dal.ca/"
     focus_urls:
-      - "https://www.dal.ca/academics/programs.html"
-      - "https://www.dal.ca/admissions.html"
-      - "https://www.dal.ca/admissions/money_matters/tuition_fees.html"
-      - "https://www.dal.ca/admissions/money_matters/funding-sources/scholarships.html"
-  
+      - "https://www.dal.ca/academics/programs"
+      - "https://www.dal.ca/admissions"
+      - "https://www.dal.ca/admissions/money_matters/tuition_fees"
+      - "https://www.dal.ca/admissions/money_matters/funding-sources/scholarships"
+
   - name: "University of Saskatchewan"
     base_url: "https://www.usask.ca/"
     focus_urls:
@@ -204,7 +244,7 @@ universities:
       - "https://admissions.usask.ca/"
       - "https://students.usask.ca/money/tuition-fees/"
       - "https://students.usask.ca/money/scholarships.php"
-  
+
   - name: "University of Manitoba"
     base_url: "https://umanitoba.ca/"
     focus_urls:
@@ -213,52 +253,38 @@ universities:
       - "https://umanitoba.ca/admissions/undergraduate/costs-and-finances"
       - "https://umanitoba.ca/financial-aid-and-awards/"
 
-# Provincial Application Portals
+  # Provincial Application Portals
   - name: "ApplyAlberta"
     base_url: "https://www.applyalberta.ca/"
     focus_urls:
       - "https://www.applyalberta.ca/program-search"
       - "https://www.applyalberta.ca/how-to-apply"
       - "https://www.applyalberta.ca/finance-your-education"
-  
+
   - name: "EducationPlannerBC"
     base_url: "https://www.educationplannerbc.ca/"
     focus_urls:
       - "https://www.educationplannerbc.ca/search"
       - "https://www.educationplannerbc.ca/plan/apply"
       - "https://www.educationplannerbc.ca/plan/finance"
-  
+
   - name: "Ontario Universities' Application Centre (OUAC)"
     base_url: "https://www.ouac.on.ca/"
     focus_urls:
       - "https://www.ouac.on.ca/ouac-101/"
       - "https://www.ouac.on.ca/ouac-105/"
       - "https://www.ontariouniversitiesinfo.ca/"
-  
+
   - name: "SRAM (Quebec)"
     base_url: "https://www.sram.qc.ca/"
     focus_urls:
       - "https://www.sram.qc.ca/diploma-of-college-studies/available-programs"
       - "https://www.sram.qc.ca/diploma-of-college-studies/student-for-a-day"
       - "https://www.sram.qc.ca/international-student/admission"
-  
+
   - name: "SRACQ (Quebec)"
     base_url: "https://www.sracq.qc.ca/"
     focus_urls:
       - "https://www.sracq.qc.ca/programmes/"
       - "https://www.sracq.qc.ca/admission/"
-      - "https://www.sracq.qc.ca/international/"
-
-# Tags to extract specific information (used for metadata)
-information_tags:
-  - tag: "programs"
-    keywords: ["program", "degree", "major", "minor", "course", "faculty", "department", "study"]
-  
-  - tag: "admissions"
-    keywords: ["admission", "apply", "application", "requirement", "deadline", "eligibility", "entry"]
-  
-  - tag: "tuition"
-    keywords: ["tuition", "fee", "cost", "expense", "financial", "payment", "pay"]
-  
-  - tag: "scholarships"
-    keywords: ["scholarship", "award", "grant", "bursary", "financial aid", "funding", "support"] 
+      - "https://www.sracq.qc.ca/international/" 

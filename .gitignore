@@ -1,0 +1,212 @@
+# Python virtual environments
+kevin/
+venv/
+env/
+.env/
+.venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+coverage.xml
+*.cover
+.hypothesis/
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+*.egg
+eggs/
+.eggs/
+*.so
+*.dylib
+*.dll
+wheelhouse/
+MANIFEST
+
+# IDEs and editors
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+*.sublime-*
+
+# Logs and databases
+*.log
+*.sqlite
+*.db
+chroma_db/
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage.*
+nosetests.xml
+
+# Other
+.coverage
+htmlcov/
+
+# Python build artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+kevin.egg-info/
+
+# Virtual environments
+kevin_env/
+venv/
+env/
+ENV/
+.env
+.venv/
+new_venv/
+env.bak/
+venv.bak/
+
+# Logs and databases
+logs/
+src/logs/
+test_logs/
+*.log
+*.sqlite
+*.db
+*.hdf5
+chromadb/
+
+# Cache and backup directories
+cache/
+chroma_db/
+chroma_db_backup*/
+*_backup*/
+data/cache/
+vector_db/
+embeddings/
+
+# Environment and secrets
+.env
+.env.*
+*.local
+config.local.yaml
+
+# IDE settings
+.idea/
+.vscode/
+*.swp
+*.swo
+.project
+.pydevproject
+.settings/
+*.sublime-workspace
+*.sublime-project
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Testing artifacts
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+.nox/
+reports/
+**/test-output/
+scraping_errors.txt
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Documentation
+docs/_build/
+site/
+
+# Streamlit
+.streamlit/
+.streamlit/secrets.toml
+
+# Temporary files
+*.tmp
+tmp/
+
+# Shell scripts (except important ones)
+# Uncomment the following if you want to ignore shell scripts
+# *.sh
+
+# Run-specific files that don't need version control
+run_*.py
+!run_kevin.py
+
+# Specific to this project
+kevin/
+
+# Scrape data and cache
+data/cache/
+data/raw/
+data/vectordb/
+data/stats/
+data/backup/
+data/._*
+*.cache
+*.cache.json
+scrape_cache/
+scrape_data/
+temp/
+tmp/
+
+# Scrape logs
+logs/scrape/
+logs/crawler/
+*.crawl.log
+*.scrape.log
+
+# Temporary files
+*.tmp
+*.temp
+*~
+.DS_Store
+Thumbs.db
+
+# Specific large files causing issues
+kevin/lib/python3.10/site-packages/pyarrow/libarrow.1900.dylib
+kevin/lib/python3.10/site-packages/torch/lib/libtorch_cpu.dylib
+chroma_db/chroma.sqlite3
+
+# Additional directories to ignore
+kevin/lib/
+**/site-packages/
+**/torch/lib/
+**/pyarrow/
+**/chroma_db/
+chroma_db/ 

@@ -1,0 +1,55 @@
+{
+  "total_documents": 100,
+  "chunking": {
+    "total_documents": 100,
+    "successfully_chunked": 100,
+    "failed_chunking": 0,
+    "total_chunks_created": 754,
+    "empty_documents": 0,
+    "avg_chunks_per_document": 7.54,
+    "largest_document_chunks": 25,
+    "smallest_document_chunks": 1,
+    "sources": {
+      "future.utoronto.ca": 61,
+      "apply.adm.utoronto.ca": 3,
+      "planningandbudget.utoronto.ca": 1,
+      "studentaccount.utoronto.ca": 7,
+      "internationalexperience.utoronto.ca": 1,
+      "www.registrar.utoronto.ca": 4,
+      "www.ontario.ca": 1,
+      "www.utoronto.ca": 2,
+      "alumni.utoronto.ca": 6,
+      "gro.utoronto.ca": 1,
+      "research.utoronto.ca": 3,
+      "www.engineering.utoronto.ca": 1,
+      "www.artsci.utoronto.ca": 1,
+      "internationalprograms.utoronto.ca": 1,
+      "kpe.utoronto.ca": 1,
+      "music.utoronto.ca": 1,
+      "bloomberg.nursing.utoronto.ca": 1,
+      "paconsortium.ca": 1,
+      "www.utm.utoronto.ca": 1,
+      "www.utsc.utoronto.ca": 1,
+      "idpz.utorauth.utoronto.ca": 1
+    }
+  },
+  "vector_db": {
+    "docs_added": 0,
+    "batches_processed": 0,
+    "batches_failed": 0,
+    "fallback_used": false
+  },
+  "timing": {
+    "start_time": 1740862118.828275,
+    "chunking_time": 0.021973848342895508,
+    "filtering_time": 0.09133696556091309,
+    "db_add_time": 0,
+    "total_time": 0.11363983154296875
+  },
+  "filtering": {
+    "total_chunks": 754,
+    "successful": 0,
+    "failed": 754
+  },
+  "error": "Metadata filtering failed or no documents remained"
+}

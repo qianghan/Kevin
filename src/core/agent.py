@@ -14,7 +14,13 @@ from langchain.schema import Document
 from langchain.prompts import PromptTemplate
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, FunctionMessage
 from langchain_community.llms.huggingface_pipeline import HuggingFacePipeline
-from transformers import pipeline
+# Conditionally import transformers only if not using DeepSeek only
+if not os.environ.get('USE_DEEPSEEK_ONLY') == '1':
+    try:
+        from transformers import pipeline
+    except UnicodeDecodeError as e:
+        print(f"Error importing transformers: {e}")
+        print("Continuing without transformers support")
 from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import ToolNode
 from dotenv import load_dotenv
@@ -42,17 +48,23 @@ class AgentState(TypedDict):
     web_documents: List[Document]  # Documents from web search
     has_answered: bool  # Whether the query has been answered
     use_web_search: bool  # Whether to use web search
-    is_relevant: bool  # Whether documents are relevant
-    is_hallucination_free: bool  # Whether response is free of hallucinations
     query: str  # The original query
     response: Optional[str]  # Generated response
+    search_starttime: Optional[float]  # Start time for performance tracking
+    thinking_steps: List[Dict[str, Any]]  # Captures internal thinking process for UI
 
 # Initialize LLM based on configuration
 def get_llm():
-    """Get LLM based on configuration."""
-    logger.info("Initializing LLM based on configuration")
+    """Get the LLM to use for the agent."""
+    logger.info("Initializing LLM")
     
     try:
+        # Check for environment variable to force DeepSeek API usage
+        if os.getenv('USE_DEEPSEEK_ONLY', 'false').lower() in ('true', '1', 't'):
+            logger.info("USE_DEEPSEEK_ONLY is set - only using DeepSeek API")
+            return DeepSeekAPI()
+            
+        # Load configuration
         with open("config.yaml", 'r') as file:
             config = yaml.safe_load(file)
         
@@ -68,41 +80,18 @@ def get_llm():
                 return DeepSeekAPI()
             except Exception as e:
                 logger.error(f"Error initializing DeepSeek API: {str(e)}", exc_info=True)
-                
-                # Fall back to HuggingFace if configured and DeepSeek fails
-                if llm_config.get('fallback_to_huggingface', True):
-                    logger.warning("Falling back to HuggingFace model due to DeepSeek initialization failure")
-                    model_name = llm_config.get('fallback_model', "deepseek-ai/deepseek-coder-1.3b-base")
-                    logger.info(f"Initializing HuggingFace pipeline with model: {model_name}")
-                    
-                    llm_pipeline = pipeline(
-                        task="text-generation",
-                        model=model_name,
-                        max_length=llm_config.get('max_tokens', 2048),
-                        temperature=llm_config.get('temperature', 0.1),
-                        top_p=0.95,
-                        repetition_penalty=1.15
-                    )
-                    return HuggingFacePipeline(pipeline=llm_pipeline)
-                else:
-                    # Re-raise the exception if no fallback is configured
-                    logger.critical("No fallback configured and DeepSeek initialization failed")
-                    raise
+                # No fallback to HuggingFace, force DeepSeek API usage
+                logger.critical("DeepSeek API initialization failed and fallback is disabled")
+                raise RuntimeError(f"DeepSeek API must be configured properly: {str(e)}")
         else:
-            # Default to HuggingFace
-            logger.info("Provider set to use HuggingFace model directly")
-            model_name = llm_config.get('model_name', "deepseek-ai/deepseek-coder-1.3b-base")
-            logger.info(f"Initializing HuggingFace pipeline with model: {model_name}")
-            
-            llm_pipeline = pipeline(
-                task="text-generation",
-                model=model_name,
-                max_length=llm_config.get('max_tokens', 2048),
-                temperature=llm_config.get('temperature', 0.1),
-                top_p=0.95,
-                repetition_penalty=1.15
-            )
-            return HuggingFacePipeline(pipeline=llm_pipeline)
+            # Force provider to be deepseek
+            logger.warning(f"Provider '{provider}' is not supported. Only DeepSeek API is allowed. Switching to DeepSeek.")
+            try:
+                logger.info("Attempting to initialize DeepSeek API client")
+                return DeepSeekAPI()
+            except Exception as e:
+                logger.error(f"Error initializing DeepSeek API: {str(e)}", exc_info=True)
+                raise RuntimeError(f"DeepSeek API must be configured properly: {str(e)}")
     except Exception as e:
         logger.critical(f"Failed to initialize LLM: {str(e)}", exc_info=True)
         raise RuntimeError(f"Failed to initialize LLM: {str(e)}")
@@ -112,7 +101,14 @@ def router(state: AgentState) -> AgentState:
     """Decide whether to use vector store or web search."""
     workflow_logger.info("Executing router node to determine search method")
     
+    # Initialize thinking steps if not present
+    if "thinking_steps" not in state:
+        state["thinking_steps"] = []
+    
     try:
+        # Track performance
+        state["search_starttime"] = time.time()
+        
         # Get configuration
         with open("config.yaml", 'r') as file:
             config = yaml.safe_load(file)
@@ -129,57 +125,39 @@ def router(state: AgentState) -> AgentState:
         state["query"] = query
         logger.info(f"Processing query: {query}")
         
-        # Check if user explicitly requested web search
-        use_web_search = state.get("use_web_search", False)
+        # Check for explicit web search keywords
+        web_search_keywords = ["recent", "latest", "news", "current", "today", "covid", "2023", "2024"]
+        needs_web = any(keyword in query.lower() for keyword in web_search_keywords)
         
-        # If web search is not explicitly requested, decide based on content
-        if not use_web_search:
-            workflow_logger.info("Determining search method based on query content")
-            # Create system prompt for the router decision
-            router_prompt = """You are a helpful assistant that decides how to answer questions.
-            
-Your task is to determine if a query about Canadian universities is likely to be answered by:
-1. Information from university websites (about programs, admissions, tuition, scholarships)
-2. Information that requires current/recent web search data
-
-Query: {query}
-
-Output ONLY ONE of the following:
-- "vectorstore" - if this query can be answered with standard university information
-- "websearch" - if this query requires up-to-date or specific information that might not be in university documentation
-
-Choose "vectorstore" unless the query clearly requires current information like recent news, COVID policies, 
-specific events, or very detailed/specific numbers that might require the most up-to-date information.
-"""
-            
-            # Get LLM
-            llm = get_llm()
-            
-            # Format the prompt with the query
-            formatted_prompt = router_prompt.format(query=query)
-            
-            # Generate decision
-            logger.debug("Generating routing decision using LLM")
-            decision = llm.invoke(formatted_prompt).strip().lower()
-            logger.info(f"Router decision: {decision}")
-            
-            # Parse decision
-            if "websearch" in decision:
-                workflow_logger.info(f"Routing query to web search: {query}")
-                state["use_web_search"] = True
-                state["messages"].append(
-                    SystemMessage(
-                        content=f"I'll search the web for information about: {query}"
-                    )
+        # Add thinking step for routing decision
+        thinking = {
+            "step": "router",
+            "time": time.strftime("%H:%M:%S"),
+            "description": "Deciding search method",
+            "details": {
+                "query": query,
+                "keywords_detected": [k for k in web_search_keywords if k in query.lower()],
+                "decision": "web search" if needs_web or state.get("use_web_search", False) else "knowledge base"
+            }
+        }
+        state["thinking_steps"].append(thinking)
+        
+        if needs_web or state.get("use_web_search", False):
+            workflow_logger.info(f"Routing query to web search: {query}")
+            state["use_web_search"] = True
+            state["messages"].append(
+                SystemMessage(
+                    content=f"I'll search the web for information about: {query}"
                 )
-            else:
-                workflow_logger.info(f"Routing query to vector store: {query}")
-                state["use_web_search"] = False
-                state["messages"].append(
-                    SystemMessage(
-                        content=f"I'll check my knowledge base for information about: {query}"
-                    )
+            )
+        else:
+            workflow_logger.info(f"Routing query to vector store: {query}")
+            state["use_web_search"] = False
+            state["messages"].append(
+                SystemMessage(
+                    content=f"I'll check my knowledge base for information about: {query}"
                 )
+            )
     except Exception as e:
         logger.error(f"Error in router node: {str(e)}", exc_info=True)
         # Default to vector store if there's an error
@@ -190,56 +168,131 @@ specific events, or very detailed/specific numbers that might require the most u
                 content=f"I'll check my knowledge base for information about your query."
             )
         )
+        
+        # Add error to thinking steps
+        if "thinking_steps" in state:
+            thinking = {
+                "step": "router_error",
+                "time": time.strftime("%H:%M:%S"),
+                "description": "Error in routing decision",
+                "details": {
+                    "error": str(e),
+                    "fallback": "knowledge base"
+                }
+            }
+            state["thinking_steps"].append(thinking)
     
     return state
 
 # Node for retrieving from vector store
 def retrieve_from_vectorstore(state: AgentState) -> AgentState:
     """Retrieve relevant documents from the vector store."""
-    workflow_logger.info("Executing vector store retrieval node")
+    query = state["query"]
+    thinking_steps = state.get("thinking_steps", [])
+    
+    retrieve_start = time.time()
+    thinking_steps.append({
+        "step": "vector_retrieval_start",
+        "time": time.strftime("%H:%M:%S"),
+        "description": "Beginning document retrieval from knowledge base",
+        "details": {
+            "query": query,
+            "timestamp": time.time()
+        }
+    })
     
     try:
-        # Get the query
-        query = state["query"]
-        logger.info(f"Retrieving documents for query: {query}")
+        docs = []
+        try:
+            # Create document processor instance
+            doc_processor = DocumentProcessor()
+            
+            # Get similarity search method
+            similarity_search = getattr(doc_processor.get_vectorstore(), "similarity_search_with_score", None)
+            if similarity_search:
+                search_results = similarity_search(query, k=6)
+                
+                # Filter results based on similarity score
+                docs = [doc for doc, score in search_results if score < 1.2]
+                
+                # Add a thinking step for search results
+                score_details = [{"document": doc.metadata.get("source", "Unknown"), "score": f"{score:.4f}"} for doc, score in search_results]
+                thinking_steps.append({
+                    "step": "similarity_search_results",
+                    "time": time.strftime("%H:%M:%S"),
+                    "description": f"Found {len(search_results)} documents, keeping {len(docs)} relevant ones",
+                    "details": {
+                        "search_results": score_details,
+                        "timestamp": time.time()
+                    }
+                })
+            else:
+                docs = doc_processor.get_vectorstore().similarity_search(query, k=5)
+                thinking_steps.append({
+                    "step": "search_results",
+                    "time": time.strftime("%H:%M:%S"),
+                    "description": f"Retrieved {len(docs)} documents from knowledge base",
+                    "details": {
+                        "document_count": len(docs),
+                        "timestamp": time.time()
+                    }
+                })
+        except Exception as e:
+            # Fallback to alternative method
+            docs = []
+            thinking_steps.append({
+                "step": "search_error",
+                "time": time.strftime("%H:%M:%S"),
+                "description": "Error in primary search method, using fallback",
+                "details": {
+                    "error": str(e),
+                    "timestamp": time.time()
+                }
+            })
         
-        # Initialize document processor
-        processor = DocumentProcessor()
+        # Add retrieved documents to state
+        state["documents"] = docs
         
-        # Search for relevant documents
-        start_time = time.time()
-        documents = processor.search_documents(query, k=5)
-        elapsed_time = time.time() - start_time
+        # Add a thinking step for completion
+        retrieve_time = time.time() - retrieve_start
+        thinking_steps.append({
+            "step": "vector_retrieval_complete",
+            "time": time.strftime("%H:%M:%S"),
+            "description": "Document retrieval complete",
+            "details": {
+                "document_count": len(docs),
+                "time_taken": f"{retrieve_time:.2f}s",
+                "timestamp": time.time()
+            }
+        })
         
-        logger.info(f"Retrieved {len(documents)} documents in {elapsed_time:.2f} seconds")
-        workflow_logger.info(f"Vector search retrieved {len(documents)} documents")
-        
-        # Add documents to state
-        state["documents"] = documents
-        
-        # Log document sources
-        for i, doc in enumerate(documents):
+        # Document preview for debugging
+        preview = []
+        for i, doc in enumerate(docs[:3]):  # Only show first 3 docs
             source = doc.metadata.get("source", "Unknown")
-            logger.debug(f"Document {i+1} source: {source}")
+            content_preview = doc.page_content[:100] + "..." if len(doc.page_content) > 100 else doc.page_content
+            preview.append(f"{i+1}. {source}: {content_preview}")
         
-        # Add system message about retrieval
-        state["messages"].append(
-            SystemMessage(
-                content=f"I've retrieved {len(documents)} documents from my knowledge base that might help answer the query."
-            )
-        )
+        # Log retrieved documents
+        workflow_logger.info(f"Retrieved {len(docs)} documents: {'; '.join(preview)}")
+        
     except Exception as e:
-        logger.error(f"Error in vector store retrieval: {str(e)}", exc_info=True)
-        workflow_logger.error(f"Failed to retrieve documents from vector store: {str(e)}")
+        # Log the error
+        workflow_logger.error(f"Error retrieving documents: {e}")
         
-        # Handle error gracefully
-        state["documents"] = []
-        state["messages"].append(
-            SystemMessage(
-                content=f"I encountered an issue retrieving information from my knowledge base. I'll try to answer based on what I know."
-            )
-        )
+        # Add error thinking step
+        thinking_steps.append({
+            "step": "retrieval_error",
+            "time": time.strftime("%H:%M:%S"),
+            "description": "Error retrieving documents",
+            "details": {
+                "error": str(e),
+                "timestamp": time.time()
+            }
+        })
     
+    # Update thinking steps
+    state["thinking_steps"] = thinking_steps
     return state
 
 # Node for web search
@@ -252,365 +305,246 @@ def perform_web_search(state: AgentState) -> AgentState:
     
     try:
         # Use the search_web function from utils
+        start_time = time.time()
         documents = search_web(query)
+        elapsed_time = time.time() - start_time
         
         logger.info(f"Web search returned {len(documents)} documents")
         
         # Add the retrieved documents to the state
         state["web_documents"] = documents
         
+        # Add thinking step
+        if "thinking_steps" in state:
+            sources = []
+            for i, doc in enumerate(documents[:3]):  # Just get first 3 docs
+                source = doc.metadata.get("source", "Unknown")
+                title = doc.metadata.get("title", "Unknown title")
+                sources.append({"title": title, "source": source})
+                
+            thinking = {
+                "step": "web_search",
+                "time": time.strftime("%H:%M:%S"),
+                "description": f"Searching the web for: {query}",
+                "details": {
+                    "documents_found": len(documents),
+                    "time_taken": f"{elapsed_time:.2f}s",
+                    "sources": sources
+                }
+            }
+            state["thinking_steps"].append(thinking)
+        
         if documents:
             return state
         else:
             logger.warning("Web search returned no results")
+            
+            # Add thinking step for empty results
+            if "thinking_steps" in state:
+                thinking = {
+                    "step": "web_search_empty",
+                    "time": time.strftime("%H:%M:%S"),
+                    "description": "Web search returned no results",
+                    "details": {
+                        "query": query
+                    }
+                }
+                state["thinking_steps"].append(thinking)
+                
             # Return original state with empty web_documents
             return {**state, "web_documents": []}
     
     except Exception as e:
         logger.error(f"Error in web search: {e}", exc_info=True)
         workflow_logger.error(f"Web search failed: {str(e)}")
+        
+        # Add error to thinking steps
+        if "thinking_steps" in state:
+            thinking = {
+                "step": "web_search_error",
+                "time": time.strftime("%H:%M:%S"),
+                "description": "Error searching the web",
+                "details": {
+                    "error": str(e),
+                    "query": query
+                }
+            }
+            state["thinking_steps"].append(thinking)
+            
         # Return original state with empty web_documents
         return {**state, "web_documents": []}
 
-# Document grader to assess relevance
-def grade_documents(state: AgentState) -> AgentState:
-    """Grade documents to assess their relevance to the query."""
-    workflow_logger.info("Executing document grading node")
-    
-    try:
-        # Get configuration
-        with open("config.yaml", 'r') as file:
-            config = yaml.safe_load(file)
-        
-        # Get the query and documents
-        query = state["query"]
-        
-        # Decide which documents to grade
-        docs_to_grade = state.get("documents", [])
-        if not docs_to_grade and "web_documents" in state:
-            docs_to_grade = state.get("web_documents", [])
-        
-        logger.info(f"Grading {len(docs_to_grade)} documents for relevance to query: {query}")
-        
-        if not docs_to_grade:
-            # No documents to grade
-            logger.warning("No documents available for grading")
-            workflow_logger.warning("Document grading failed: No documents available")
-            state["is_relevant"] = False
-            state["messages"].append(
-                SystemMessage(
-                    content="I don't have any relevant information to answer this query."
-                )
-            )
-            return state
-        
-        # Prepare documents for grading
-        docs_text = ""
-        for i, doc in enumerate(docs_to_grade):
-            source = doc.metadata.get("source", "Unknown source")
-            title = doc.metadata.get("title", "No title")
-            docs_text += f"Document {i+1} (from {title}):\n{doc.page_content[:500]}...\n\n"
-        
-        # Create system prompt for the grader
-        grader_prompt = """You are a document relevance grader. Your task is to determine if the retrieved documents are relevant to the query.
-
-Query: {query}
-
-Retrieved Documents:
-{docs_text}
-
-On a scale of 0 to 1, how relevant are these documents to the query? Provide a single numerical score only.
-A score of 0 means completely irrelevant, and a score of 1 means highly relevant.
-
-Score: """
-        
-        # Get LLM
-        llm = get_llm()
-        
-        # Format the prompt with the query and documents
-        formatted_prompt = grader_prompt.format(query=query, docs_text=docs_text)
-        
-        # Generate grade
-        logger.debug("Generating document relevance score using LLM")
-        start_time = time.time()
-        try:
-            grade_text = llm.invoke(formatted_prompt).strip()
-            grade = float(grade_text.split()[0])  # Extract first number
-            elapsed_time = time.time() - start_time
-            logger.info(f"Document grade: {grade:.2f} (generated in {elapsed_time:.2f}s)")
-        except Exception as e:
-            logger.error(f"Error parsing relevance grade: {str(e)}", exc_info=True)
-            # Default to 0.5 if grading fails
-            grade = 0.5
-            logger.warning(f"Using default grade of {grade} due to grading failure")
-        
-        # Get relevance threshold from config
-        relevance_threshold = config["workflow"].get("relevance_threshold", 0.7)
-        logger.debug(f"Using relevance threshold: {relevance_threshold}")
-        
-        # Determine if documents are relevant
-        is_relevant = grade >= relevance_threshold
-        state["is_relevant"] = is_relevant
-        
-        workflow_logger.info(f"Document relevance assessment: {grade:.2f} (threshold: {relevance_threshold})")
-        
-        # Add system message about grading
-        if is_relevant:
-            workflow_logger.info("Documents deemed relevant to query")
-            state["messages"].append(
-                SystemMessage(
-                    content=f"I've determined that the information I found is relevant to your query (relevance score: {grade:.2f})."
-                )
-            )
-        else:
-            workflow_logger.info("Documents deemed not relevant to query")
-            state["messages"].append(
-                SystemMessage(
-                    content=f"I've determined that the information I found may not be directly relevant to your query (relevance score: {grade:.2f})."
-                )
-            )
-    except Exception as e:
-        logger.error(f"Error in document grading node: {str(e)}", exc_info=True)
-        workflow_logger.error(f"Document grading failed: {str(e)}")
-        
-        # Default to assuming documents are relevant on error
-        state["is_relevant"] = True
-        state["messages"].append(
-            SystemMessage(
-                content="I'll proceed with the information I have to try to answer your query."
-            )
-        )
-    
-    return state
-
 # Generate answer based on available documents
 def generate_answer(state: AgentState) -> AgentState:
-    """Generate an answer based on retrieved documents."""
-    workflow_logger.info("Executing answer generation node")
+    """Generate an answer based on the retrieved documents."""
+    query = state["query"]
+    documents = state.get("documents", [])
+    thinking_steps = state.get("thinking_steps", [])
+    
+    # Start thinking step
+    generate_start = time.time()
+    thinking_steps.append({
+        "step": "generation_start",
+        "time": time.strftime("%H:%M:%S"),
+        "description": "Starting answer generation",
+        "details": {
+            "document_count": len(documents),
+            "timestamp": time.time()
+        }
+    })
     
     try:
-        # Get configuration
-        with open("config.yaml", 'r') as file:
-            config = yaml.safe_load(file)
-        
-        # Get the query
-        query = state["query"]
-        logger.info(f"Generating answer for query: {query}")
-        
-        # Determine which documents to use
-        if state.get("is_relevant", False) and "documents" in state and state["documents"]:
-            # Use vector store documents if relevant
-            documents = state["documents"]
-            source_type = "knowledge base"
-            logger.info(f"Using {len(documents)} documents from knowledge base")
-        elif "web_documents" in state and state["web_documents"]:
-            # Fall back to web search documents
-            documents = state["web_documents"]
-            source_type = "web search"
-            logger.info(f"Using {len(documents)} documents from web search")
-        else:
-            # No documents available
-            documents = []
-            source_type = "limited information"
-            logger.warning("No documents available for answer generation")
-        
-        workflow_logger.info(f"Generating answer using {source_type} with {len(documents)} documents")
-        
-        # Prepare context from documents
-        context = ""
-        for i, doc in enumerate(documents):
-            source = doc.metadata.get("source", "Unknown source")
-            title = doc.metadata.get("title", "No title")
-            context += f"Document {i+1} (from {title}):\n{doc.page_content}\n\n"
-        
-        # Create system prompt
-        system_prompt = """You are a helpful assistant specializing in Canadian university information. 
-You provide accurate information to students about programs, admissions, tuition, and scholarships at Canadian universities.
-
-You have access to information from {source_type}. Use this information to provide helpful, accurate answers.
-If the information isn't in the provided context, say that you don't have that specific information.
-Always cite your sources when providing information.
-
-Context information:
-{context}
-
-User query: {query}
-"""
-        
         # Get LLM
         llm = get_llm()
         
-        # Format the prompt with context and query
-        formatted_prompt = system_prompt.format(context=context, query=query, source_type=source_type)
+        # Prepare documents for the context
+        if documents:
+            # Log the number of documents being used
+            workflow_logger.info(f"Generating answer based on {len(documents)} documents")
+            
+            # Add thinking step for document preparation
+            thinking_steps.append({
+                "step": "context_preparation",
+                "time": time.strftime("%H:%M:%S"),
+                "description": "Preparing document context",
+                "details": {
+                    "document_count": len(documents),
+                    "sources": [doc.metadata.get("source", "Unknown") for doc in documents],
+                    "timestamp": time.time()
+                }
+            })
+            
+            # Prepare document context
+            context = "\n\n---\n\n".join([doc.page_content for doc in documents])
+        else:
+            # No documents found
+            context = "No relevant documents found in the knowledge base."
+            workflow_logger.warning("No documents available for context")
+            
+            thinking_steps.append({
+                "step": "no_context",
+                "time": time.strftime("%H:%M:%S"),
+                "description": "No relevant documents found for context",
+                "details": {
+                    "timestamp": time.time()
+                }
+            })
+        
+        # Create the prompt with custom instructions
+        prompt_template = """
+        You are Kevin, a professional consultant specialized in Canadian university education. 
+        You provide accurate, comprehensive, and helpful information about Canadian universities, 
+        including admissions, programs, tuition, scholarships, campus life, and more.
+        
+        Use the following context to answer the question. If the context doesn't contain relevant 
+        information to fully answer the question, acknowledge the limitations of your knowledge 
+        and suggest what additional information might be helpful.
+        
+        Context:
+        {context}
+        
+        Question: {question}
+        
+        Your answer should be:
+        1. Comprehensive yet concise
+        2. Structured with clear sections when appropriate
+        3. Professional and helpful in tone
+        4. Accurate and based only on the provided context
+        
+        Answer:
+        """
+        
+        # Add thinking step for prompt creation
+        thinking_steps.append({
+            "step": "prompt_creation",
+            "time": time.strftime("%H:%M:%S"),
+            "description": "Created prompt for answer generation",
+            "details": {
+                "context_length": len(context),
+                "timestamp": time.time()
+            }
+        })
+        
+        # Create and format the prompt
+        prompt = PromptTemplate(
+            template=prompt_template,
+            input_variables=["context", "question"]
+        )
+        
+        # Format the prompt with our variables
+        formatted_prompt = prompt.format(context=context, question=query)
         
         # Generate answer
-        logger.debug("Generating answer using LLM")
-        start_time = time.time()
+        workflow_logger.info("Generating answer with LLM")
+        thinking_steps.append({
+            "step": "llm_generation",
+            "time": time.strftime("%H:%M:%S"),
+            "description": "Sending query to language model",
+            "details": {
+                "model": getattr(llm, "model_name", "unknown"),
+                "timestamp": time.time()
+            }
+        })
+        
+        # Invoke LLM
         answer = llm.invoke(formatted_prompt)
-        elapsed_time = time.time() - start_time
         
-        answer_preview = answer[:100] + "..." if len(answer) > 100 else answer
-        logger.info(f"Generated answer in {elapsed_time:.2f}s: {answer_preview}")
+        # Measure generation time
+        generate_time = time.time() - generate_start
         
-        # Save answer to state
+        # Add thinking step for answer generation
+        thinking_steps.append({
+            "step": "answer_generated",
+            "time": time.strftime("%H:%M:%S"),
+            "description": "Answer successfully generated",
+            "details": {
+                "answer_length": len(answer),
+                "time_taken": f"{generate_time:.2f}s",
+                "timestamp": time.time()
+            }
+        })
+        
+        # Create an AI message with the answer
+        ai_message = AIMessage(content=answer)
+        
+        # Update state with the answer and thinking steps
+        state["messages"].append(ai_message)
+        state["thinking_steps"] = thinking_steps
+        state["has_answered"] = True
         state["response"] = answer
         
-        workflow_logger.info(f"Answer generation successful (length: {len(answer)} chars)")
+        # Log completion
+        workflow_logger.info(f"Answer generated in {generate_time:.2f}s")
+        
+        return state
+        
     except Exception as e:
-        logger.error(f"Error in answer generation: {str(e)}", exc_info=True)
-        workflow_logger.error(f"Answer generation failed: {str(e)}")
+        # Log error
+        workflow_logger.error(f"Error generating answer: {e}")
         
-        # Set a generic response in case of error
-        state["response"] = "I apologize, but I encountered an issue while generating an answer to your question. Please try asking again or rephrasing your question."
+        # Add error thinking step
+        thinking_steps.append({
+            "step": "generation_error",
+            "time": time.strftime("%H:%M:%S"),
+            "description": "Error generating answer",
+            "details": {
+                "error": str(e),
+                "error_type": type(e).__name__,
+                "timestamp": time.time()
+            }
+        })
         
-    return state
-
-# Check for hallucinations in the response
-def check_hallucination(state: AgentState) -> AgentState:
-    """Check if the generated response contains hallucinations."""
-    workflow_logger.info("Executing hallucination check node")
-    
-    try:
-        # Get configuration
-        with open("config.yaml", 'r') as file:
-            config = yaml.safe_load(file)
+        # Create an error message
+        error_message = f"I apologize, but I encountered an error while generating your answer: {str(e)}"
+        ai_message = AIMessage(content=error_message)
         
-        # Get the query and response
-        query = state["query"]
-        response = state["response"]
+        # Update state with error
+        state["messages"].append(ai_message)
+        state["thinking_steps"] = thinking_steps
+        state["has_answered"] = True
+        state["response"] = error_message
         
-        logger.info(f"Checking hallucination for query: {query}")
-        
-        # Determine which documents to use
-        if "documents" in state and state["documents"]:
-            # Use vector store documents
-            documents = state["documents"]
-            source_desc = "vector store"
-        elif "web_documents" in state and state["web_documents"]:
-            # Use web search documents
-            documents = state["web_documents"]
-            source_desc = "web search"
-        else:
-            # No documents available
-            documents = []
-            source_desc = "no documents"
-        
-        logger.info(f"Using {len(documents)} documents from {source_desc} for hallucination check")
-        
-        # If no documents, we can't check for hallucinations
-        if not documents:
-            logger.warning("No documents available for hallucination check")
-            workflow_logger.warning("Hallucination check skipped: No documents available")
-            state["is_hallucination_free"] = False
-            return state
-        
-        # Prepare context from documents
-        context = ""
-        for i, doc in enumerate(documents):
-            context += f"Document {i+1}:\n{doc.page_content[:500]}...\n\n"
-        
-        # Create system prompt for hallucination check
-        hallucination_prompt = """You are a hallucination detector. Your task is to determine if the response contains information not supported by the context.
-
-Query: {query}
-
-Context:
-{context}
-
-Response:
-{response}
-
-On a scale of 0 to 1, how well is the response supported by the context? Provide a single numerical score only.
-A score of 0 means completely hallucinated (not supported by context), and a score of 1 means fully supported by the context.
-
-Score: """
-        
-        # Get LLM
-        llm = get_llm()
-        
-        # Format the prompt with the query, context, and response
-        formatted_prompt = hallucination_prompt.format(query=query, context=context, response=response)
-        
-        # Generate score
-        logger.debug("Generating hallucination score using LLM")
-        start_time = time.time()
-        try:
-            score_text = llm.invoke(formatted_prompt).strip()
-            score = float(score_text.split()[0])  # Extract first number
-            elapsed_time = time.time() - start_time
-            logger.info(f"Hallucination score: {score:.2f} (generated in {elapsed_time:.2f}s)")
-        except Exception as e:
-            logger.error(f"Error parsing hallucination score: {str(e)}", exc_info=True)
-            # Default to 0.5 if scoring fails
-            score = 0.5
-            logger.warning(f"Using default hallucination score of {score} due to scoring failure")
-        
-        # Get hallucination threshold from config
-        hallucination_threshold = config["workflow"].get("hallucination_threshold", 0.8)
-        logger.debug(f"Using hallucination threshold: {hallucination_threshold}")
-        
-        # Determine if response is free of hallucinations
-        is_hallucination_free = score >= hallucination_threshold
-        state["is_hallucination_free"] = is_hallucination_free
-        
-        workflow_logger.info(f"Hallucination assessment: {score:.2f} (threshold: {hallucination_threshold})")
-        
-        # If hallucinations detected, regenerate the answer with a more conservative prompt
-        if not is_hallucination_free:
-            workflow_logger.warning(f"Hallucinations detected (score: {score:.2f}), regenerating answer")
-            logger.warning(f"Hallucinations detected in response with score {score:.2f}")
-            
-            # Create a more conservative system prompt
-            conservative_prompt = """You are a helpful assistant specializing in Canadian university information.
-You provide accurate information to students about programs, admissions, tuition, and scholarships at Canadian universities.
-
-IMPORTANT: Only provide information that is EXPLICITLY stated in the context below. DO NOT add any details, numbers, or facts not directly mentioned in the context.
-If the information isn't in the provided context, clearly state that you don't have that specific information.
-Always cite your sources when providing information.
-
-Context information:
-{context}
-
-User query: {query}
-"""
-            
-            # Format the prompt with context and query
-            formatted_conservative_prompt = conservative_prompt.format(
-                context=context, 
-                query=query
-            )
-            
-            # Generate a more conservative answer
-            logger.info("Regenerating answer with conservative prompt")
-            start_time = time.time()
-            conservative_answer = llm.invoke(formatted_conservative_prompt)
-            elapsed_time = time.time() - start_time
-            
-            answer_preview = conservative_answer[:100] + "..." if len(conservative_answer) > 100 else conservative_answer
-            logger.info(f"Regenerated answer in {elapsed_time:.2f}s: {answer_preview}")
-            
-            # Update the response
-            state["response"] = conservative_answer
-            state["is_hallucination_free"] = True  # Assume the conservative answer is hallucination-free
-            
-            # Add system message about regeneration
-            state["messages"].append(
-                SystemMessage(
-                    content="I've revised my answer to ensure it's fully supported by the available information."
-                )
-            )
-            
-            workflow_logger.info("Answer successfully regenerated with conservative approach")
-        else:
-            workflow_logger.info("No hallucinations detected, proceeding with original answer")
-    except Exception as e:
-        logger.error(f"Error in hallucination check: {str(e)}", exc_info=True)
-        workflow_logger.error(f"Hallucination check failed: {str(e)}")
-        
-        # Default to assuming the response is hallucination-free on error
-        state["is_hallucination_free"] = True
-    
-    return state
+        return state
 
 # Finalize the response and update messaging
 def finalize_response(state: AgentState) -> AgentState:
@@ -629,37 +563,41 @@ def finalize_response(state: AgentState) -> AgentState:
         # Mark as answered
         state["has_answered"] = True
         
-        # If web search was used and results should be added to RAG
-        if state.get("use_web_search", False) and "web_documents" in state and state["web_documents"]:
-            # Get configuration
-            with open("config.yaml", 'r') as file:
-                config = yaml.safe_load(file)
+        # Calculate and log total query time if we were timing
+        if "search_starttime" in state:
+            total_time = time.time() - state["search_starttime"]
+            logger.info(f"Total query processing time: {total_time:.2f} seconds")
+            workflow_logger.info(f"Query completed in {total_time:.2f} seconds")
             
-            # Check if web results should be added to RAG
-            if config["workflow"].get("include_web_results_in_rag", True):
-                logger.info("Adding web search results to knowledge base")
-                workflow_logger.info("Adding web search results to vector store")
-                
-                # Initialize document processor
-                processor = DocumentProcessor()
-                
-                # Add web documents to vector store
-                web_docs = state["web_documents"]
-                processor.add_documents(web_docs)
-                
-                logger.info(f"Added {len(web_docs)} documents from web search to knowledge base")
-                
-                # Add system message about adding to knowledge base
-                state["messages"].append(
-                    SystemMessage(
-                        content="I've added the web search results to my knowledge base for future reference."
-                    )
-                )
+            # Add final thinking step with timing
+            if "thinking_steps" in state:
+                thinking = {
+                    "step": "completion",
+                    "time": time.strftime("%H:%M:%S"),
+                    "description": "Query processing completed",
+                    "details": {
+                        "total_time": f"{total_time:.2f}s",
+                        "thinking_steps_count": len(state["thinking_steps"])
+                    }
+                }
+                state["thinking_steps"].append(thinking)
         
         workflow_logger.info("Response finalization complete")
     except Exception as e:
         logger.error(f"Error in response finalization: {str(e)}", exc_info=True)
         workflow_logger.error(f"Response finalization failed: {str(e)}")
+        
+        # Add error to thinking steps
+        if "thinking_steps" in state:
+            thinking = {
+                "step": "finalization_error",
+                "time": time.strftime("%H:%M:%S"),
+                "description": "Error finalizing response",
+                "details": {
+                    "error": str(e)
+                }
+            }
+            state["thinking_steps"].append(thinking)
         
         # Ensure we still mark the query as answered
         state["has_answered"] = True
@@ -687,14 +625,23 @@ def decide_after_grading(state: AgentState) -> str:
 
 def should_end(state: AgentState) -> str:
     """Decide if the agent should end or continue."""
-    decision = "end" if state.get("has_answered", False) else "continue"
-    workflow_logger.info(f"End decision: {decision}")
+    # Ensure the has_answered flag is properly checked
+    has_answered = state.get("has_answered", False)
+    
+    # Additional safety check - if we have a response, assume we've answered
+    if state.get("response") and not has_answered:
+        workflow_logger.warning("Response exists but has_answered is False. Forcing has_answered to True.")
+        has_answered = True
+        state["has_answered"] = True
+    
+    decision = "end" if has_answered else "continue"
+    workflow_logger.info(f"End decision: {decision} (has_answered: {has_answered})")
     return decision
 
 # Build the graph
 def build_agent() -> StateGraph:
-    """Build the agent graph with enhanced workflow."""
-    logger.info("Building agent graph with enhanced workflow")
+    """Build the agent graph with simplified workflow for better performance"""
+    logger.info("Building agent graph with simplified workflow for better performance")
     
     try:
         # Create graph
@@ -705,9 +652,7 @@ def build_agent() -> StateGraph:
         workflow.add_node("router", router)
         workflow.add_node("retrieve_from_vectorstore", retrieve_from_vectorstore)
         workflow.add_node("perform_web_search", perform_web_search)
-        workflow.add_node("grade_documents", grade_documents)
         workflow.add_node("generate_answer", generate_answer)
-        workflow.add_node("check_hallucination", check_hallucination)
         workflow.add_node("finalize_response", finalize_response)
         
         # Add edges
@@ -721,28 +666,9 @@ def build_agent() -> StateGraph:
             }
         )
         
-        workflow.add_edge("retrieve_from_vectorstore", "grade_documents")
-        workflow.add_edge("perform_web_search", "grade_documents")
-        
-        workflow.add_conditional_edges(
-            "grade_documents",
-            decide_after_vectorstore,
-            {
-                "generate_answer": "generate_answer",
-                "web_search": "perform_web_search"
-            }
-        )
-        
-        workflow.add_edge("generate_answer", "check_hallucination")
-        
-        workflow.add_conditional_edges(
-            "check_hallucination",
-            decide_after_grading,
-            {
-                "finalize": "finalize_response",
-                "regenerate": "generate_answer"
-            }
-        )
+        workflow.add_edge("retrieve_from_vectorstore", "generate_answer")
+        workflow.add_edge("perform_web_search", "generate_answer")
+        workflow.add_edge("generate_answer", "finalize_response")
         
         workflow.add_conditional_edges(
             "finalize_response",
@@ -770,13 +696,16 @@ class UniversityAgent:
         logger.info("Initializing UniversityAgent")
         try:
             self.graph = build_agent()
+            # Simple compile without any extra parameters
+            # This version of LangGraph doesn't support config or executor access
             self.graph_instance = self.graph.compile()
+            
             logger.info("UniversityAgent initialized successfully")
         except Exception as e:
             logger.critical(f"Failed to initialize UniversityAgent: {str(e)}", exc_info=True)
             raise RuntimeError(f"Failed to initialize agent: {str(e)}")
     
-    def query(self, question: str, use_web_search: bool = False) -> str:
+    def query(self, question: str, use_web_search: bool = False) -> Dict[str, Any]:
         """Query the agent with a question."""
         query_id = f"query_{int(time.time())}"
         logger.info(f"Processing query ID {query_id}: {question}")
@@ -792,15 +721,34 @@ class UniversityAgent:
                 "web_documents": [],
                 "has_answered": False,
                 "use_web_search": use_web_search,
-                "is_relevant": False,
-                "is_hallucination_free": False,
                 "query": question,
-                "response": None
+                "response": None,
+                "thinking_steps": [
+                    {
+                        "step": "initialization",
+                        "time": time.strftime("%H:%M:%S"),
+                        "description": "Starting query processing",
+                        "details": {
+                            "query": question,
+                            "web_search_requested": use_web_search,
+                            "timestamp": time.time()
+                        }
+                    }
+                ]
             }
             
             # Log whether web search is explicitly requested
             if use_web_search:
                 logger.info(f"[{query_id}] Web search explicitly requested")
+                # Add a thinking step for web search request
+                state["thinking_steps"].append({
+                    "step": "web_search_requested",
+                    "time": time.strftime("%H:%M:%S"),
+                    "description": "Web search explicitly requested by user",
+                    "details": {
+                        "timestamp": time.time()
+                    }
+                })
             
             # Run the graph
             workflow_logger.info(f"[{query_id}] Executing agent graph")
@@ -808,6 +756,7 @@ class UniversityAgent:
             
             # Extract answer
             messages = result["messages"]
+            answer = None
             for msg in reversed(messages):
                 if isinstance(msg, AIMessage):
                     answer = msg.content
@@ -818,19 +767,78 @@ class UniversityAgent:
                     elapsed_time = time.time() - start_time
                     workflow_logger.info(f"[{query_id}] Query completed in {elapsed_time:.2f} seconds")
                     
-                    return answer
+                    # Add a final thinking step for completion
+                    if "thinking_steps" in result:
+                        result["thinking_steps"].append({
+                            "step": "completion",
+                            "time": time.strftime("%H:%M:%S"),
+                            "description": "Response generation complete",
+                            "details": {
+                                "elapsed_time": f"{elapsed_time:.2f}s",
+                                "answer_length": len(answer),
+                                "timestamp": time.time()
+                            }
+                        })
+                    break
             
-            # If no answer found
-            logger.warning(f"[{query_id}] No answer found in result messages")
-            workflow_logger.warning(f"[{query_id}] Query failed: No answer generated")
-            return "I couldn't generate an answer to your question."
+            if not answer:
+                # If no answer found
+                logger.warning(f"[{query_id}] No answer found in result messages")
+                workflow_logger.warning(f"[{query_id}] Query failed: No answer generated")
+                answer = "I couldn't generate an answer to your question."
+                
+                # Add error thinking step
+                if "thinking_steps" in result:
+                    result["thinking_steps"].append({
+                        "step": "error",
+                        "time": time.strftime("%H:%M:%S"),
+                        "description": "Failed to generate answer",
+                        "details": {
+                            "error": "No answer found in messages"
+                        }
+                    })
+            
+            # Return both the answer and thinking steps
+            return {
+                "answer": answer,
+                "thinking": result.get("thinking_steps", [])
+            }
         
         except Exception as e:
             elapsed_time = time.time() - start_time
             error_detail = f"{str(e)}\n{traceback.format_exc()}"
             logger.error(f"[{query_id}] Error processing query: {error_detail}")
             workflow_logger.error(f"[{query_id}] Query failed in {elapsed_time:.2f}s: {str(e)}")
-            return f"I encountered an error while processing your query: {str(e)}"
+            
+            # Create more detailed thinking steps for error
+            thinking_steps = [
+                {
+                    "step": "initialization",
+                    "time": time.strftime("%H:%M:%S"),
+                    "description": "Starting query processing",
+                    "details": {
+                        "query": question,
+                        "web_search_requested": use_web_search,
+                        "timestamp": time.time()
+                    }
+                },
+                {
+                    "step": "error",
+                    "time": time.strftime("%H:%M:%S"),
+                    "description": "Error processing query",
+                    "details": {
+                        "error": str(e),
+                        "error_type": type(e).__name__,
+                        "time_taken": f"{elapsed_time:.2f}s",
+                        "timestamp": time.time()
+                    }
+                }
+            ]
+            
+            return {
+                "answer": f"I encountered an error while processing your query: {str(e)}",
+                "thinking": thinking_steps
+            }
 
 if __name__ == "__main__":
     # Example usage
