@@ -15,6 +15,7 @@ from dotenv import load_dotenv
 from langchain.callbacks.manager import CallbackManagerForLLMRun
 from langchain.llms.base import LLM
 from pydantic import BaseModel, Field, root_validator, model_validator
+import logging
 
 # Add parent directory to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
@@ -139,11 +140,11 @@ class DeepSeekAPI(LLM, BaseModel):
         if self.use_cache:
             cache_key = self._get_cache_key(prompt, stop, **kwargs)
             if cache_key in RESPONSE_CACHE:
-                logger.info("Using cached response")
+                logger.debug("Using cached response")
                 return RESPONSE_CACHE[cache_key]
         
-        # Log the API call
-        prompt_preview = prompt[:100] + "..." if len(prompt) > 100 else prompt
+        # Only log a preview of the prompt to reduce overhead
+        prompt_preview = prompt[:50] + "..." if len(prompt) > 50 else prompt
         api_logger.info(f"DeepSeek API call: {prompt_preview}")
         
         headers = {
@@ -151,27 +152,37 @@ class DeepSeekAPI(LLM, BaseModel):
             "Authorization": f"Bearer {self.api_key}"
         }
         
-        # Prepare request data
+        # Prepare request data - use optimized settings
         data = {
             "model": self.model_name,
             "messages": [{"role": "user", "content": prompt}],
             "temperature": self.temperature,
             "max_tokens": self.max_tokens,
-            "top_p": self.top_p
+            "top_p": self.top_p,
+            "frequency_penalty": kwargs.get("frequency_penalty", 0.2),
+            "presence_penalty": kwargs.get("presence_penalty", 0.1)
         }
         
         # Add stop sequences if provided
         if stop:
             data["stop"] = stop
         
-        # Add any additional parameters
+        # Add any additional parameters but only those that are relevant
         for key, value in kwargs.items():
-            data[key] = value
+            if key in ["stream", "stop", "n", "logit_bias"]:
+                data[key] = value
+        
+        # Start timing the API call
+        start_time = time.time()
         
         # Implement retry logic
         for attempt in range(1, self.max_retries + 1):
             try:
-                logger.debug(f"Making API request to DeepSeek, attempt {attempt}/{self.max_retries}")
+                # Only log detailed debugging information on first attempt
+                if attempt == 1:
+                    logger.debug(f"Making API request to DeepSeek")
+                else:
+                    logger.debug(f"Retrying API request, attempt {attempt}/{self.max_retries}")
                 
                 # Make API request
                 response = requests.post(
@@ -198,8 +209,8 @@ class DeepSeekAPI(LLM, BaseModel):
                         api_logger.error(f"API call failed after {self.max_retries} attempts: {error_msg}")
                         raise ValueError(error_msg)
                     
-                    # Otherwise, wait and retry
-                    wait_time = self.retry_delay * attempt
+                    # Otherwise, wait and retry with exponential backoff
+                    wait_time = self.retry_delay * (2 ** (attempt - 1))
                     logger.warning(f"Retrying in {wait_time} seconds...")
                     time.sleep(wait_time)
                     continue
@@ -208,13 +219,18 @@ class DeepSeekAPI(LLM, BaseModel):
                 try:
                     response_data = response.json()
                     result = response_data["choices"][0]["message"]["content"]
-                    result_preview = result[:100] + "..." if len(result) > 100 else result
-                    api_logger.info(f"DeepSeek API response received: {result_preview}")
-                    logger.debug("API call successful")
+                    
+                    # Log API performance
+                    duration = time.time() - start_time
+                    api_logger.info(f"DeepSeek API response received in {duration:.2f}s")
+                    
+                    # Only log a preview of the result to reduce overhead
+                    if logger.level <= logging.DEBUG:
+                        result_preview = result[:50] + "..." if len(result) > 50 else result
+                        logger.debug(f"API response: {result_preview}")
                     
                     # Cache the result if caching is enabled
                     if self.use_cache:
-                        cache_key = self._get_cache_key(prompt, stop, **kwargs)
                         RESPONSE_CACHE[cache_key] = result
                         self._manage_cache()
                         
@@ -223,20 +239,22 @@ class DeepSeekAPI(LLM, BaseModel):
                     error_msg = f"Failed to parse DeepSeek API response: {e}"
                     logger.error(error_msg)
                     if attempt == self.max_retries:
-                        api_logger.error(f"Failed to parse API response after {self.max_retries} attempts: {error_msg}")
+                        api_logger.error(f"Failed to parse API response: {error_msg}")
                         raise ValueError(error_msg)
                     
-                    wait_time = self.retry_delay * attempt
+                    # Use exponential backoff for retries
+                    wait_time = self.retry_delay * (2 ** (attempt - 1))
                     logger.warning(f"Retrying in {wait_time} seconds...")
                     time.sleep(wait_time)
             
             except requests.RequestException as e:
                 logger.error(f"Request exception: {str(e)}")
                 if attempt == self.max_retries:
-                    api_logger.error(f"API call failed after {self.max_retries} attempts due to request exception: {str(e)}")
+                    api_logger.error(f"API call failed due to request exception: {str(e)}")
                     raise ValueError(f"DeepSeek API request failed: {str(e)}")
                 
-                wait_time = self.retry_delay * attempt
+                # Use exponential backoff for retries
+                wait_time = self.retry_delay * (2 ** (attempt - 1))
                 logger.warning(f"Retrying in {wait_time} seconds...")
                 time.sleep(wait_time)
         

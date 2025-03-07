@@ -16,6 +16,7 @@ from typing import List, Dict, Any, Optional, Union, Tuple
 from pathlib import Path
 import sqlite3
 import numpy as np
+import hashlib
 
 # Update imports - Remove ChromaDB and add FAISS
 from langchain_core.documents import Document
@@ -55,10 +56,17 @@ class RAGEngine:
         """
         self.logger = get_logger("rag_engine")
         self.config_path = config_path
+        self.has_vectordb = False
+        self.vectordb = None
+        self.retriever = None
         
         # Load configuration
-        with open(config_path, 'r') as f:
-            self.config = yaml.safe_load(f)
+        try:
+            with open(config_path, 'r') as f:
+                self.config = yaml.safe_load(f)
+        except Exception as e:
+            self.logger.error(f"Error loading configuration: {e}")
+            self.config = {}
         
         # Get embedding model config
         self.embedding_config = self.config.get('embedding', {})
@@ -82,12 +90,25 @@ class RAGEngine:
             self.logger.info(f"Found vector database at {self.vectordb_dir}")
             
             # Initialize vector database
-            self._initialize_vectordb()
+            try:
+                self._initialize_vectordb()
+            except Exception as e:
+                self.logger.error(f"Failed to initialize vector database: {e}")
+                self.has_vectordb = False
+                self.vectordb = None
+                self.retriever = None
             
         # Initialize LLM
-        self._initialize_llm()
+        try:
+            self._initialize_llm()
+        except Exception as e:
+            self.logger.error(f"Failed to initialize LLM: {e}")
+            raise RuntimeError(f"Failed to initialize the LLM component: {e}")
         
         self.logger.info(f"RAG Engine initialized with config from {config_path}")
+        
+        # Initialize document cache
+        self._doc_cache = {}
 
     def _initialize_vectordb(self) -> None:
         """Initialize the vector database."""
@@ -103,14 +124,74 @@ class RAGEngine:
                 logger.info(f"Using embedding model from metadata: {embedding_model}")
                 
                 # Create embeddings instance matching the one used in training
+                use_simple_embeddings = True  # Default to simple embeddings
+                
                 try:
-                    embedding_function = HuggingFaceEmbeddings(model_name=embedding_model)
-                    logger.info(f"Successfully loaded HuggingFace embedding model: {embedding_model}")
+                    # First check if transformers has encoding issues
+                    try:
+                        import transformers
+                        use_simple_embeddings = False
+                    except UnicodeDecodeError:
+                        logger.warning("Detected UTF-8 encoding issues with transformers library. Using SimpleEmbeddings instead.")
+                        use_simple_embeddings = True
+                    
+                    if not use_simple_embeddings:
+                        # Add caching to embedding function
+                        class CachedHuggingFaceEmbeddings(HuggingFaceEmbeddings):
+                            """HuggingFaceEmbeddings with caching to improve performance"""
+                            def __init__(self, *args, **kwargs):
+                                super().__init__(*args, **kwargs)
+                                self._cache = {}
+                                
+                            def embed_documents(self, texts):
+                                """Embed documents with caching"""
+                                results = []
+                                texts_to_embed = []
+                                indices = []
+                                
+                                # Check cache for each text
+                                for i, text in enumerate(texts):
+                                    text_hash = hashlib.md5(text.encode()).hexdigest()
+                                    if text_hash in self._cache:
+                                        results.append(self._cache[text_hash])
+                                    else:
+                                        texts_to_embed.append(text)
+                                        indices.append(i)
+                                
+                                # If any texts need embedding, compute them
+                                if texts_to_embed:
+                                    new_embeddings = super().embed_documents(texts_to_embed)
+                                    
+                                    # Update cache with new embeddings
+                                    for j, embedding in enumerate(new_embeddings):
+                                        text = texts_to_embed[j]
+                                        text_hash = hashlib.md5(text.encode()).hexdigest()
+                                        self._cache[text_hash] = embedding
+                                        
+                                    # Insert new embeddings at the correct positions
+                                    for j, idx in enumerate(indices):
+                                        if idx >= len(results):
+                                            results.append(new_embeddings[j])
+                                        else:
+                                            results.insert(idx, new_embeddings[j])
+                                
+                                return results
+                        
+                        # Use cached embeddings for better performance
+                        embedding_function = CachedHuggingFaceEmbeddings(model_name=embedding_model)
+                        logger.info(f"Successfully loaded HuggingFace embedding model with caching: {embedding_model}")
+                    else:
+                        # Use simple embeddings if transformers has issues
+                        from models.embeddings import SimpleEmbeddings
+                        embedding_function = SimpleEmbeddings()
+                        logger.info("Using SimpleEmbeddings due to transformers library encoding issues")
                 except Exception as e:
                     logger.warning(f"Could not load HuggingFace embeddings: {e}. Falling back to SimpleEmbeddings.")
+                    from models.embeddings import SimpleEmbeddings
                     embedding_function = SimpleEmbeddings()
             else:
                 logger.warning("No metadata.json found. Using SimpleEmbeddings as fallback.")
+                from models.embeddings import SimpleEmbeddings
                 embedding_function = SimpleEmbeddings()
             
             # Load the FAISS index
@@ -120,30 +201,35 @@ class RAGEngine:
                 allow_dangerous_deserialization=True  # We trust our own saved files
             )
             
+            # Get retrieval parameters from config
+            top_k = self.config.get('retrieval', {}).get('top_k', self.top_k)
+            fetch_k = self.config.get('retrieval', {}).get('fetch_k', top_k * 2)
+            score_threshold = self.config.get('retrieval', {}).get('score_threshold', 0.15)
+            
+            # Get vector DB specific parameters
+            search_type = self.config.get('vector_db', {}).get('search_type', "similarity")
+            similarity_top_k = self.config.get('vector_db', {}).get('similarity_top_k', top_k)
+            
             # Create a retriever with improved search parameters
             self.retriever = self.vectordb.as_retriever(
-                search_type="similarity",
+                search_type=search_type,
                 search_kwargs={
-                    "k": self.top_k,
-                    "score_threshold": 0.15,  # Lower threshold to find more diverse matches
-                    "fetch_k": self.top_k * 4,  # Fetch even more candidates for better filtering
-                    "filter": None  # No filtering to ensure comprehensive results
+                    "k": similarity_top_k,
+                    "score_threshold": score_threshold,
+                    "fetch_k": fetch_k,
                 }
             )
             
-            logger.info(f"Vector database initialized successfully with retriever (k={self.top_k})")
+            logger.info(f"Vector database initialized successfully with retriever (k={top_k}, search_type={search_type})")
             
-            # Verify the database is working using direct similarity search
-            test_query = "university"
+            # Skip verification to save time - only do minimal check
+            # Safe check that doesn't rely on internal attributes like _index
             try:
-                test_docs = self.vectordb.similarity_search(test_query, k=1)
-                if test_docs:
-                    logger.info(f"Vector database verification successful. Found {len(test_docs)} test documents.")
-                    logger.debug(f"Sample document: {test_docs[0].page_content[:100]}...")
-                else:
-                    logger.warning("Vector database verification: No test documents found.")
+                # Simple check to see if the vectordb works - query with an empty string
+                self.vectordb.similarity_search("test", k=1)
+                logger.info("Vector database verification passed")
             except Exception as e:
-                logger.warning(f"Vector database verification failed: {e}")
+                logger.warning(f"Vector database may not be properly initialized: {e}")
                 
         except Exception as e:
             logger.error(f"Error initializing vector database: {e}")
@@ -175,18 +261,52 @@ class RAGEngine:
             return []
         
         try:
-            # Use direct vector similarity search instead of the retriever
-            # This bypasses any potential issues with the retriever configuration
+            # Check if we have a cache and if this query is cached
+            cache_key = f"query_cache_{hashlib.md5(query.encode()).hexdigest()}"
+            
+            # Try to get from cache first
+            if hasattr(self, '_doc_cache') and cache_key in self._doc_cache:
+                self.logger.info("Using cached document results")
+                return self._doc_cache[cache_key]
+            
+            # Initialize cache if not exists
+            if not hasattr(self, '_doc_cache'):
+                self._doc_cache = {}
+            
+            # Get retrieval parameters from config
+            top_k = self.config.get('retrieval', {}).get('top_k', k)
+            score_threshold = self.config.get('retrieval', {}).get('score_threshold', 0.25)
+            
+            # Check if vectordb is available
+            if not hasattr(self, 'vectordb') or self.vectordb is None:
+                self.logger.error("Vector database not properly initialized")
+                return []
+                
+            # Use direct vector similarity search with optimized parameters
             docs = self.vectordb.similarity_search(
                 query, 
-                k=k,
-                distance_threshold=None  # No threshold filtering to ensure we get results
+                k=top_k,
+                distance_threshold=score_threshold  # Higher threshold for better relevance
             )
             
             # Log retrieval results
             self.logger.info(f"Retrieved {len(docs)} documents")
             for i, doc in enumerate(docs):
                 self.logger.debug(f"Document {i+1}: {doc.metadata.get('source', 'Unknown source')}")
+            
+            # Limit document length to reduce processing time
+            for doc in docs:
+                if len(doc.page_content) > 2000:  # Limit to 2000 chars
+                    doc.page_content = doc.page_content[:2000] + "..."
+            
+            # Cache the results
+            self._doc_cache[cache_key] = docs
+            
+            # Limit cache size
+            if len(self._doc_cache) > 100:
+                # Remove oldest items (first 20 items)
+                for old_key in list(self._doc_cache.keys())[:20]:
+                    del self._doc_cache[old_key]
             
             return docs
             
@@ -208,43 +328,53 @@ class RAGEngine:
         self.logger.info(f"Generating answer for query: {query}")
         
         try:
-            # Create context from documents with metadata
+            # Create context from documents with length limits and better formatting
             context_parts = []
+            total_context_length = 0
+            max_context_length = 6000  # Maximum context length to send to LLM
+            
             for doc in docs:
                 # Add source information if available
                 source = doc.metadata.get('source', 'Unknown source')
+                # Use shorter content to reduce token count
                 content = doc.page_content
-                context_parts.append(f"Source: {source}\n{content}")
+                
+                # Calculate how much more context we can add
+                part = f"Source: {source}\n{content}"
+                if total_context_length + len(part) > max_context_length:
+                    # If adding this document would exceed our limit, truncate it
+                    available_length = max_context_length - total_context_length
+                    if available_length > 200:  # Only add if we can include a meaningful chunk
+                        part = f"Source: {source}\n{content[:available_length-100]}..."
+                        context_parts.append(part)
+                        total_context_length += len(part)
+                    break
+                else:
+                    context_parts.append(part)
+                    total_context_length += len(part)
             
             context = "\n\n".join(context_parts)
             
-            # Create a more detailed prompt for the LLM tailored for university consultation
-            prompt = f"""You are an experienced professional consultant specializing in Canadian university information, with extensive knowledge about admissions, programs, financial aid, campus life, and other aspects of higher education in Canada.
-
-You're speaking with a student or parent who is seeking guidance about Canadian universities. Your goal is to provide accurate, helpful, and nuanced advice that addresses their specific needs.
-
-Based on the following information sources, please answer the query in a professional yet approachable manner. Format important details like deadlines, requirements, or costs in a way that's easy to understand.
+            # Create a more concise prompt for faster processing
+            prompt = f"""You are a knowledgeable Canadian university consultant answering a question based only on the provided information.
 
 Context:
 {context}
 
 Question: {query}
 
-In your response:
-1. Directly address their specific question first
-2. Provide relevant details, statistics, or requirements if available
-3. Note any important deadlines or processes they should be aware of
-4. Suggest additional considerations they might not have thought of
-5. Cite your sources when possible (e.g., "According to UBC's website...")
-6. If the information is incomplete or outdated, acknowledge this and suggest where they might find the most current information
-
-If the context doesn't contain information to answer the question properly, be transparent about this limitation rather than making assumptions. You may suggest what information they should look for and where."""
+Answer concisely but accurately, mentioning sources when relevant. If the information is not in the context, simply state that you don't have enough information to answer."""
+            
+            # Track start time for performance monitoring
+            start_time = time.time()
             
             # Generate answer using the LLM
             answer = self.llm.invoke(prompt)
             
-            # Log the generated answer
-            self.logger.info("Successfully generated answer")
+            # Log performance metrics
+            duration = time.time() - start_time
+            self.logger.info(f"Answer generated in {duration:.2f} seconds")
+            
             return answer
             
         except Exception as e:
@@ -278,19 +408,39 @@ If the context doesn't contain information to answer the question properly, be t
                 continue
                 
             try:
+                # Start timing
+                start_time = time.time()
+                retrieval_start = time.time()
+                
                 # Retrieve relevant documents
                 docs = self.retrieve_documents(query)
+                
+                retrieval_time = time.time() - retrieval_start
                 
                 if not docs:
                     print("⚠️ No relevant information found in the database.")
                     continue
-                    
+                
+                print(f"📊 Retrieved {len(docs)} relevant documents in {retrieval_time:.2f} seconds")
+                
+                # Start generation timing
+                generation_start = time.time()
+                
                 # Generate answer
                 answer = self.generate_answer(query, docs)
+                
+                generation_time = time.time() - generation_start
+                total_time = time.time() - start_time
                 
                 # Display answer
                 print("\n🔍 Answer:")
                 print(answer)
+                
+                # Display performance metrics
+                print(f"\n⏱️ Performance metrics:")
+                print(f"  • Document retrieval: {retrieval_time:.2f}s")
+                print(f"  • Answer generation: {generation_time:.2f}s")
+                print(f"  • Total processing time: {total_time:.2f}s")
                 print("\n" + "-"*80 + "\n")
                 
             except Exception as e:
