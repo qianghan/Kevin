@@ -21,6 +21,7 @@ This project implements a modular, extensible information retrieval system with:
 - **Streamlit Interface**: User-friendly web interface for interacting with the agent
 - **Web Search**: Retrieves up-to-date information when needed through Tavily API
 - **Comprehensive Logging**: Detailed logging system for tracking agent operations
+- **REST API**: FastAPI-based REST API with streaming capabilities for building custom applications
 
 ## System Architecture
 
@@ -162,6 +163,11 @@ Each component can be run independently through the command line interface, but 
 ├── pyproject.toml           # Project dependencies and metadata
 ├── setup.py                 # Installation script
 ├── src/                     # Source code directory
+│   ├── api/                 # REST API implementation
+│   │   ├── app.py           # FastAPI application
+│   │   ├── models.py        # Pydantic data models
+│   │   ├── routers/         # API route definitions
+│   │   └── services/        # API service implementations
 │   ├── core/                # Core application components
 │   │   ├── agent.py         # LangGraph agent implementation
 │   │   ├── agent_setup.py   # Agent configuration utilities
@@ -176,6 +182,7 @@ Each component can be run independently through the command line interface, but 
 │   └── web/                 # Web interface
 │       └── app.py           # Streamlit application
 └── tests/                   # Test directory
+    ├── api/                 # API tests
     ├── test_structure.py    # Project structure verification tests
     └── test_webui.py        # Web interface tests
 ```
@@ -316,6 +323,11 @@ kevin --mode query --query "What are the admission requirements for McGill Unive
 # Start the web interface
 kevin --mode web
 
+# Start the REST API server
+kevin --mode api                              # Run the API server with defaults
+kevin --mode api --host 0.0.0.0 --port 8000   # Specify host and port
+kevin --mode api --reload --debug             # Enable development mode
+
 # Enable web search for a query
 kevin --mode query --query "What are the latest COVID policies at UBC?" --web-search
 ```
@@ -330,7 +342,7 @@ A typical workflow would involve running these commands in sequence:
 Launch the Streamlit web interface:
 
 ```bash
-kevin
+kevin --mode web
 ```
 
 Then open your browser at `http://localhost:8501`.
@@ -342,6 +354,106 @@ The web interface provides:
 3. Sample questions to get started
 4. Data management tools in the sidebar
 5. Logging controls
+
+### REST API
+
+Launch the FastAPI server:
+
+```bash
+kevin --mode api
+```
+
+Then access the API at `http://localhost:8000`. API documentation is available at:
+- Swagger UI: `http://localhost:8000/docs`
+- ReDoc: `http://localhost:8000/redoc`
+
+#### API Endpoints Overview
+
+The REST API provides the following endpoints:
+
+**Chat Endpoints**
+- `POST /api/chat/query`: Submit a chat query, with optional streaming
+- `GET /api/chat/query/stream`: Stream a chat query with real-time updates
+- `GET /api/chat/conversations/{conversation_id}`: Retrieve conversation history
+
+**Search Endpoints**
+- `GET /api/search/documents`: Search documents in the vector store
+- `GET /api/search/web`: Search the web for information
+
+**Document Endpoints**
+- `GET /api/documents/get/{document_id}`: Retrieve a document by ID
+- `GET /api/documents/url`: Retrieve a document by URL
+
+**Admin Endpoints**
+- `POST /api/admin`: Perform administrative actions
+  - Rebuild the vector index
+  - Clear caches
+  - Get system status
+
+**Utility Endpoints**
+- `GET /api/health`: Check the API health
+- `GET /`: Get API information
+
+#### Example API Usage
+
+```python
+import requests
+
+# Base URL for the API
+base_url = "http://localhost:8000"
+
+# Chat query
+response = requests.post(
+    f"{base_url}/api/chat/query",
+    json={
+        "query": "What are the admission requirements for UBC?",
+        "use_web_search": True,
+        "stream": False
+    }
+)
+print(response.json())
+
+# Search documents
+response = requests.get(
+    f"{base_url}/api/search/documents",
+    params={"query": "scholarship requirements", "limit": 5}
+)
+print(response.json())
+
+# Admin action
+response = requests.post(
+    f"{base_url}/api/admin",
+    json={"action": "get_system_status"}
+)
+print(response.json())
+```
+
+For streaming responses, use a streaming-compatible client:
+
+```python
+import requests
+import json
+import sseclient
+
+# Issue a streaming request
+response = requests.get(
+    f"{base_url}/api/chat/query/stream",
+    params={"query": "What are the admission requirements for UBC?", "use_web_search": True},
+    stream=True
+)
+
+# Process the streaming response
+client = sseclient.SSEClient(response)
+for event in client.events():
+    if event.event == "thinking_start":
+        print("Thinking...")
+    elif event.event == "answer_chunk":
+        data = json.loads(event.data)
+        print(data["chunk"], end="", flush=True)
+    elif event.event == "done":
+        print("\nDone!")
+        break
+```
 
 ## Agent Workflow
 
