@@ -193,7 +193,27 @@ def get_logger(name):
         return LOGGERS[name]
     
     logger = logging.getLogger(name)
+    logger.setLevel(logging.INFO)
+    
+    # Prevent propagation to the root logger to avoid duplicate logs
+    logger.propagate = False
+    
+    # Add a file handler for this logger
+    log_file = os.path.join(logs_dir, f'{name.replace(".", "_")}.log')
+    file_handler = RotatingFileHandler(
+        log_file,
+        maxBytes=10485760,  # 10MB
+        backupCount=3
+    )
+    file_handler.setFormatter(json_formatter)
+    logger.addHandler(file_handler)
+    
+    # Add console handler
     logger.addHandler(console_handler)
+    
+    # Store logger for future reference
+    LOGGERS[name] = logger
+    
     return logger
 
 def set_log_level(level, logger_name=None):

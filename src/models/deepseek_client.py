@@ -224,10 +224,33 @@ class DeepSeekAPI(LLM, BaseModel):
                     duration = time.time() - start_time
                     api_logger.info(f"DeepSeek API response received in {duration:.2f}s")
                     
+                    # Log the full response content to a dedicated file
+                    try:
+                        # Create a responses directory if it doesn't exist
+                        responses_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'responses')
+                        os.makedirs(responses_dir, exist_ok=True)
+                        
+                        # Write response to timestamped file
+                        timestamp = time.strftime("%Y%m%d-%H%M%S")
+                        response_file = os.path.join(responses_dir, f'response-{timestamp}.txt')
+                        
+                        with open(response_file, 'w') as f:
+                            f.write(f"===== DEEPSEEK RESPONSE AT {time.strftime('%Y-%m-%d %H:%M:%S')} =====\n\n")
+                            f.write(result)
+                            f.write("\n\n====== END OF RESPONSE ======\n")
+                        
+                        # Log that we saved the full response
+                        logger.info(f"Full response saved to {response_file}")
+                    except Exception as e:
+                        logger.error(f"Failed to save response to file: {e}")
+                    
                     # Only log a preview of the result to reduce overhead
                     if logger.level <= logging.DEBUG:
                         result_preview = result[:50] + "..." if len(result) > 50 else result
                         logger.debug(f"API response: {result_preview}")
+                    else:
+                        # Even at INFO level, log more of the content
+                        logger.info(f"API response (first 500 chars): {result[:500]}...")
                     
                     # Cache the result if caching is enabled
                     if self.use_cache:
@@ -263,16 +286,15 @@ class DeepSeekAPI(LLM, BaseModel):
         logger.critical(error_msg)
         raise RuntimeError(error_msg)
     
-    # Cached version of invoke for better performance
-    def invoke(self, input_data: Union[str, Dict[str, Any]], **kwargs) -> Union[str, Dict[str, str]]:
+    def invoke(self, input_data: Union[str, Dict[str, Any], List], **kwargs) -> Union[str, Dict[str, str]]:
         """
         Invoke the model with the given input.
         
-        This method handles both string inputs and dictionary inputs to support
-        both LangChain v1 and v2 interfaces.
+        This method handles string inputs, dictionary inputs, and list inputs (for LangChain messages)
+        to support both LangChain v1 and v2 interfaces.
         
         Args:
-            input_data: Either a string prompt or a dictionary with an "input" key
+            input_data: Either a string prompt, a dictionary with an "input" key, or a list of messages
             **kwargs: Additional keyword arguments to pass to the model
             
         Returns:
@@ -283,22 +305,56 @@ class DeepSeekAPI(LLM, BaseModel):
             
             # Handle string input (LangChain v1 style)
             if isinstance(input_data, str):
+                logger.info("Processing string input")
                 result = self._call(input_data, **kwargs)
+                logger.info(f"Generated result (string input): {result[:50]}...")
+                return result
+            
+            # Handle list input (LangChain message list)
+            elif isinstance(input_data, list):
+                logger.info(f"Processing list input with {len(input_data)} items")
+                # Extract text from message objects
+                combined_prompt = ""
+                for message in input_data:
+                    if hasattr(message, "content"):
+                        role = getattr(message, "type", "unknown")
+                        content = message.content
+                        combined_prompt += f"\n\n{role}: {content}"
+                        logger.debug(f"Added message content from {role}")
+                    elif isinstance(message, dict) and "content" in message:
+                        role = message.get("role", "unknown")
+                        content = message["content"]
+                        combined_prompt += f"\n\n{role}: {content}"
+                        logger.debug(f"Added dict content from {role}")
+                
+                if not combined_prompt:
+                    raise ValueError("Could not extract content from message list")
+                
+                result = self._call(combined_prompt, **kwargs)
+                logger.info(f"Generated result (list input): {result[:50]}...")
+                
+                # Return as a simple string to avoid compatibility issues
+                # This ensures our agent code can handle the response directly
+                logger.info("Returning result as string to ensure compatibility")
                 return result
                 
             # Handle dictionary input (LangChain v2 style)
             elif isinstance(input_data, dict) and "input" in input_data:
+                logger.info("Processing dict input with 'input' key")
                 prompt = input_data["input"]
                 result = self._call(prompt, **kwargs)
+                logger.info(f"Generated result (dict input): {result[:50]}...")
                 return {"output": result}
                 
             # Handle other dictionary formats
             elif isinstance(input_data, dict):
+                logger.info(f"Processing dict input with keys: {list(input_data.keys())}")
                 # Try to find a key that might contain the prompt
                 for key in ["prompt", "text", "query", "message", "content"]:
                     if key in input_data:
                         prompt = input_data[key]
                         result = self._call(prompt, **kwargs)
+                        logger.info(f"Generated result (dict with {key}): {result[:50]}...")
                         return {"output": result}
                 
                 # If we can't find a suitable key, raise an error
@@ -308,7 +364,7 @@ class DeepSeekAPI(LLM, BaseModel):
                 raise ValueError(f"Unsupported input type: {type(input_data)}")
                 
         except Exception as e:
-            logger.error(f"Error in invoke method: {str(e)}")
+            logger.error(f"Error in invoke method: {str(e)}", exc_info=True)
             # Re-raise the exception to be handled by the caller
             raise
     
