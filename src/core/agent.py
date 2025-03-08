@@ -25,6 +25,9 @@ from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import ToolNode
 from dotenv import load_dotenv
 import inspect
+# Removing the problematic import temporarily
+# from langchain.callbacks.base import BaseCallbackHandler
+# from langchain.callbacks.manager import CallbackManager
 
 # Add parent directory to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
@@ -604,30 +607,87 @@ def generate_answer(state: AgentState) -> AgentState:
         # Add the last user message if available
         messages.append(state["messages"][-1])
     
+    # Create a streaming callback handler to update thinking steps
+    streaming_content = []
+    first_token_received = False
+    first_token_time = None
+    
+    # Simplified placeholder for callback handler - not extending BaseCallbackHandler
+    class StreamingCallbackHandler:
+        def on_llm_new_token(self, token: str, **kwargs) -> None:
+            nonlocal first_token_received, first_token_time, streaming_content
+            if not first_token_received:
+                first_token_received = True
+                first_token_time = time.time()
+                # Update thinking step with first token time
+                thinking_steps[-1]["description"] = "Receiving answer stream from LLM"
+                thinking_steps[-1]["content"] = f"First token received in {first_token_time - llm_start_time:.2f}s"
+                # Update real-time thinking steps when first token arrives
+                if agent_instance and hasattr(agent_instance, 'latest_thinking_steps'):
+                    agent_instance.latest_thinking_steps = thinking_steps.copy()
+            
+            # Add token to streaming content
+            streaming_content.append(token)
+            
+            # Update thinking step content with the current answer so far
+            if len(streaming_content) % 10 == 0:  # Update every 10 tokens to reduce overhead
+                current_content = "".join(streaming_content)
+                preview = current_content[:500] + "..." if len(current_content) > 500 else current_content
+                thinking_steps[-1]["content"] = f"Answer being generated: {preview}"
+                thinking_steps[-1]["duration_ms"] = int((time.time() - llm_start_time) * 1000)
+                # Update real-time thinking steps
+                if agent_instance and hasattr(agent_instance, 'latest_thinking_steps'):
+                    agent_instance.latest_thinking_steps = thinking_steps.copy()
+    
+    # Create simplified callback handler - just an instance, not a manager
+    callback_handler = StreamingCallbackHandler()
+    
     try:
-        # Handle different LLM input formats
+        # Handle different LLM input formats with streaming enabled
         if hasattr(llm, 'invoke'):
             logger.info(f"Calling LLM with invoke method - message types: {[type(m).__name__ for m in messages]}")
-            response = llm.invoke(messages)
-            logger.info(f"LLM response type: {type(response).__name__}")
             
-            # Extract answer from response based on its type
-            if hasattr(response, 'content'):
-                # LangChain AIMessage format
-                answer = response.content
-                logger.info(f"Extracted answer from AIMessage.content: {answer[:50]}...")
-            elif isinstance(response, str):
-                # String response
-                answer = response
-                logger.info(f"Using string response directly: {answer[:50]}...")
-            elif isinstance(response, dict):
-                # Dictionary response
-                answer = response.get('output', response.get('content', response.get('text', str(response))))
-                logger.info(f"Extracted answer from dict with keys {list(response.keys())}: {answer[:50]}...")
+            # Enable streaming for the DeepSeek API
+            if hasattr(llm, "_streaming_call"):
+                logger.info("Using streaming mode for LLM call")
+                # If it's the DeepSeek API, use streaming
+                # Pass our callback handler directly to collect tokens
+                response = llm.invoke(messages, stream=True, callbacks=[callback_handler])
+                
+                # Wait for streaming to complete to collect the full response
+                # This is not optimal but ensures compatibility
+                time.sleep(0.5)  # Small wait to ensure streaming starts
+                
+                # For streaming, the answer should be in streaming_content,
+                # but if it's empty, try to get it from the response
+                answer = "".join(streaming_content)
+                
+                # If we didn't collect any content through callbacks
+                if not answer and isinstance(response, str):
+                    answer = response
+                
+                logger.info(f"Streaming complete, collected answer length: {len(answer)}")
             else:
-                # Fallback - convert to string
-                answer = str(response)
-                logger.info(f"Converted unknown response type to string: {answer[:50]}...")
+                # For non-streaming LLMs
+                response = llm.invoke(messages)
+                
+                # Extract answer from response based on its type
+                if hasattr(response, 'content'):
+                    # LangChain AIMessage format
+                    answer = response.content
+                    logger.info(f"Extracted answer from AIMessage.content: {answer[:50]}...")
+                elif isinstance(response, str):
+                    # String response
+                    answer = response
+                    logger.info(f"Using string response directly: {answer[:50]}...")
+                elif isinstance(response, dict):
+                    # Dictionary response
+                    answer = response.get('output', response.get('content', response.get('text', str(response))))
+                    logger.info(f"Extracted answer from dict with keys {list(response.keys())}: {answer[:50]}...")
+                else:
+                    # Fallback - convert to string
+                    answer = str(response)
+                    logger.info(f"Converted unknown response type to string: {answer[:50]}...")
         else:
             # Fallback to older _call method if invoke not available
             logger.info("Falling back to _call method")
@@ -673,159 +733,105 @@ def generate_answer(state: AgentState) -> AgentState:
         answer = "I'm unable to generate a response at this time. Please try again."
     
     logger.info(f"Storing answer in state: {answer[:100]}..." if answer else "No answer to store")
-    
-    # Set answer in ALL possible fields to ensure it's preserved
     state["answer"] = answer
     state["output"] = answer
-    state["response"] = answer
-    state["messages"] = state.get("messages", []) + [AIMessage(content=answer)]
+    state["response"] = answer  # Also store in response field
+    
+    # Make sure we mark the state as having answered
     state["has_answered"] = True
     
-    # Store the answer directly in the Graph object as a backup
-    # This is a global variable to ensure it persists across nodes
-    global _LAST_ANSWER
-    _LAST_ANSWER = answer
+    # Store the answer directly in the agent instance if available
+    if agent_instance:
+        agent_instance.last_answer = answer
     
-    # Set the final thinking steps
+    # Add thinking step for completion
+    thinking_steps.append({
+        "type": "completion",
+        "time": time.strftime("%H:%M:%S"),
+        "description": "Answer ready",
+        "duration_ms": int((time.time() - start_time) * 1000),
+        "content": f"Total time: {(time.time() - start_time):.2f}s"
+    })
+    
+    # Update state with thinking steps
     state["thinking_steps"] = thinking_steps
+    
+    # Update real-time thinking steps
+    if agent_instance and hasattr(agent_instance, 'latest_thinking_steps'):
+        agent_instance.latest_thinking_steps = thinking_steps.copy()
     
     return state
 
 # Finalize the response and update messaging
 def finalize_response(state: AgentState) -> AgentState:
-    """Finalize the response for the user by extracting answer and updating message history."""
+    """Finalize the response and update the message history."""
     workflow_logger.info("Executing response finalization node")
-    logger.info("Finalizing response and updating message history")
     
-    try:
-        # Log state keys for debugging
-        logger.info(f"State keys: {list(state.keys())}")
-        if "output" in state:
-            logger.info(f"Output found in state: {type(state['output']).__name__}")
-        if "answer" in state:
-            logger.info(f"Answer found in state: {type(state['answer']).__name__}")
-        
-        # Get the agent instance to update real-time thinking steps
-        agent_instance = None
-        for frame in inspect.stack():
-            if 'self' in frame.frame.f_locals and isinstance(frame.frame.f_locals['self'], UniversityAgent):
-                agent_instance = frame.frame.f_locals['self']
-                break
-        
-        # Final thinking step to show completion
-        step_time = time.strftime("%H:%M:%S")
-        
-        # Add final thinking step with timing
-        if "thinking_steps" in state:
-            thinking = {
-                "type": "completion",
-                "time": step_time,
-                "description": "Query processing complete",
-                "duration_ms": 0,
-                "content": f"Total thinking steps: {len(state['thinking_steps'])}",
-            }
-            state["thinking_steps"].append(thinking)
-            
-            # Update real-time thinking steps
-            if agent_instance and hasattr(agent_instance, 'latest_thinking_steps'):
-                agent_instance.latest_thinking_steps = state["thinking_steps"].copy()
-        
-        # Extract response from state - check both possible keys
-        response = state.get("output")
-        logger.info(f"Checking output key: {'Found' if response else 'Not found'}")
-        
-        if response is None:
-            response = state.get("answer")
-            logger.info(f"Checking answer key: {'Found' if response else 'Not found'}")
-        
-        if response is None:
-            response = state.get("response")
-            logger.info(f"Checking response key: {'Found' if response else 'Not found'}")
-        
-        # Try the global backup if all else fails
-        global _LAST_ANSWER
-        if response is None and _LAST_ANSWER is not None:
-            response = _LAST_ANSWER
-            logger.info(f"Using global backup answer: {response[:50]}...")
-        
-        # Try to get the answer from the agent instance if available
-        if response is None:
-            # Get the agent instance
-            agent_instance = None
-            for frame in inspect.stack():
-                if 'self' in frame.frame.f_locals and isinstance(frame.frame.f_locals['self'], UniversityAgent):
-                    agent_instance = frame.frame.f_locals['self']
-                    break
-            
-            if agent_instance and hasattr(agent_instance, 'last_answer') and agent_instance.last_answer:
-                response = agent_instance.last_answer
-                logger.info(f"Using agent instance's last_answer: {response[:50]}...")
-        
-        # If we still don't have a response, generate a default one
-        if response is None:
-            logger.warning("No response found in state, generating default")
-            response = "I'm sorry, I wasn't able to generate a proper response to your query."
-            # Store for consistency
-            state["output"] = response
-            state["answer"] = response
-            state["response"] = response
+    # Log state for debugging
+    logger.info(f"Finalizing response and updating message history")
+    logger.info(f"State keys: {list(state.keys())}")
+    
+    # Extract the agent instance to update real-time thinking steps
+    agent_instance = None
+    for frame in inspect.stack():
+        if 'self' in frame.frame.f_locals and isinstance(frame.frame.f_locals['self'], UniversityAgent):
+            agent_instance = frame.frame.f_locals['self']
+            break
+    
+    # Check if we have an output or answer
+    output = state.get("output")
+    answer = state.get("answer")
+    
+    logger.info(f"Output found in state: {type(output).__name__ if output else 'Not found'}")
+    logger.info(f"Answer found in state: {type(answer).__name__ if answer else 'Not found'}")
+    
+    # Try different keys to find a response
+    if output:
+        logger.info(f"Checking output key: Found")
+        response = output
+    elif answer:
+        logger.info(f"Checking answer key: Found")
+        response = answer
+    elif "response" in state and state["response"]:
+        logger.info(f"Checking response key: Found")
+        response = state["response"]
+    elif agent_instance and hasattr(agent_instance, 'last_answer') and agent_instance.last_answer:
+        # Try getting from agent instance
+        logger.info(f"Using agent instance last_answer")
+        response = agent_instance.last_answer
+    else:
+        # If no response in state, generate a default one
+        logger.warning("No response found in state, using default message")
+        response = "I'm unable to generate a response at this time. Please try again."
+    
+    # Log the response for debugging
+    logger.info(f"Using response: {response[:50]}..." if response else "No response")
+    
+    # Store response in state
+    state["response"] = response
+    state["output"] = response
+    state["answer"] = response
+    
+    # Add response as AI message if not already present
+    if isinstance(state.get("messages", []), list):
+        # Check if the last message is already an AI message - if so, replace it
+        if state["messages"] and hasattr(state["messages"][-1], "type") and state["messages"][-1].type == "ai":
+            # Replace the last AI message
+            state["messages"][-1] = AIMessage(content=response)
+            logger.info(f"Replaced last AI message")
         else:
-            logger.info(f"Using response: {response[:50]}...")
-        
-        # Ensure response is a valid string to prevent Pydantic validation errors
-        if not isinstance(response, str):
-            logger.warning(f"Response is not a string, converting from {type(response)}")
-            response = str(response) if response is not None else "No response generated"
-        
-        # Add a response complete thinking step
-        if "thinking_steps" in state:
-            state["thinking_steps"].append({
-                "type": "response_complete",
-                "time": step_time,
-                "description": "Response generation complete",
-                "duration_ms": 0,
-                "content": f"Final response: {response[:50]}..."
-            })
-            
-            if agent_instance and hasattr(agent_instance, 'latest_thinking_steps'):
-                agent_instance.latest_thinking_steps = state["thinking_steps"].copy()
-        
-        # Add the answer as a message
-        try:
+            # Add new AI message
             state["messages"].append(AIMessage(content=response))
-            logger.info("Added response as AIMessage")
-        except Exception as e:
-            logger.error(f"Error creating AIMessage: {e}")
-            # Try a simpler approach if AIMessage creation fails
-            state["messages"].append({"role": "assistant", "content": response})
-            logger.info("Added response as dict message")
-        
-        # Mark that we have answered
-        state["has_answered"] = True
-        
-        # Log completion
-        if "search_starttime" in state:
-            workflow_logger.info(f"Query completed in {time.time() - state.get('search_starttime', time.time()):.2f} seconds")
-        workflow_logger.info("Response finalization complete")
-        
-        return state
-        
-    except Exception as e:
-        logger.error(f"Error in response finalization: {e}", exc_info=True)
-        # Make sure we have a valid response even if everything fails
-        state["has_answered"] = True
-        state["output"] = "I apologize, but I encountered an error while processing your request."
-        
-        try:
-            # Attempt to add a fallback message
-            state["messages"].append(AIMessage(content="I apologize, but I encountered an error while processing your request."))
-        except Exception as inner_e:
-            logger.error(f"Failed to add fallback message: {inner_e}")
-            # If even that fails, use a simple dict
-            state["messages"].append({"role": "assistant", "content": "I apologize, but I encountered an error."})
-        
-        workflow_logger.error(f"Response finalization failed: {e}")
-        return state
+            logger.info(f"Added response as AIMessage")
+    
+    # Mark state as having answered
+    state["has_answered"] = True
+    
+    workflow_logger.info("Query completed in %.2f seconds", 
+                        time.time() - state.get("search_starttime", time.time()))
+    workflow_logger.info("Response finalization complete")
+    
+    return state
 
 # Decision nodes for the graph
 def decide_search_method(state: AgentState) -> str:
@@ -1119,56 +1125,71 @@ class UniversityAgent:
         return result
 
 def create_prompt_for_llm(query: str, documents: List[Document]) -> str:
-    """
-    Create a prompt for the LLM based on the query and available documents.
+    """Create a prompt for the LLM based on the query and retrieved documents."""
+    # Define maximum content length per document to keep prompts manageable
+    MAX_DOCUMENT_CONTENT_LENGTH = 800  # Characters per document
+    MAX_TOTAL_DOCUMENT_LENGTH = 6000   # Total characters for all documents
     
-    Args:
-        query: The user's query
-        documents: List of Document objects containing context
+    # Format documents with limited content length
+    formatted_docs = []
+    total_length = 0
+    
+    for i, doc in enumerate(documents):
+        # Get content and metadata
+        content = doc.page_content if hasattr(doc, 'page_content') else str(doc)
         
-    Returns:
-        A formatted prompt string for the LLM
-    """
-    # Create the base prompt template
-    prompt_template = """
-    You are Kevin, a professional consultant specialized in Canadian university education. 
-    You provide accurate, comprehensive, and helpful information about Canadian universities, 
-    including admissions, programs, tuition, scholarships, campus life, and more.
+        # Limit content length for each document
+        if len(content) > MAX_DOCUMENT_CONTENT_LENGTH:
+            content = content[:MAX_DOCUMENT_CONTENT_LENGTH] + "..."
+        
+        # Get source if available
+        source = ""
+        if hasattr(doc, 'metadata'):
+            source = doc.metadata.get('source', '')
+        
+        # Format document with source if available
+        if source:
+            formatted_doc = f"Document {i+1} [Source: {source}]:\n{content}\n\n"
+        else:
+            formatted_doc = f"Document {i+1}:\n{content}\n\n"
+        
+        # Check if adding this document would exceed our total limit
+        if total_length + len(formatted_doc) <= MAX_TOTAL_DOCUMENT_LENGTH:
+            formatted_docs.append(formatted_doc)
+            total_length += len(formatted_doc)
+        else:
+            # If we're going to exceed the limit, add a truncated version or skip
+            remaining_length = MAX_TOTAL_DOCUMENT_LENGTH - total_length
+            if remaining_length > 100:  # Only add if we can include meaningful content
+                truncated_doc = formatted_doc[:remaining_length] + "..."
+                formatted_docs.append(truncated_doc)
+            # Add note about documents being truncated
+            formatted_docs.append(f"Note: {len(documents) - (i+1)} more documents were retrieved but truncated to save space.")
+            break
     
-    Use the following context to answer the question. If the context doesn't contain relevant 
-    information to fully answer the question, acknowledge the limitations of your knowledge 
-    and suggest what additional information might be helpful.
+    # Combine documents
+    documents_text = "\n".join(formatted_docs) if formatted_docs else "No relevant documents found."
     
-    Context:
-    {context}
+    # Create system prompt
+    system_prompt = f"""You are Kevin, a professional consultant for Canadian universities. You help potential students find information about programs, admissions, scholarships, campus life, and more.
     
-    Question: {question}
+Your goal is to provide accurate, helpful information based on the provided documents. If the documents don't contain the answer, you should say so rather than making up information. Always cite your sources when possible.
+
+USER QUERY: {query}
+
+RETRIEVED DOCUMENTS:
+{documents_text}
+
+INSTRUCTIONS:
+1. Answer the query using ONLY the information in the documents above.
+2. If the documents don't contain enough information to fully answer the query, acknowledge this and suggest what additional information might be helpful.
+3. Be concise but comprehensive.
+4. Format your answer in Markdown for readability.
+5. Do not reference these instructions in your answer.
+6. Do not make up information that is not in the documents.
+"""
     
-    Your answer should be:
-    1. Comprehensive yet concise
-    2. Structured with clear sections when appropriate
-    3. Professional and helpful in tone
-    4. Accurate and based only on the provided context
-    
-    Answer:
-    """
-    
-    # Prepare document context
-    if documents:
-        # Join documents with separators
-        context = "\n\n---\n\n".join([
-            f"Source: {doc.metadata.get('source', 'Unknown')}\n"
-            f"{doc.page_content[:2000]}"  # Limit to 2000 chars per doc to avoid token limits
-            for doc in documents
-        ])
-    else:
-        # No documents found
-        context = "No relevant documents found in the knowledge base or search results."
-    
-    # Format the prompt with our variables
-    formatted_prompt = prompt_template.format(context=context, question=query)
-    
-    return formatted_prompt
+    return system_prompt
 
 if __name__ == "__main__":
     # Example usage

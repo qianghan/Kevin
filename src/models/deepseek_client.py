@@ -16,6 +16,7 @@ from langchain.callbacks.manager import CallbackManagerForLLMRun
 from langchain.llms.base import LLM
 from pydantic import BaseModel, Field, root_validator, model_validator
 import logging
+import sseclient
 
 # Add parent directory to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
@@ -136,6 +137,11 @@ class DeepSeekAPI(LLM, BaseModel):
         **kwargs
     ) -> str:
         """Call the DeepSeek API with the given prompt."""
+        # Check if streaming is requested
+        stream = kwargs.get("stream", False)
+        if stream:
+            return self._streaming_call(prompt, stop, run_manager, **kwargs)
+            
         # Check cache first if caching is enabled
         if self.use_cache:
             cache_key = self._get_cache_key(prompt, stop, **kwargs)
@@ -286,6 +292,85 @@ class DeepSeekAPI(LLM, BaseModel):
         logger.critical(error_msg)
         raise RuntimeError(error_msg)
     
+    def _streaming_call(
+        self,
+        prompt: str,
+        stop: Optional[List[str]] = None,
+        run_manager: Optional[CallbackManagerForLLMRun] = None,
+        **kwargs
+    ) -> str:
+        """Call the DeepSeek API with streaming enabled."""
+        import json
+        import sseclient
+        
+        # Don't check cache for streaming calls as they're intended for real-time use
+        
+        # Only log a preview of the prompt to reduce overhead
+        prompt_preview = prompt[:50] + "..." if len(prompt) > 50 else prompt
+        api_logger.info(f"DeepSeek API streaming call: {prompt_preview}")
+        
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.api_key}"
+        }
+        
+        # Prepare message format
+        messages = []
+        # Check if prompt already contains "\n\nsystem:" or "\n\nuser:" format
+        if "\n\nsystem:" in prompt or "\n\nuser:" in prompt:
+            # Extract messages from formatted prompt
+            parts = prompt.split("\n\n")
+            for part in parts:
+                if part.strip():
+                    if part.startswith("system:"):
+                        messages.append({"role": "system", "content": part[7:].strip()})
+                    elif part.startswith("user:"):
+                        messages.append({"role": "user", "content": part[5:].strip()})
+                    elif part.startswith("assistant:"):
+                        messages.append({"role": "assistant", "content": part[10:].strip()})
+                    else:
+                        # If no role prefix, assume it's user content
+                        messages.append({"role": "user", "content": part.strip()})
+        else:
+            # No special formatting, treat as single user message
+            messages.append({"role": "user", "content": prompt})
+        
+        # Prepare request data
+        data = {
+            "model": self.model_name,
+            "messages": messages,
+            "temperature": self.temperature,
+            "max_tokens": self.max_tokens,
+            "top_p": self.top_p,
+            "stream": True,  # Force stream to be True
+            "frequency_penalty": kwargs.get("frequency_penalty", 0.2),
+            "presence_penalty": kwargs.get("presence_penalty", 0.1)
+        }
+        
+        # Add stop sequences if provided
+        if stop:
+            data["stop"] = stop
+        
+        # Add any additional parameters but only those that are relevant
+        for key, value in kwargs.items():
+            if key in ["n", "logit_bias"]:
+                data[key] = value
+        
+        # Start timing the API call
+        start_time = time.time()
+        
+        # Get callbacks passed in kwargs
+        callbacks = kwargs.get("callbacks", None)
+        
+        # Use the more flexible streaming implementation
+        # Don't pass callbacks twice
+        if "callbacks" in kwargs:
+            # Make a copy of kwargs without the callbacks key
+            filtered_kwargs = {k: v for k, v in kwargs.items() if k != "callbacks"}
+            return self._streaming_call_with_messages(data, start_time, run_manager=run_manager, callbacks=callbacks, **filtered_kwargs)
+        else:
+            return self._streaming_call_with_messages(data, start_time, run_manager=run_manager, callbacks=callbacks, **kwargs)
+    
     def invoke(self, input_data: Union[str, Dict[str, Any], List], **kwargs) -> Union[str, Dict[str, str]]:
         """
         Invoke the model with the given input.
@@ -303,70 +388,374 @@ class DeepSeekAPI(LLM, BaseModel):
         try:
             logger.debug(f"Invoke called with input type: {type(input_data)}")
             
+            # Check if streaming is requested
+            stream = kwargs.get("stream", False)
+            
             # Handle string input (LangChain v1 style)
             if isinstance(input_data, str):
                 logger.info("Processing string input")
-                result = self._call(input_data, **kwargs)
+                if stream:
+                    result = self._streaming_call(input_data, **kwargs)
+                else:
+                    result = self._call(input_data, **kwargs)
                 logger.info(f"Generated result (string input): {result[:50]}...")
                 return result
             
             # Handle list input (LangChain message list)
             elif isinstance(input_data, list):
                 logger.info(f"Processing list input with {len(input_data)} items")
-                # Extract text from message objects
-                combined_prompt = ""
+                # Optimized message format for better performance
+                messages = []
+                
+                # Convert LangChain messages to DeepSeek API format directly
                 for message in input_data:
-                    if hasattr(message, "content"):
-                        role = getattr(message, "type", "unknown")
-                        content = message.content
-                        combined_prompt += f"\n\n{role}: {content}"
-                        logger.debug(f"Added message content from {role}")
+                    if hasattr(message, "content") and hasattr(message, "type"):
+                        # For LangChain messages, map types to DeepSeek roles
+                        role_mapping = {
+                            "system": "system",
+                            "human": "user",
+                            "ai": "assistant",
+                            "assistant": "assistant",
+                            "user": "user",
+                            "function": "function"
+                        }
+                        role = role_mapping.get(message.type, "user")
+                        messages.append({"role": role, "content": message.content})
                     elif isinstance(message, dict) and "content" in message:
-                        role = message.get("role", "unknown")
-                        content = message["content"]
-                        combined_prompt += f"\n\n{role}: {content}"
-                        logger.debug(f"Added dict content from {role}")
+                        # For dictionary messages with proper structure
+                        role = message.get("role", "user")
+                        messages.append({"role": role, "content": message["content"]})
                 
-                if not combined_prompt:
-                    raise ValueError("Could not extract content from message list")
+                if not messages:
+                    # Fallback to original format if no messages could be processed
+                    combined_prompt = ""
+                    for message in input_data:
+                        if hasattr(message, "content"):
+                            role = getattr(message, "type", "unknown")
+                            content = message.content
+                            combined_prompt += f"\n\n{role}: {content}"
+                            logger.debug(f"Added message content from {role}")
+                        elif isinstance(message, dict) and "content" in message:
+                            role = message.get("role", "unknown")
+                            content = message["content"]
+                            combined_prompt += f"\n\n{role}: {content}"
+                            logger.debug(f"Added dict content from {role}")
+                    
+                    if not combined_prompt:
+                        raise ValueError("Could not extract content from message list")
+                    
+                    if stream:
+                        result = self._streaming_call(combined_prompt, **kwargs)
+                    else:
+                        result = self._call(combined_prompt, **kwargs)
+                else:
+                    # Use optimized message format with direct API call
+                    logger.info(f"Using optimized message format with {len(messages)} messages")
+                    
+                    headers = {
+                        "Content-Type": "application/json",
+                        "Authorization": f"Bearer {self.api_key}"
+                    }
+                    
+                    # Prepare request data with messages format
+                    data = {
+                        "model": self.model_name,
+                        "messages": messages,
+                        "temperature": self.temperature,
+                        "max_tokens": self.max_tokens,
+                        "top_p": self.top_p,
+                        "frequency_penalty": kwargs.get("frequency_penalty", 0.2),
+                        "presence_penalty": kwargs.get("presence_penalty", 0.1),
+                        "stream": stream
+                    }
+                    
+                    # Add any additional parameters but only those that are relevant
+                    for key, value in kwargs.items():
+                        if key in ["stop", "n", "logit_bias"]:
+                            data[key] = value
+                    
+                    # Start timing the API call
+                    start_time = time.time()
+                    
+                    if stream:
+                        # Handle streaming response with the messages format
+                        # Don't pass callbacks twice - remove it from kwargs if present
+                        if "callbacks" in kwargs:
+                            # Make a copy of kwargs without the callbacks key
+                            filtered_kwargs = {k: v for k, v in kwargs.items() if k != "callbacks"}
+                            result = self._streaming_call_with_messages(data, start_time, callbacks=kwargs.get("callbacks"), **filtered_kwargs)
+                        else:
+                            result = self._streaming_call_with_messages(data, start_time, **kwargs)
+                    else:
+                        # Use single message format for direct API call
+                        response = requests.post(
+                            f"{self.api_base}/chat/completions",
+                            headers=headers,
+                            data=json.dumps(data),
+                            timeout=self.request_timeout
+                        )
+                        
+                        # Handle potential errors
+                        if response.status_code != 200:
+                            error_msg = f"DeepSeek API request failed with status code {response.status_code}"
+                            try:
+                                error_data = response.json()
+                                if "error" in error_data:
+                                    error_msg += f": {error_data['error']}"
+                            except:
+                                error_msg += f": {response.text}"
+                            
+                            logger.error(error_msg)
+                            raise ValueError(error_msg)
+                        
+                        # Extract and process response
+                        response_data = response.json()
+                        result = response_data["choices"][0]["message"]["content"]
+                        
+                        # Log API performance
+                        duration = time.time() - start_time
+                        api_logger.info(f"DeepSeek API response received in {duration:.2f}s")
+                        
+                        # Log the full response content to a dedicated file
+                        try:
+                            # Create a responses directory if it doesn't exist
+                            responses_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'responses')
+                            os.makedirs(responses_dir, exist_ok=True)
+                            
+                            # Write response to timestamped file
+                            timestamp = time.strftime("%Y%m%d-%H%M%S")
+                            response_file = os.path.join(responses_dir, f'response-{timestamp}.txt')
+                            
+                            with open(response_file, 'w') as f:
+                                f.write(f"===== DEEPSEEK RESPONSE AT {time.strftime('%Y-%m-%d %H:%M:%S')} =====\n\n")
+                                f.write(result)
+                                f.write("\n\n====== END OF RESPONSE ======\n")
+                            
+                            # Log that we saved the full response
+                            logger.info(f"Full response saved to {response_file}")
+                        except Exception as e:
+                            logger.error(f"Failed to save response to file: {e}")
+                        
+                        # Only log a preview of the result to reduce overhead
+                        logger.info(f"API response (first 500 chars): {result[:500]}...")
                 
-                result = self._call(combined_prompt, **kwargs)
                 logger.info(f"Generated result (list input): {result[:50]}...")
                 
-                # Return as a simple string to avoid compatibility issues
+                # Return as a simple string to ensure compatibility
                 # This ensures our agent code can handle the response directly
                 logger.info("Returning result as string to ensure compatibility")
                 return result
-                
+            
             # Handle dictionary input (LangChain v2 style)
             elif isinstance(input_data, dict) and "input" in input_data:
                 logger.info("Processing dict input with 'input' key")
                 prompt = input_data["input"]
-                result = self._call(prompt, **kwargs)
+                if stream:
+                    result = self._streaming_call(prompt, **kwargs)
+                else:
+                    result = self._call(prompt, **kwargs)
                 logger.info(f"Generated result (dict input): {result[:50]}...")
                 return {"output": result}
-                
+            
             # Handle other dictionary formats
             elif isinstance(input_data, dict):
-                logger.info(f"Processing dict input with keys: {list(input_data.keys())}")
-                # Try to find a key that might contain the prompt
-                for key in ["prompt", "text", "query", "message", "content"]:
-                    if key in input_data:
-                        prompt = input_data[key]
-                        result = self._call(prompt, **kwargs)
-                        logger.info(f"Generated result (dict with {key}): {result[:50]}...")
-                        return {"output": result}
-                
-                # If we can't find a suitable key, raise an error
-                raise ValueError(f"Could not find a suitable prompt key in input: {input_data.keys()}")
-                
+                # Try to extract prompt content from other dictionary formats
+                logger.info("Processing dict input without 'input' key")
+                prompt = input_data.get("content", 
+                                      input_data.get("text", 
+                                                   input_data.get("prompt", str(input_data))))
+                if stream:
+                    result = self._streaming_call(prompt, **kwargs)
+                else:
+                    result = self._call(prompt, **kwargs)
+                logger.info(f"Generated result (dict input): {result[:50]}...")
+                return {"output": result}
+            
+            # Fallback for any other input type
             else:
-                raise ValueError(f"Unsupported input type: {type(input_data)}")
+                logger.warning(f"Unsupported input type: {type(input_data)}")
+                prompt = str(input_data)
+                if stream:
+                    result = self._streaming_call(prompt, **kwargs)
+                else:
+                    result = self._call(prompt, **kwargs)
+                logger.info(f"Generated result (fallback): {result[:50]}...")
+                return result
                 
         except Exception as e:
-            logger.error(f"Error in invoke method: {str(e)}", exc_info=True)
-            # Re-raise the exception to be handled by the caller
+            logger.error(f"Error invoking LLM: {e}")
             raise
+    
+    def _streaming_call_with_messages(self, data, start_time, **kwargs):
+        """
+        Optimized streaming implementation that works directly with message format
+        rather than converting to a combined prompt.
+        
+        Args:
+            data: The request data with messages already properly formatted
+            start_time: The time when the API call started
+            **kwargs: Additional parameters
+            
+        Returns:
+            The generated text response
+        """
+        import json
+        import sseclient
+        
+        # Check cache first if caching is enabled (only check for non-stream requests)
+        if self.use_cache and not data.get("stream", False):
+            # Create a cache key based on the messages and other relevant parameters
+            cache_key = json.dumps({
+                "messages": data.get("messages", []),
+                "temperature": data.get("temperature", self.temperature),
+                "max_tokens": data.get("max_tokens", self.max_tokens),
+                "top_p": data.get("top_p", self.top_p),
+                "model": data.get("model", self.model_name),
+                "stop": data.get("stop", None)
+            }, sort_keys=True)
+            
+            if cache_key in RESPONSE_CACHE:
+                logger.debug("Using cached response for message-based request")
+                return RESPONSE_CACHE[cache_key]
+        
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.api_key}"
+        }
+        
+        # Make streaming API request
+        logger.debug("Making optimized streaming API request to DeepSeek")
+        
+        full_response = ""
+        
+        try:
+            response = requests.post(
+                f"{self.api_base}/chat/completions",
+                headers=headers,
+                data=json.dumps(data),
+                timeout=self.request_timeout,
+                stream=True
+            )
+            
+            # Handle API response errors
+            if response.status_code != 200:
+                error_msg = f"DeepSeek API streaming request failed with status code {response.status_code}"
+                try:
+                    error_data = json.loads(response.text)
+                    if "error" in error_data:
+                        error_msg += f": {error_data['error']}"
+                except:
+                    error_msg += f": {response.text}"
+                
+                logger.error(error_msg)
+                raise ValueError(error_msg)
+            
+            # Process the streaming response
+            client = sseclient.SSEClient(response)
+            
+            # Announce the first token arrival time
+            first_token_received = False
+            first_token_time = None
+            
+            # Extract the run_manager or callback handlers from kwargs
+            run_manager = kwargs.get("run_manager", None)
+            callbacks = kwargs.get("callbacks", None)
+            
+            # If we're passed a list of callbacks directly
+            if not run_manager and callbacks and isinstance(callbacks, list):
+                for event in client.events():
+                    if event.data == "[DONE]":
+                        break
+                    
+                    try:
+                        chunk = json.loads(event.data)
+                        if not first_token_received:
+                            first_token_received = True
+                            first_token_time = time.time() - start_time
+                            api_logger.info(f"DeepSeek first token received in {first_token_time:.2f}s")
+                        
+                        # Extract content from the chunk
+                        if "choices" in chunk and len(chunk["choices"]) > 0:
+                            delta = chunk["choices"][0].get("delta", {})
+                            content = delta.get("content", "")
+                            if content:
+                                full_response += content
+                                
+                                # Call all callback handlers with the new token
+                                for callback in callbacks:
+                                    if hasattr(callback, "on_llm_new_token"):
+                                        try:
+                                            callback.on_llm_new_token(content)
+                                        except Exception as e:
+                                            logger.warning(f"Error in callback handler: {e}")
+                    except Exception as e:
+                        logger.warning(f"Error parsing streaming chunk: {e}")
+            # Default handling without specific callbacks
+            else:
+                for event in client.events():
+                    if event.data == "[DONE]":
+                        break
+                    
+                    try:
+                        chunk = json.loads(event.data)
+                        if not first_token_received:
+                            first_token_received = True
+                            first_token_time = time.time() - start_time
+                            api_logger.info(f"DeepSeek first token received in {first_token_time:.2f}s")
+                        
+                        # Extract content from the chunk
+                        if "choices" in chunk and len(chunk["choices"]) > 0:
+                            delta = chunk["choices"][0].get("delta", {})
+                            content = delta.get("content", "")
+                            if content:
+                                full_response += content
+                                
+                                # Also check for run_manager which might be used in older LangChain versions
+                                if run_manager and hasattr(run_manager, "on_llm_new_token"):
+                                    try:
+                                        run_manager.on_llm_new_token(content)
+                                    except Exception as e:
+                                        logger.warning(f"Error in run_manager callback: {e}")
+                    except Exception as e:
+                        logger.warning(f"Error parsing streaming chunk: {e}")
+            
+            # Log completion of streaming
+            duration = time.time() - start_time
+            api_logger.info(f"DeepSeek streaming response completed in {duration:.2f}s")
+            
+            # Log the full response content to a dedicated file
+            try:
+                # Create a responses directory if it doesn't exist
+                responses_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'responses')
+                os.makedirs(responses_dir, exist_ok=True)
+                
+                # Write response to timestamped file
+                timestamp = time.strftime("%Y%m%d-%H%M%S")
+                response_file = os.path.join(responses_dir, f'response-stream-{timestamp}.txt')
+                
+                with open(response_file, 'w') as f:
+                    f.write(f"===== DEEPSEEK STREAMING RESPONSE AT {time.strftime('%Y-%m-%d %H:%M:%S')} =====\n\n")
+                    f.write(full_response)
+                    f.write("\n\n====== END OF RESPONSE ======\n")
+                
+                # Log that we saved the full response
+                logger.info(f"Full streaming response saved to {response_file}")
+            except Exception as e:
+                logger.error(f"Failed to save streaming response to file: {e}")
+            
+            # Only log a preview of the result
+            logger.info(f"API streaming response (first 500 chars): {full_response[:500]}...")
+            
+            # Cache the result if caching is enabled
+            if self.use_cache and not data.get("stream", False):
+                RESPONSE_CACHE[cache_key] = full_response
+                self._manage_cache()
+            
+            return full_response
+            
+        except requests.RequestException as e:
+            logger.error(f"Streaming request exception: {str(e)}")
+            raise ValueError(f"DeepSeek API streaming request failed: {str(e)}")
     
     def get_embedding(self, text: str) -> List[float]:
         """Get embedding for the given text using DeepSeek's embedding API."""
