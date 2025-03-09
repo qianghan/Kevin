@@ -81,8 +81,8 @@ def get_parser():
     parser.add_argument('--quiet', '-q', action='store_true', help='Suppress INFO logs, show only warnings and errors')
 
     # Add mode argument
-    parser.add_argument('mode', choices=['scrape', 'train', 'rag', 'web'], 
-                        help='Mode of operation: scrape data, train model, run RAG system, or start web interface')
+    parser.add_argument('mode', choices=['scrape', 'train', 'rag', 'web', 'api', 'webapi', 'cli', 'query'], 
+                        help='Mode of operation: scrape data, train model, run RAG system, start web interface, or run API server')
 
     return parser
 
@@ -246,6 +246,38 @@ def main():
             logger.error(traceback.format_exc())
             sys.exit(1)
         
+    elif args.mode == 'api':
+        logger.info("🚀 Starting API server...")
+        
+        try:
+            # Import and run the API server
+            from src.commands.api import api_command
+            
+            # Use callback attribute instead of calling the command directly
+            api_command.callback(host="localhost", port=8000, reload=False, debug=args.verbose > 0)
+            
+        except Exception as e:
+            logger.error(f"Error starting API server: {e}")
+            logger.error(traceback.format_exc())
+    
+    elif args.mode == 'webapi':
+        logger.info("🚀 Starting API-based Web UI...")
+        
+        try:
+            # Import and run the web UI with API backend
+            from src.commands.webapi import webapi_command
+            
+            # Use callback attribute instead of calling the command directly
+            webapi_command.callback(host="localhost", port=8501, api_url="http://localhost:8000")
+            
+        except Exception as e:
+            logger.error(f"Error starting API-based Web UI: {e}")
+            logger.info("Make sure the API server is running with 'kevin --mode api'")
+    
+    elif args.mode == 'cli':
+        # ... existing code ...
+        pass
+    
     else:
         logger.error(f"Unknown mode: {args.mode}")
         sys.exit(1)

@@ -210,3 +210,8 @@ kevin/lib/
 **/pyarrow/
 **/chroma_db/
 chroma_db/ 
+# DeepSeek API Response Files
+responses/
+response-*.txt
+response-stream-*.txt
+

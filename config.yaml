@@ -43,22 +43,29 @@ vector_db:
   collection_name: "canadian_universities"
   persist_directory: "./data/vectordb"
   embedding_model: "sentence-transformers/all-MiniLM-L6-v2"
+  similarity_top_k: 3
+  search_type: "mmr"
+
+# Retrieval configuration
+retrieval:
+  top_k: 3
+  fetch_k: 6
+  score_threshold: 0.25
 
 # LLM configuration
 llm:
   provider: "deepseek"
   api_key: "sk-a8c90a7a82884c0e994508e0608728eb"
   model_name: "deepseek-chat"
-  temperature: 0.3
-  max_tokens: 1200
-  request_timeout: 45
+  temperature: 0.2
+  max_tokens: 800
+  request_timeout: 30
   use_cache: true
-  max_retries: 3
-  retry_delay: 2
+  max_retries: 2
+  retry_delay: 1
   fallback_to_huggingface: false
   top_p: 0.88
   presence_penalty: 0.1
-  frequency_penalty: 0.2
 
 # Web search configuration
 web_search:

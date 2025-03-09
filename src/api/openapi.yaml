@@ -1,0 +1,633 @@
+openapi: 3.0.3
+info:
+  title: Kevin API
+  description: |-
+    API for Kevin, an AI-powered agent that provides accurate and up-to-date information about Canadian universities.
+    
+    This API allows developers to integrate Kevin's knowledge and capabilities into their own applications.
+    Features include:
+    
+    * Chat-based queries with optional streaming responses
+    * Document and web search capabilities
+    * Conversation management
+    * Administrative functions
+    
+    For more information, visit the [Kevin GitHub repository](https://github.com/qianghan/Kevin).
+  termsOfService: https://github.com/qianghan/Kevin
+  contact:
+    email: admin@example.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+  version: "1.0.0"
+servers:
+  - url: http://localhost:8000
+    description: Local development server
+tags:
+  - name: chat
+    description: Chat with the Kevin assistant
+  - name: search
+    description: Search for information
+  - name: documents
+    description: Retrieve and manage documents
+  - name: admin
+    description: Administrative functions
+  - name: utility
+    description: Utility endpoints
+paths:
+  /:
+    get:
+      summary: API Information
+      description: Get information about the API
+      operationId: getRootInfo
+      tags:
+        - utility
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  name:
+                    type: string
+                    example: "Kevin API"
+                  version:
+                    type: string
+                    example: "1.0.0"
+                  description:
+                    type: string
+                    example: "API for Kevin, a university-focused AI assistant"
+                  docs_url:
+                    type: string
+                    example: "/docs"
+  /api/health:
+    get:
+      summary: Health Check
+      description: Check if the API is running properly
+      operationId: healthCheck
+      tags:
+        - utility
+      responses:
+        '200':
+          description: API is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "ok"
+                  timestamp:
+                    type: number
+                    format: float
+                    example: 1615478362.4536
+  /api/chat/query:
+    post:
+      summary: Chat Query
+      description: Submit a chat query and receive a response
+      operationId: chatQuery
+      tags:
+        - chat
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChatRequest"
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatResponse"
+        '307':
+          description: Redirect to streaming endpoint if streaming is requested
+          headers:
+            Location:
+              schema:
+                type: string
+                example: "/api/chat/query/stream?query=What%20is%20UBC?&use_web_search=true"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/chat/query/stream:
+    get:
+      summary: Stream Chat Query
+      description: Stream a chat query with real-time updates
+      operationId: streamChatQuery
+      tags:
+        - chat
+      parameters:
+        - name: query
+          in: query
+          description: The query to process
+          required: true
+          schema:
+            type: string
+            example: "What is the University of British Columbia?"
+        - name: use_web_search
+          in: query
+          description: Whether to use web search
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - name: conversation_id
+          in: query
+          description: Conversation ID for continuing a conversation
+          required: false
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                example: |-
+                  event: thinking_start
+                  data: {"query": "What is UBC?"}
+                  
+                  event: answer_chunk
+                  data: {"chunk": "The University of British Columbia (UBC) is "}
+                  
+                  event: done
+                  data: {"conversation_id": "123e4567-e89b-12d3-a456-426614174000", "duration_seconds": 0.5}
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/chat/conversations/{conversation_id}:
+    get:
+      summary: Get Conversation
+      description: Get the history of a conversation
+      operationId: getConversation
+      tags:
+        - chat
+      parameters:
+        - name: conversation_id
+          in: path
+          description: Conversation ID
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  conversation_id:
+                    type: string
+                    format: uuid
+                  messages:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        role:
+                          type: string
+                          enum: [user, assistant]
+                        content:
+                          type: string
+                        timestamp:
+                          type: number
+                          format: float
+                        thinking_steps:
+                          type: array
+                          items:
+                            $ref: "#/components/schemas/ThinkingStep"
+                        documents:
+                          type: array
+                          items:
+                            $ref: "#/components/schemas/Document"
+        '404':
+          description: Conversation not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/search/documents:
+    get:
+      summary: Search Documents
+      description: Search for documents in the vector store
+      operationId: searchDocuments
+      tags:
+        - search
+      parameters:
+        - name: query
+          in: query
+          description: The search query
+          required: true
+          schema:
+            type: string
+            example: "admission requirements"
+        - name: limit
+          in: query
+          description: Maximum number of results to return
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 20
+            default: 5
+        - name: include_content
+          in: query
+          description: Whether to include document content in the response
+          required: false
+          schema:
+            type: boolean
+            default: true
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  query:
+                    type: string
+                  documents:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Document"
+                  count:
+                    type: integer
+                  duration_seconds:
+                    type: number
+                    format: float
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/search/web:
+    get:
+      summary: Web Search
+      description: Search the web for information
+      operationId: searchWeb
+      tags:
+        - search
+      parameters:
+        - name: query
+          in: query
+          description: The search query
+          required: true
+          schema:
+            type: string
+            example: "recent changes to international student policies"
+        - name: limit
+          in: query
+          description: Maximum number of results to return
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 10
+            default: 5
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  query:
+                    type: string
+                  documents:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Document"
+                  count:
+                    type: integer
+                  duration_seconds:
+                    type: number
+                    format: float
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/documents/get/{document_id}:
+    get:
+      summary: Get Document by ID
+      description: Retrieve a document by its ID
+      operationId: getDocumentById
+      tags:
+        - documents
+      parameters:
+        - name: document_id
+          in: path
+          description: Document ID
+          required: true
+          schema:
+            type: string
+        - name: include_content
+          in: query
+          description: Whether to include document content in the response
+          required: false
+          schema:
+            type: boolean
+            default: true
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Document"
+        '404':
+          description: Document not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/documents/url:
+    get:
+      summary: Get Document by URL
+      description: Retrieve a document by its URL
+      operationId: getDocumentByUrl
+      tags:
+        - documents
+      parameters:
+        - name: url
+          in: query
+          description: Document URL
+          required: true
+          schema:
+            type: string
+            format: uri
+            example: "https://www.ubc.ca/about"
+        - name: include_content
+          in: query
+          description: Whether to include document content in the response
+          required: false
+          schema:
+            type: boolean
+            default: true
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Document"
+                  - type: object
+                    properties:
+                      url:
+                        type: string
+                        format: uri
+        '404':
+          description: Document not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/admin:
+    post:
+      summary: Admin Action
+      description: Perform an administrative action
+      operationId: adminAction
+      tags:
+        - admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminRequest"
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminResponse"
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        loc:
+                          type: array
+                          items:
+                            oneOf:
+                              - type: string
+                              - type: integer
+                        msg:
+                          type: string
+                        type:
+                          type: string
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+components:
+  schemas:
+    ThinkingStep:
+      type: object
+      description: A thinking step in the agent's reasoning process
+      properties:
+        description:
+          type: string
+          description: Description of the thinking step
+        duration:
+          type: number
+          format: float
+          description: Duration of the step in seconds
+          nullable: true
+        result:
+          type: object
+          description: Result of the thinking step
+          nullable: true
+        error:
+          type: string
+          description: Error message if the step failed
+          nullable: true
+      required:
+        - description
+    Document:
+      type: object
+      description: A document retrieved during query processing
+      properties:
+        id:
+          type: string
+          description: Document ID
+        content:
+          type: string
+          description: The content of the document
+        metadata:
+          type: object
+          description: Metadata about the document
+          properties:
+            source:
+              type: string
+              description: Source of the document
+            title:
+              type: string
+              description: Title of the document
+            date:
+              type: string
+              format: date-time
+              description: Date the document was created or retrieved
+              nullable: true
+      required:
+        - id
+        - metadata
+    ChatRequest:
+      type: object
+      description: A chat query request
+      properties:
+        query:
+          type: string
+          description: The query to process
+          example: "What are the admission requirements for UBC?"
+        use_web_search:
+          type: boolean
+          description: Whether to use web search
+          default: false
+        conversation_id:
+          type: string
+          format: uuid
+          description: Conversation ID for continuing a conversation
+          nullable: true
+        stream:
+          type: boolean
+          description: Whether to stream the response
+          default: false
+      required:
+        - query
+    ChatResponse:
+      type: object
+      description: A chat query response
+      properties:
+        answer:
+          type: string
+          description: The answer to the query
+        conversation_id:
+          type: string
+          format: uuid
+          description: The conversation ID
+        thinking_steps:
+          type: array
+          description: The thinking steps used to generate the answer
+          items:
+            $ref: "#/components/schemas/ThinkingStep"
+          default: []
+        documents:
+          type: array
+          description: The documents retrieved during processing
+          items:
+            $ref: "#/components/schemas/Document"
+          default: []
+        duration_seconds:
+          type: number
+          format: float
+          description: Time taken to process the query
+      required:
+        - answer
+        - conversation_id
+        - duration_seconds
+    ErrorResponse:
+      type: object
+      description: An error response
+      properties:
+        detail:
+          type: string
+          description: Error message
+      required:
+        - detail
+    AdminAction:
+      type: string
+      description: An administrative action to perform
+      enum:
+        - rebuild_index
+        - clear_caches
+        - get_system_status
+    AdminRequest:
+      type: object
+      description: An administrative action request
+      properties:
+        action:
+          $ref: "#/components/schemas/AdminAction"
+          description: The action to perform
+        parameters:
+          type: object
+          description: Parameters for the action
+          nullable: true
+      required:
+        - action
+    AdminResponse:
+      type: object
+      description: An administrative action response
+      properties:
+        success:
+          type: boolean
+          description: Whether the action was successful
+        message:
+          type: string
+          description: A message describing the result
+        details:
+          type: object
+          description: Additional details about the result
+          nullable: true
+        duration_seconds:
+          type: number
+          format: float
+          description: Time taken to perform the action
+      required:
+        - success
+        - message
+        - duration_seconds
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: Optional API key for authentication 
