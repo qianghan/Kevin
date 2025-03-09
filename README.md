@@ -22,6 +22,7 @@ This project implements a modular, extensible information retrieval system with:
 - **Web Search**: Retrieves up-to-date information when needed through Tavily API
 - **Comprehensive Logging**: Detailed logging system for tracking agent operations
 - **REST API**: FastAPI-based REST API with streaming capabilities for building custom applications
+- **API-Based Web UI**: A Streamlit-based web interface that communicates with the REST API instead of directly using core modules
 
 ## System Architecture
 
@@ -320,13 +321,18 @@ kevin --mode rag                              # Start interactive RAG session
 kevin --mode query --query "What are the admission requirements for McGill University?"  # One-off query
 
 # OTHER OPTIONS:
-# Start the web interface
+# Start the standard web interface (direct core integration)
 kevin --mode web
 
 # Start the REST API server
 kevin --mode api                              # Run the API server with defaults
-kevin --mode api --host 0.0.0.0 --port 8000   # Specify host and port
+kevin --mode api --host localhost --port 8000   # Specify host and port
 kevin --mode api --reload --debug             # Enable development mode
+
+# Start the API-based web UI (connects to the API server)
+kevin --mode webapi                           # Start the Web UI with defaults
+kevin --mode webapi --host localhost --port 8501  # Specify host and port
+kevin --mode webapi --api-url http://api-server:8000  # Connect to a different API server
 
 # Enable web search for a query
 kevin --mode query --query "What are the latest COVID policies at UBC?" --web-search
@@ -394,6 +400,23 @@ The REST API provides the following endpoints:
 - `GET /api/health`: Check the API health
 - `GET /`: Get API information
 
+#### API Documentation
+
+Kevin uses FastAPI's built-in OpenAPI specification generation to document the API. This provides:
+
+1. **Interactive Documentation**: Swagger UI at `http://localhost:8000/docs` lets you try the API directly in your browser
+2. **Alternative Documentation**: ReDoc at `http://localhost:8000/redoc` provides a more readable reference
+3. **OpenAPI JSON**: The raw OpenAPI specification is available at `http://localhost:8000/openapi.json`
+
+The OpenAPI specification includes:
+- All available endpoints and operations
+- Operation parameters (both required and optional)
+- Authentication methods (when configured)
+- Response schemas and examples
+- Expected error responses
+
+This documentation is automatically generated from the code, ensuring it's always up-to-date with the actual implementation.
+
 #### Example API Usage
 
 ```python
@@ -454,6 +477,89 @@ for event in client.events():
         print("\nDone!")
         break
 ```
+
+### API-Based Web UI Architecture
+
+The Kevin system provides a separation of concerns between the backend API and the frontend UI. This architecture allows for:
+
+1. **Scalability**: The FastAPI backend can be deployed separately from the Streamlit UI
+2. **Flexibility**: Multiple UIs can be developed that communicate with the same API
+3. **Maintainability**: Backend logic changes don't require UI changes and vice versa
+
+Here's how the components work together:
+
+```
+┌────────────────────────┐      ┌───────────────────────┐
+│                        │      │                       │
+│  Streamlit Web UI      │◄─────┤  FastAPI Backend      │
+│  (src/web/api_app.py)  │      │  (src/api/app.py)     │
+│                        │─────►│                       │
+└────────────────────────┘      └───────────────────────┘
+                                           │
+                                           │
+                                           ▼
+                                 ┌───────────────────────┐
+                                 │                       │
+                                 │  Core Kevin System    │
+                                 │  (src/core/*)         │
+                                 │                       │
+                                 └───────────────────────┘
+```
+
+#### Web UI Integration Flow
+
+The API-based Web UI follows this flow:
+
+1. **UI Initialization**:
+   - Streamlit app connects to the FastAPI backend on startup
+   - Health check confirms API availability
+   - UI components are rendered based on API capabilities
+
+2. **User Interaction**:
+   - User enters a query in the chat interface
+   - UI sends the query to the API with appropriate parameters
+   - For streaming responses, SSE (Server-Sent Events) connection is established
+
+3. **Real-time Updates**:
+   - API streams thinking steps and answer chunks via SSE
+   - UI displays "thinking" indicators during processing
+   - Answer is displayed with typing animation as it's received
+   - Documents are rendered as citations with proper formatting
+
+4. **Conversation Management**:
+   - Chat history is maintained and displayed from conversations API
+   - Context is preserved between questions in the same conversation
+   - UI supports creating new conversations or continuing existing ones
+
+#### Starting the API-Based Web UI
+
+To use the API-based Web UI, first start the FastAPI backend:
+
+```bash
+kevin --mode api
+```
+
+Then, in a separate terminal, start the Streamlit-based Web UI:
+
+```bash
+kevin --mode webapi
+```
+
+The Web UI will be available at `http://localhost:8501` and will connect to the API at `http://localhost:8000`.
+
+If port 8501 is already in use, the system will automatically find an available port.
+
+#### Backend Communication
+
+The KevinApiClient class in `src/web/api_app.py` handles all communication with the backend API, providing:
+
+- Regular (synchronous) query handling
+- Streaming query handling with callback functions
+- Document and web search functionality
+- Conversation history retrieval
+- Admin operations
+
+This client abstracts away the API details, allowing the UI code to focus on presentation rather than communication logic.
 
 ## Agent Workflow
 
