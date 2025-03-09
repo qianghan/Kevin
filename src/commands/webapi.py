@@ -9,55 +9,68 @@ import os
 import sys
 import click
 import subprocess
+import socket
 from pathlib import Path
+from typing import Optional
 
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
+def is_port_in_use(port: int) -> bool:
+    """Check if a port is in use."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        return s.connect_ex(('localhost', port)) == 0
+
+def find_available_port(start_port: int, max_attempts: int = 10) -> Optional[int]:
+    """Find an available port starting from start_port."""
+    port = start_port
+    for _ in range(max_attempts):
+        if not is_port_in_use(port):
+            return port
+        port += 1
+    return None
+
 @click.command("webapi")
-@click.option("--host", default="localhost", help="Host for the Streamlit server")
-@click.option("--port", default=8501, help="Port for the Streamlit server")
-@click.option("--api-url", default="http://localhost:8000", help="URL of the Kevin API")
+@click.option("--host", default="localhost", help="Host to bind the server to")
+@click.option("--port", default=8501, help="Port to bind the server to")
+@click.option("--api-url", default="http://localhost:8000", help="URL of the API server")
 def webapi_command(host: str, port: int, api_url: str):
-    """
-    Run the Kevin web interface using the API backend.
+    """Run the Kevin web UI with API backend."""
     
-    This starts a Streamlit server that communicates with the FastAPI backend
-    instead of directly using the core modules. The API server must be running
-    separately using 'kevin --mode api'.
-    """
-    try:
-        logger.info(f"Starting Kevin web UI on {host}:{port} using API at {api_url}")
-        logger.info(f"Note: Make sure the API server is running with 'kevin --mode api'")
-        
-        # Find the web/api_app.py path
-        current_file = Path(__file__).resolve()
-        web_app_path = current_file.parent.parent / "web" / "api_app.py"
-        
-        if not web_app_path.exists():
-            logger.error(f"Web UI app not found at {web_app_path}")
+    # Check if the specified port is in use and find an available one if needed
+    if is_port_in_use(port):
+        logger.warning(f"Port {port} is already in use.")
+        new_port = find_available_port(port + 1)
+        if new_port:
+            logger.info(f"Using available port {new_port} instead.")
+            port = new_port
+        else:
+            logger.error("Could not find an available port. Please free up port resources or specify a different port.")
             sys.exit(1)
-        
-        # Set environment variables for the process
-        env = os.environ.copy()
-        env["KEVIN_API_URL"] = api_url
-        
-        # Build the Streamlit command
-        cmd = [
-            "streamlit", "run", str(web_app_path),
-            "--server.address", host,
-            "--server.port", str(port),
-            "--browser.serverAddress", host,
-            "--browser.serverPort", str(port),
-        ]
-        
-        logger.info(f"Running command: {' '.join(cmd)}")
-        
-        # Run Streamlit with the API URL set
-        subprocess.run(cmd, env=env)
-    except KeyboardInterrupt:
-        logger.info("Web UI stopped by user")
-    except Exception as e:
-        logger.error(f"Error starting web UI: {e}")
-        sys.exit(1) 
+    
+    logger.info(f"Starting Kevin web UI on {host}:{port} using API at {api_url}")
+    logger.info("Note: Make sure the API server is running with 'kevin --mode api'")
+    
+    # Get the path to the web app
+    web_app_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "web", "api_app.py")
+    
+    # Check if the file exists
+    if not os.path.exists(web_app_path):
+        logger.error(f"Web app file not found: {web_app_path}")
+        sys.exit(1)
+    
+    # Run streamlit with the correct arguments
+    cmd = [
+        "streamlit", "run", web_app_path,
+        f"--server.address", host,
+        f"--server.port", str(port),
+        f"--browser.serverAddress", host,
+        f"--browser.serverPort", str(port)
+    ]
+    
+    # Set environment variable for API URL
+    os.environ["KEVIN_API_URL"] = api_url
+    
+    logger.info(f"Running command: {' '.join(cmd)}")
+    subprocess.run(cmd) 
