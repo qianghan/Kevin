@@ -17,12 +17,13 @@ from langchain.llms.base import LLM
 from pydantic import BaseModel, Field, root_validator, model_validator
 import logging
 import sseclient
+import uuid
 
 # Add parent directory to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
 # Import project modules
-from utils.logger import get_logger, api_logger
+from src.utils.logger import get_logger, api_logger
 
 # Load environment variables
 load_dotenv()

@@ -112,8 +112,13 @@ def _update_thinking_steps(agent_instance, state, new_thinking_step):
     state["thinking_steps"].append(new_thinking_step)
     
     # Update the agent's latest_thinking_steps for real-time display in the UI
-    if hasattr(agent_instance, 'latest_thinking_steps'):
-        agent_instance.latest_thinking_steps = state["thinking_steps"].copy()
+    if agent_instance:
+        if hasattr(agent_instance, '_record_thinking_step'):
+            # Use the new method which also triggers callbacks
+            agent_instance._record_thinking_step(new_thinking_step)
+        elif hasattr(agent_instance, 'latest_thinking_steps'):
+            # Fallback to direct update for backward compatibility
+            agent_instance.latest_thinking_steps = state["thinking_steps"].copy()
     
     return state
 
@@ -944,6 +949,9 @@ class UniversityAgent:
             # Initialize last_answer for state preservation
             self.last_answer = None
             
+            # Initialize callback for thinking steps
+            self._thinking_step_callback = None
+            
             # Run a sanity check to make sure the graph is configured correctly
             logger.debug(f"Graph methods: {[m for m in dir(self.graph) if not m.startswith('_') and callable(getattr(self.graph, m))]}")
             logger.info("UniversityAgent initialized successfully")
@@ -952,6 +960,32 @@ class UniversityAgent:
             logger.error(f"Error initializing agent: {e}", exc_info=True)
             raise RuntimeError(f"Failed to initialize agent: {e}")
     
+    def set_thinking_step_callback(self, callback_function):
+        """Set a callback function to be called for each thinking step.
+        
+        Args:
+            callback_function: A function that takes a thinking step as an argument.
+                The thinking step will be a dictionary with at least a 'description' key.
+        """
+        logger.debug("Setting thinking step callback")
+        self._thinking_step_callback = callback_function
+
+    def _record_thinking_step(self, step):
+        """Record a thinking step and call the callback if set.
+        
+        Args:
+            step: A thinking step dictionary with at least a 'description' key.
+        """
+        # Add to our internal record
+        self.latest_thinking_steps.append(step)
+        
+        # Call the callback if set
+        if self._thinking_step_callback:
+            try:
+                self._thinking_step_callback(step)
+            except Exception as e:
+                logger.error(f"Error in thinking step callback: {e}")
+
     def _run_compiled(self, state):
         """Run the graph using the compiled instance (LangGraph v0.0.x)"""
         logger.debug("Running graph using compiled instance")
@@ -1047,7 +1081,9 @@ class UniversityAgent:
             logger.info(f"[{query_id}] Web search explicitly requested")
         
         # Reset latest thinking steps for UI
-        self.latest_thinking_steps = state["thinking_steps"].copy()
+        self.latest_thinking_steps = []
+        for step in state["thinking_steps"]:
+            self._record_thinking_step(step)
         
         # Set default result in case execution fails
         result = {

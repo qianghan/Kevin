@@ -15,7 +15,7 @@ logger = get_logger(__name__)
 
 
 @click.command("api")
-@click.option("--host", default="127.0.0.1", help="Host to bind the server to")
+@click.option("--host", default="localhost", help="Host to bind the server to")
 @click.option("--port", default=8000, help="Port to bind the server to")
 @click.option("--reload/--no-reload", default=False, help="Enable/disable auto-reload")
 @click.option("--debug/--no-debug", default=False, help="Enable/disable debug mode")
