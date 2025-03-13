@@ -66,6 +66,99 @@ This application is optimized for deployment on Vercel:
 - `models/`: MongoDB schema models
 - `public/`: Static assets
 
+## UI Architecture
+
+```
+┌───────────────────────────────────────────────────────┐
+│                  Next.js Application                  │
+└───────────────────────────────────────────────────────┘
+                            │
+┌──────────────┬────────────┴───────────┬───────────────┐
+│              │                        │               │
+▼              ▼                        ▼               ▼
+┌──────────┐ ┌────────────────┐  ┌─────────────┐  ┌────────────┐
+│  App     │ │  Components    │  │   Lib       │  │  Models    │
+│  Router  │ │                │  │             │  │            │
+└──────────┘ └────────────────┘  └─────────────┘  └────────────┘
+     │               │                  │                │
+     ▼               ▼                  ▼                ▼
+┌──────────┐ ┌────────────────┐  ┌─────────────┐  ┌────────────┐
+│ Pages    │ │ Auth           │  │ API Client  │  │ User       │
+│          │ │ Chat           │  │ Auth Utils  │  │ ChatSession│
+│ - Home   │ │ Dashboard      │  │ DB Utils    │  │            │
+│ - Auth   │ │ UI Components  │  │ Utilities   │  │            │
+│ - Dash   │ │ Forms          │  │             │  │            │
+└──────────┘ └────────────────┘  └─────────────┘  └────────────┘
+                                        │
+                                        ▼
+                              ┌─────────────────────┐
+                              │  Kevin FastAPI      │
+                              │  Backend            │
+                              └─────────────────────┘
+```
+
+### Detailed Architecture Explanation
+
+#### 1. App Router Structure (App Directory)
+- **Modern Next.js 13+ App Router** - Uses the new file-based routing system
+- **Route Groups**:
+  - `(auth)`: Contains authentication-related pages like login, signup
+  - `(dashboard)`: Contains protected pages that require authentication
+  - `api`: API routes for server-side operations, including NextAuth endpoints
+
+#### 2. Component Architecture (Components Directory)
+- **Component Categories**:
+  - `auth/`: Authentication components including SessionProvider
+  - `chat/`: Chat interface components for interacting with Kevin AI
+  - `dashboard/`: Admin and user dashboard components
+  - `forms/`: Reusable form components
+  - `ui/`: Reusable UI elements (buttons, cards, modals, etc.)
+
+#### 3. Library Layer (Lib Directory)
+- **Service Categories**:
+  - `api/`: API client for communicating with the Kevin FastAPI backend
+  - `auth/`: Authentication utilities and NextAuth configuration
+  - `db/`: Database connection and utilities for MongoDB
+  - `utils/`: General utility functions and helpers
+
+#### 4. Data Models (Models Directory)
+- **MongoDB Schemas**:
+  - `User.ts`: User model with role-based permissions
+  - `ChatSession.ts`: Chat session model for storing conversations
+
+#### 5. Authentication Flow
+```
+┌─────────┐     ┌─────────────┐     ┌───────────┐     ┌────────────┐
+│  Login  │────▶│  NextAuth   │────▶│  JWT      │────▶│ Protected  │
+│  Page   │     │  Provider   │     │  Session  │     │ Routes     │
+└─────────┘     └─────────────┘     └───────────┘     └────────────┘
+      │                │
+      │                ▼
+┌─────▼──────┐  ┌─────────────┐
+│  OAuth     │  │  MongoDB    │
+│  Providers │  │  User Data  │
+└────────────┘  └─────────────┘
+```
+
+#### 6. Chat Interface Flow
+```
+┌─────────────┐    ┌────────────┐    ┌────────────┐    ┌───────────┐
+│ Chat        │───▶│ API Client │───▶│ Kevin      │───▶│ Stream    │
+│ Interface   │    │            │    │ Backend    │    │ Response  │
+└─────────────┘    └────────────┘    └────────────┘    └───────────┘
+       │                                                     │
+       ▼                                                     ▼
+┌─────────────┐                                     ┌───────────────┐
+│ Chat        │◀────────────────────────────────────│ Update UI     │
+│ History     │                                     │ with Response │
+└─────────────┘                                     └───────────────┘
+```
+
+#### 7. State Management
+- **Client-side State**: React hooks and context API
+- **Server-side State**: MongoDB for persistence
+- **Session State**: NextAuth.js SessionProvider
+
 ## Authentication Flow
 
 1. Users sign in with Google, Facebook, or email/password
