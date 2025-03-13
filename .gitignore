@@ -1,5 +1,6 @@
 # Python virtual environments
 kevin/
+kevin_venv/
 venv/
 env/
 .env/
@@ -81,6 +82,7 @@ kevin.egg-info/
 
 # Virtual environments
 kevin_env/
+kevin_venv/
 venv/
 env/
 ENV/
@@ -214,4 +216,68 @@ chroma_db/
 responses/
 response-*.txt
 response-stream-*.txt
+
+# FastAPI specific
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.pytest_cache/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+
+# API documentation
+/docs/_build/
+/site/
+/docs/en/.venv/
+/docs/en/site/
+
+# Docker
+.dockerignore
+docker-compose.override.yml
+
+# Local development
+.python-version
+Pipfile.lock
+poetry.lock
+.ruff_cache/
+
+# API Keys and sensitive information
+secrets/
+api_keys.json
+*_credentials.json
+
+# Additional logs for FastAPI
+server.log
+api.log
+fastapi.log
+uvicorn.log
+gunicorn.log
+
+# MongoDB
+.mongodb/
+mongodb_data/
+.mongodata/
+
+# Redis (if used)
+*.rdb
+redis_data/
+
+# Celery (if used)
+celerybeat-schedule
+celerybeat.pid
+
+# SSL certificates
+*.pem
+*.crt
+*.key
 

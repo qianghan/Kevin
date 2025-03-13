@@ -637,4 +637,59 @@ Contributions are welcome! Please feel free to submit a Pull Request to https://
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details. 
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Monorepo Structure
+
+This repository is organized as a monorepo containing both the Kevin backend and the Next.js web UI:
+
+- **Backend (root directory)**: The main Kevin AI backend built with FastAPI
+- **Web UI (`/ui` directory)**: A modern Next.js web application that interfaces with the Kevin API
+
+### Backend
+
+The backend provides the core AI functionality, including:
+- Chat API with streaming support
+- Document management
+- Search capabilities
+- Admin functions
+
+For more details on the backend, see the main README content above.
+
+### Web UI
+
+The web UI provides a modern interface for interacting with Kevin:
+- Next.js-based frontend with TypeScript and Tailwind CSS
+- Authentication with Google, Facebook, and email/password
+- User roles (student and parent)
+- Real-time chat with streaming responses
+- MongoDB integration for storing users and chat sessions
+
+To learn more about the web UI, see the [UI README](ui/README.md).
+
+## Development
+
+### Running the Backend
+
+```bash
+# Activate the virtual environment
+source kevin_venv/bin/activate
+
+# Run the backend
+python -m src.main
+```
+
+### Running the Web UI
+
+```bash
+# Navigate to the UI directory
+cd ui
+
+# Install dependencies
+npm install
+
+# Run the development server
+npm run dev
+```
+
+Visit http://localhost:3000 to access the web UI, which will connect to the backend running on http://localhost:8000. 
