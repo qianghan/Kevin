@@ -6,7 +6,17 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "db:install": "cd db && npm install",
+    "db:start": "cd db && docker-compose up -d",
+    "db:stop": "cd db && docker-compose down",
+    "db:test": "cd db && node test-mongodb.js",
+    "db:logs": "docker logs kevin-ui-mongodb",
+    "db:shell": "docker exec -it kevin-ui-mongodb mongosh kevindb -u kevinuser -p kevin_password",
+    "db:reset": "cd db && docker-compose down && rm -rf data/* && docker-compose up -d"
   },
   "dependencies": {
     "@auth/mongodb-adapter": "^3.8.0",
@@ -39,11 +49,20 @@
   "devDependencies": {
     "@eslint/eslintrc": "^3",
     "@tailwindcss/postcss": "^4",
+    "@testing-library/jest-dom": "^6.1.4",
+    "@testing-library/react": "^15.0.0",
+    "@testing-library/user-event": "^14.5.1",
+    "@types/jest": "^29.5.5",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "15.2.2",
+    "jest": "^29.7.0",
+    "jest-environment-jsdom": "^29.7.0",
+    "mongodb-memory-server": "^9.0.1",
+    "msw": "^2.0.10",
+    "node-mocks-http": "^1.12.2",
     "tailwindcss": "^4",
     "typescript": "^5"
   }
