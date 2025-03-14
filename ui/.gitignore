@@ -83,3 +83,18 @@ next-env.d.ts
 # Sitemap
 /public/sitemap*.xml
 /public/robots.txt
+
+# MongoDB
+/db/data/**
+/db/node_modules/
+/db/package-lock.json
+/db/.mongodb/
+
+# Logs
+/logs
+*.log
+
+# Local files
+.DS_Store
+.env.local.*
+.eslintcache

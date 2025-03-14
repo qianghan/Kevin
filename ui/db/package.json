@@ -9,10 +9,11 @@
     "stop": "docker-compose down",
     "logs": "docker logs kevin-ui-mongodb",
     "shell": "docker exec -it kevin-ui-mongodb mongosh kevindb -u kevinuser -p kevin_password",
-    "reset": "docker-compose down && rm -rf data/* && docker-compose up -d"
+    "reset": "docker-compose down && rm -rf data/* && docker-compose up -d",
+    "postinstall": "npm install dotenv mongodb"
   },
   "dependencies": {
     "dotenv": "^16.0.3",
     "mongodb": "^5.0.0"
   }
-} 
+}
