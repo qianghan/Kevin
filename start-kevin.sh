@@ -25,7 +25,7 @@ show_help() {
     echo ""
     echo -e "Options:"
     echo -e "  -h, --help                 Show this help message"
-    echo -e "  -a, --action ACTION        Action to perform: ${GREEN}start${NC}, ${RED}stop${NC}, ${YELLOW}restart${NC} (default: start)"
+    echo -e "  -a, --action ACTION        Action to perform: ${GREEN}start${NC}, ${RED}stop${NC}, ${YELLOW}restart${NC}, ${RED}stopall${NC} (default: start)"
     echo -e "  -s, --service SERVICE      Service to manage: ${BLUE}ui${NC}, ${BLUE}api${NC}, ${BLUE}db${NC}, ${BLUE}all${NC} (default: all)"
     echo -e "  -l, --logs                 Show logs for running services"
     echo -e "  -d, --debug                Enable debug output"
@@ -35,6 +35,7 @@ show_help() {
     echo -e "  $0 -a stop -s db           Stop the MongoDB database"
     echo -e "  $0 -a restart -s api       Restart the FastAPI backend"
     echo -e "  $0 -a start -s ui          Start only the Next.js UI"
+    echo -e "  $0 -a stopall              Stop all services"
     echo -e "  $0 -l                      Show logs for running services"
     echo ""
 }
@@ -71,7 +72,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Validate action
-if [[ ! "$ACTION" =~ ^(start|stop|restart|logs)$ ]]; then
+if [[ ! "$ACTION" =~ ^(start|stop|restart|logs|stopall)$ ]]; then
     echo -e "${RED}Invalid action: $ACTION${NC}"
     show_help
     exit 1
@@ -312,6 +313,18 @@ logs_ui() {
     tail -f "$UI_LOG_FILE"
 }
 
+# Function to stop all services
+stop_all_services() {
+    echo -e "${RED}Stopping all Kevin Application services...${NC}"
+    
+    # Stop in reverse order of dependencies
+    stop_ui
+    stop_api
+    stop_db
+    
+    echo -e "${GREEN}✅ All services stopped${NC}"
+}
+
 # Main logic based on action and service
 case "$ACTION" in
     start)
@@ -356,6 +369,11 @@ case "$ACTION" in
         if [[ "$SERVICE" == "all" ]]; then
             echo -e "${GREEN}✅ All services stopped${NC}"
         fi
+        ;;
+    
+    stopall)
+        # New dedicated action to stop all services
+        stop_all_services
         ;;
         
     restart)
@@ -408,6 +426,12 @@ case "$ACTION" in
                 *) echo -e "${RED}Invalid choice${NC}" ;;
             esac
         fi
+        ;;
+        
+    *)
+        echo -e "${RED}Error: Invalid action '$ACTION'${NC}" >&2
+        show_help
+        exit 1
         ;;
 esac
 
