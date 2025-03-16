@@ -15,6 +15,7 @@ export interface ChatSessionDocument extends Document {
   userId: mongoose.Types.ObjectId;
   conversationId?: string; // Kevin API conversation ID
   messages: ChatMessage[];
+  contextSummary?: string; // Summary of conversation context
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -66,6 +67,10 @@ const ChatSessionSchema = new Schema<ChatSessionDocument>(
       type: [MessageSchema],
       default: []
     },
+    contextSummary: {
+      type: String,
+      default: ''
+    },
     isActive: {
       type: Boolean,
       default: true
@@ -75,6 +80,9 @@ const ChatSessionSchema = new Schema<ChatSessionDocument>(
     timestamps: true
   }
 );
+
+// Create a compound index on userId + conversationId to ensure uniqueness per user
+ChatSessionSchema.index({ userId: 1, conversationId: 1 }, { unique: true, sparse: true });
 
 // Static methods
 interface ChatSessionModel extends Model<ChatSessionDocument> {

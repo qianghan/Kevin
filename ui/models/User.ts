@@ -5,6 +5,7 @@ export interface BaseUser {
   email: string;
   name: string;
   image?: string;
+  password?: string;
   emailVerified?: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -29,6 +30,7 @@ export type UserType = StudentUser | ParentUser;
 // Interface for the Mongoose document
 export interface UserDocument extends Document, BaseUser {
   role: 'student' | 'parent';
+  password?: string;
   parentIds?: mongoose.Types.ObjectId[];
   studentIds?: mongoose.Types.ObjectId[];
   partnerIds?: mongoose.Types.ObjectId[];
@@ -45,6 +47,9 @@ const UserSchema = new Schema<UserDocument>(
     name: {
       type: String,
       required: true,
+    },
+    password: {
+      type: String,
     },
     image: {
       type: String,
