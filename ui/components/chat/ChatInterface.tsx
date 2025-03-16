@@ -759,13 +759,11 @@ export default function ChatInterface({
         {messages.length === 0 && !streamingMessage && (
           <div className="flex items-center justify-center h-full">
             <div className="text-center max-w-md mx-auto p-8 rounded-xl bg-white shadow-lg border border-gray-100 bg-gradient-to-b from-white to-gray-50">
-              <div className="mb-6 bg-gradient-to-br from-indigo-500 to-purple-600 text-white w-16 h-16 rounded-full flex items-center justify-center mx-auto shadow-md">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-                </svg>
+              <div className="mb-6 bg-gradient-to-br from-indigo-500 to-purple-600 text-white w-20 h-20 rounded-full flex items-center justify-center mx-auto shadow-md">
+                <span className="text-3xl font-bold" style={{ textShadow: '0px 2px 3px rgba(0, 0, 0, 0.3)' }}>K</span>
               </div>
-              <h3 className="text-2xl font-semibold text-gray-800 mb-3">Welcome to Kevin AI</h3>
-              <p className="text-gray-600 mb-8 leading-relaxed">Let Kevin assist you with Canadian university information...</p>
+              <h3 className="text-2xl font-semibold text-gray-800 mb-3">Welcome to Kevin.AI</h3>
+              <p className="text-gray-600 mb-8 leading-relaxed">Let Kevin.AI assist you with Canadian university information...</p>
               <div className="flex flex-col sm:flex-row justify-center gap-3">
                 <button 
                   onClick={() => setInput("What are the admission requirements for UBC Computer Science?")}
@@ -809,9 +807,7 @@ export default function ChatInterface({
                 {/* Role indicator for assistant */}
                 {message.role === 'assistant' && (
                   <div className="w-8 h-8 rounded-full bg-gradient-to-br from-teal-500 to-emerald-600 text-white flex items-center justify-center mr-2 flex-shrink-0 mt-1 shadow-md">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 10a2 2 0 11-4 0 2 2 0 014 0zm6 0a2 2 0 11-4 0 2 2 0 014 0zM4 10a2 2 0 11.001-.001A2 2 0 014 10z" />
-                    </svg>
+                    <span className="text-lg font-bold" style={{ textShadow: '0px 1px 2px rgba(0, 0, 0, 0.2)' }}>K</span>
                   </div>
                 )}
                 
@@ -852,7 +848,19 @@ export default function ChatInterface({
                   }
                   >
                     {message.role === 'assistant' ? (
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      <ReactMarkdown 
+                        remarkPlugins={[remarkGfm]}
+                        components={{
+                          a: ({ node, ...props }) => (
+                            <a 
+                              {...props} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="text-blue-600 hover:text-blue-800 hover:underline"
+                            />
+                          )
+                        }}
+                      >
                         {message.content}
                       </ReactMarkdown>
                     ) : (
@@ -904,9 +912,7 @@ export default function ChatInterface({
         {streamingMessage && isLoading && (
           <div className="flex justify-start" id={`streaming-${streamingId}`}>
             <div className="w-8 h-8 rounded-full bg-gradient-to-br from-teal-500 to-emerald-600 text-white flex items-center justify-center mr-2 flex-shrink-0 mt-1 shadow-md">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 10a2 2 0 11-4 0 2 2 0 014 0zm6 0a2 2 0 11-4 0 2 2 0 014 0zM4 10a2 2 0 11.001-.001A2 2 0 014 10z" />
-              </svg>
+              <span className="text-lg font-bold" style={{ textShadow: '0px 1px 2px rgba(0, 0, 0, 0.2)' }}>K</span>
             </div>
             <div className="p-5 rounded-2xl max-w-[85%] md:max-w-[75%] bg-white text-gray-700 border border-gray-100 relative group shadow-md hover:shadow-lg transition-shadow">
               {/* Copy button for streaming message */}
@@ -922,7 +928,19 @@ export default function ChatInterface({
               </button>
               
               <div className="whitespace-pre-wrap markdown-content text-base leading-relaxed">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                <ReactMarkdown 
+                  remarkPlugins={[remarkGfm]}
+                  components={{
+                    a: ({ node, ...props }) => (
+                      <a 
+                        {...props} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="text-blue-600 hover:text-blue-800 hover:underline"
+                      />
+                    )
+                  }}
+                >
                   {streamingMessage}
                 </ReactMarkdown>
                 <span className="animate-pulse text-indigo-500 font-medium">▋</span>

@@ -18,7 +18,7 @@ app.get('/', (req, res) => {
   res.json({
     name: 'Kevin API (Mock)',
     version: '1.0.0',
-    description: 'Mock API for Kevin AI',
+    description: 'Mock API for Kevin.AI',
     docs_url: '/docs'
   });
 });

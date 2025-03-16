@@ -6,7 +6,7 @@ import { SessionProvider } from "@/components/auth/SessionProvider";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Kevin AI - Your University Assistant",
+  title: "Kevin.AI - Your University Assistant",
   description: "A powerful AI assistant for university students and parents",
 };
 

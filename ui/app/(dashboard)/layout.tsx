@@ -64,7 +64,12 @@ export default function DashboardLayout({
       } z-10`}>
         <div className="h-full flex flex-col">
           <div className="p-4 border-b flex justify-between items-center">
-            <h2 className="text-xl font-semibold">Kevin AI</h2>
+            <div className="flex items-center">
+              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 text-white flex items-center justify-center mr-2 shadow-md">
+                <span className="text-lg font-bold" style={{ textShadow: '0px 1px 2px rgba(0, 0, 0, 0.2)' }}>K</span>
+              </div>
+              <h2 className="text-xl font-semibold">Kevin.AI</h2>
+            </div>
             <button 
               onClick={toggleSidebar}
               className="p-1 rounded-md hover:bg-gray-100"

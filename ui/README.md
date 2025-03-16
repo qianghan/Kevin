@@ -1,6 +1,6 @@
-# Kevin Web UI
+# Kevin.AI Web UI
 
-A Next.js-based web application for the Kevin AI assistant, providing a modern interface for students and parents to interact with the Kevin AI.
+A Next.js-based web application for the Kevin.AI assistant, providing a modern interface for students and parents to interact with the Kevin.AI.
 
 ## Features
 
@@ -110,7 +110,7 @@ This application is optimized for deployment on Vercel:
 #### 2. Component Architecture (Components Directory)
 - **Component Categories**:
   - `auth/`: Authentication components including SessionProvider
-  - `chat/`: Chat interface components for interacting with Kevin AI
+  - `chat/`: Chat interface components for interacting with Kevin.AI
   - `dashboard/`: Admin and user dashboard components
   - `forms/`: Reusable form components
   - `ui/`: Reusable UI elements (buttons, cards, modals, etc.)
