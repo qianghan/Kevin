@@ -7,7 +7,8 @@ A Next.js-based web application for the Kevin AI assistant, providing a modern i
 - **Modern UI**: Clean, responsive interface built with Next.js and Tailwind CSS
 - **Authentication**: Sign in with Google, Facebook, or email/password
 - **User Roles**: Support for student and parent roles with appropriate permissions
-- **Chat Interface**: Real-time chat with streaming responses and thinking steps visualization
+- **Enhanced Chat Interface**: Real-time chat with streaming responses, modern gradient styling, and thinking steps visualization
+- **Context Summarization**: Intelligent conversation summarization for improved continuity and reduced token usage
 - **Session Management**: Create and manage multiple chat sessions
 - **Family Management**: Parents can manage students and other parent partners
 - **MongoDB Integration**: Persistent storage of users, chat sessions, and messages
@@ -119,12 +120,12 @@ This application is optimized for deployment on Vercel:
   - `api/`: API client for communicating with the Kevin FastAPI backend
   - `auth/`: Authentication utilities and NextAuth configuration
   - `db/`: Database connection and utilities for MongoDB
-  - `utils/`: General utility functions and helpers
+  - `utils/`: General utility functions and context summarization
 
 #### 4. Data Models (Models Directory)
 - **MongoDB Schemas**:
   - `User.ts`: User model with role-based permissions
-  - `ChatSession.ts`: Chat session model for storing conversations
+  - `ChatSession.ts`: Chat session model for storing conversations and context summaries
 
 #### 5. Authentication Flow
 ```
@@ -146,12 +147,19 @@ This application is optimized for deployment on Vercel:
 │ Chat        │───▶│ API Client │───▶│ Kevin      │───▶│ Stream    │
 │ Interface   │    │            │    │ Backend    │    │ Response  │
 └─────────────┘    └────────────┘    └────────────┘    └───────────┘
-       │                                                     │
-       ▼                                                     ▼
-┌─────────────┐                                     ┌───────────────┐
-│ Chat        │◀────────────────────────────────────│ Update UI     │
-│ History     │                                     │ with Response │
-└─────────────┘                                     └───────────────┘
+       │                │                                    │
+       │                │                                    │
+       │                ▼                                    │
+       │         ┌────────────┐                             │
+       │         │ Context    │                             │
+       │         │ Summary    │                             │
+       │         └────────────┘                             │
+       │                │                                   │
+       ▼                ▼                                   ▼
+┌─────────────┐  ┌────────────┐               ┌───────────────┐
+│ Chat        │◀─┤ Database   │◀──────────────│ Update UI     │
+│ History     │  │ Storage    │               │ with Response │
+└─────────────┘  └────────────┘               └───────────────┘
 ```
 
 #### 7. State Management
@@ -170,8 +178,33 @@ This application is optimized for deployment on Vercel:
 
 - Real-time chat with streaming responses using Server-Sent Events (SSE)
 - Visualization of AI thinking steps
+- Modern UI with gradient backgrounds and improved contrast
 - Support for multiple chat sessions per user
 - Persistent storage of chat history in MongoDB
+- Context summarization for improved conversation continuity and reduced token usage
+
+### Context Summarization
+
+The chat system now includes intelligent context summarization capabilities:
+
+- **Optimized Token Usage**: Generates concise summaries of conversation history to reduce the tokens sent to the AI model
+- **Improved Continuity**: Helps the AI maintain context across longer conversations without requiring the full message history
+- **Smart Summarization Logic**:
+  - For short conversations (≤3 messages): Simple formatting of the complete context
+  - For longer conversations: Sophisticated summarization that extracts key questions and recent exchanges
+- **Database Integration**: Context summaries are stored alongside chat sessions in MongoDB
+
+### UI Enhancements
+
+Recent UI improvements include:
+
+- **Modern Aesthetic**: Gradient backgrounds and improved color schemes for better visual appeal
+- **Improved Message Styling**:
+  - User messages: Gradient background with white text for better readability
+  - Assistant messages: Clean white background with dark text
+- **Enhanced Interaction**: Hover effects, copy buttons, and better spacing for improved usability
+- **Responsive Design**: Adaptable layout that works well on mobile and desktop devices
+- **Visual Hierarchy**: Better distinction between user and assistant messages for easier conversation reading
 
 ## License
 

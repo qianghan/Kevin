@@ -765,19 +765,19 @@ export default function ChatInterface({
                 </svg>
               </div>
               <h3 className="text-2xl font-semibold text-gray-800 mb-3">Welcome to Kevin AI</h3>
-              <p className="text-gray-600 mb-8 leading-relaxed">Let Kevin assist you...</p>
+              <p className="text-gray-600 mb-8 leading-relaxed">Let Kevin assist you with Canadian university information...</p>
               <div className="flex flex-col sm:flex-row justify-center gap-3">
                 <button 
-                  onClick={() => setInput("What can you help me with?")}
+                  onClick={() => setInput("What are the admission requirements for UBC Computer Science?")}
                   className="px-4 py-3 bg-gray-100 hover:bg-gray-200 rounded-xl text-sm text-gray-700 transition-colors font-medium shadow-sm hover:shadow"
                 >
-                  What can you help me with?
+                  UBC Computer Science requirements
                 </button>
                 <button 
-                  onClick={() => setInput("Tell me about Kevin AI")}
+                  onClick={() => setInput("Compare tuition costs between University of Toronto and McGill for international students")}
                   className="px-4 py-3 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 rounded-xl text-sm text-white transition-colors font-medium shadow-sm hover:shadow"
                 >
-                  Tell me about Kevin AI
+                  UofT vs McGill tuition costs
                 </button>
               </div>
             </div>
