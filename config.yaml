@@ -161,6 +161,15 @@ universities:
       - "https://carleton.ca/studentaccounts/tuition-fees/"
       - "https://carleton.ca/awards/"
 
+  # Ontario Colleges
+  - name: "Seneca College"
+    base_url: "https://www.senecacollege.ca/"
+    focus_urls:
+      - "https://www.senecacollege.ca/programs.html"
+      - "https://www.senecacollege.ca/admissions.html"
+      - "https://www.senecacollege.ca/registrar/paying-for-your-education/tuition-and-fees.html"
+      - "https://www.senecacollege.ca/registrar/paying-for-your-education/osap.html"
+
   # British Columbia Universities
   - name: "University of British Columbia"
     base_url: "https://www.ubc.ca/"
@@ -185,6 +194,14 @@ universities:
       - "https://www.uvic.ca/undergraduate/admissions/"
       - "https://www.uvic.ca/registrar/students/financials/"
       - "https://www.uvic.ca/registrar/students/financials/financial-aid/"
+
+  - name: "Thompson Rivers University"
+    base_url: "https://www.tru.ca/"
+    focus_urls:
+      - "https://www.tru.ca/programs.html"
+      - "https://www.tru.ca/admissions.html"
+      - "https://www.tru.ca/studentfinance/costs.html"
+      - "https://www.tru.ca/awards.html"
 
   # Quebec Universities
   - name: "McGill University"
@@ -235,7 +252,34 @@ universities:
       - "https://www.ucalgary.ca/registrar/finances/tuition-and-fees"
       - "https://www.ucalgary.ca/registrar/finances/awards-scholarships-and-bursaries"
 
-  # Other Major Universities
+  # Saskatchewan Universities
+  - name: "University of Saskatchewan"
+    base_url: "https://www.usask.ca/"
+    focus_urls:
+      - "https://programs.usask.ca/"
+      - "https://admissions.usask.ca/"
+      - "https://students.usask.ca/money/tuition-fees/"
+      - "https://students.usask.ca/money/scholarships.php"
+      
+  - name: "University of Regina"
+    base_url: "https://www.uregina.ca/"
+    focus_urls:
+      - "https://www.uregina.ca/programs/"
+      - "https://www.uregina.ca/admissions/"
+      - "https://www.uregina.ca/student/registrar/registration-withdrawal/academic-advising-offices/index.html"
+      - "https://www.uregina.ca/cost-aid/tuition/undergraduate-tuition-fees.html"
+      - "https://www.uregina.ca/cost-aid/funding/"
+
+  # Manitoba Universities
+  - name: "University of Manitoba"
+    base_url: "https://umanitoba.ca/"
+    focus_urls:
+      - "https://umanitoba.ca/explore/programs-of-study"
+      - "https://umanitoba.ca/admissions/"
+      - "https://umanitoba.ca/admissions/undergraduate/costs-and-finances"
+      - "https://umanitoba.ca/financial-aid-and-awards/"
+
+  # Atlantic Canada Universities
   - name: "Dalhousie University"
     base_url: "https://www.dal.ca/"
     focus_urls:
@@ -244,21 +288,21 @@ universities:
       - "https://www.dal.ca/admissions/money_matters/tuition_fees"
       - "https://www.dal.ca/admissions/money_matters/funding-sources/scholarships"
 
-  - name: "University of Saskatchewan"
-    base_url: "https://www.usask.ca/"
+  - name: "Memorial University of Newfoundland"
+    base_url: "https://www.mun.ca/"
     focus_urls:
-      - "https://programs.usask.ca/"
-      - "https://admissions.usask.ca/"
-      - "https://students.usask.ca/money/tuition-fees/"
-      - "https://students.usask.ca/money/scholarships.php"
+      - "https://www.mun.ca/undergrad/programs/"
+      - "https://www.mun.ca/undergrad/apply/"
+      - "https://www.mun.ca/scholarships/"
+      - "https://www.mun.ca/finance/fees/"
 
-  - name: "University of Manitoba"
-    base_url: "https://umanitoba.ca/"
+  - name: "University of New Brunswick"
+    base_url: "https://www.unb.ca/"
     focus_urls:
-      - "https://umanitoba.ca/explore/programs-of-study"
-      - "https://umanitoba.ca/admissions/"
-      - "https://umanitoba.ca/admissions/undergraduate/costs-and-finances"
-      - "https://umanitoba.ca/financial-aid-and-awards/"
+      - "https://www.unb.ca/academics/programs/"
+      - "https://www.unb.ca/admissions/"
+      - "https://www.unb.ca/moneymatters/tuition/"
+      - "https://www.unb.ca/moneymatters/scholarships/"
 
   # Provincial Application Portals
   - name: "ApplyAlberta"
@@ -295,3 +339,606 @@ universities:
       - "https://www.sracq.qc.ca/programmes/"
       - "https://www.sracq.qc.ca/admission/"
       - "https://www.sracq.qc.ca/international/" 
+      
+  # Additional Colleges & Universities
+  - name: "Humber College"
+    base_url: "https://humber.ca/"
+    focus_urls:
+      - "https://humber.ca/programs.html"
+      - "https://humber.ca/admissions.html"
+      - "https://humber.ca/registration-records/fees-financial-aid.html"
+      - "https://humber.ca/registration-records/financial-aid/scholarships-bursaries.html"
+  
+  - name: "University of Prince Edward Island"
+    base_url: "https://www.upei.ca/"
+    focus_urls:
+      - "https://www.upei.ca/programs"
+      - "https://www.upei.ca/admissions"
+      - "https://www.upei.ca/fees"
+      - "https://www.upei.ca/scholarships-and-awards"
+  
+  - name: "Mount Royal University"
+    base_url: "https://www.mtroyal.ca/"
+    focus_urls:
+      - "https://www.mtroyal.ca/ProgramsCourses/index.htm"
+      - "https://www.mtroyal.ca/Admission/index.htm"
+      - "https://www.mtroyal.ca/Admission/MoneyMatters/index.htm"
+      - "https://www.mtroyal.ca/Admission/MoneyMatters/ScholarshipsBursaries/index.htm"
+  
+  - name: "Sheridan College"
+    base_url: "https://www.sheridancollege.ca/"
+    focus_urls:
+      - "https://www.sheridancollege.ca/programs"
+      - "https://www.sheridancollege.ca/admissions"
+      - "https://www.sheridancollege.ca/fees-and-finances"
+      - "https://www.sheridancollege.ca/fees-and-finances/financial-aid-and-awards"
+  
+  - name: "Acadia University"
+    base_url: "https://www2.acadiau.ca/"
+    focus_urls:
+      - "https://www2.acadiau.ca/programs.html"
+      - "https://www2.acadiau.ca/admissions.html"
+      - "https://www2.acadiau.ca/financial-aid.html"
+      - "https://www2.acadiau.ca/fees.html" 
+      
+  # 20 Additional Canadian Universities - March 2025
+  - name: "Ryerson University"
+    base_url: "https://www.torontomu.ca/"
+    focus_urls:
+      - "https://www.torontomu.ca/programs/"
+      - "https://www.torontomu.ca/admissions/"
+      - "https://www.torontomu.ca/fees/"
+      - "https://www.torontomu.ca/student-financial-assistance/"
+  
+  - name: "Lakehead University"
+    base_url: "https://www.lakeheadu.ca/"
+    focus_urls:
+      - "https://www.lakeheadu.ca/programs"
+      - "https://www.lakeheadu.ca/admissions"
+      - "https://www.lakeheadu.ca/students/financing"
+      - "https://www.lakeheadu.ca/students/financing/scholarships"
+  
+  - name: "Brock University"
+    base_url: "https://brocku.ca/"
+    focus_urls:
+      - "https://brocku.ca/programs/"
+      - "https://brocku.ca/admissions/"
+      - "https://brocku.ca/safa/tuition-and-fees/"
+      - "https://brocku.ca/safa/awards-and-scholarships/"
+  
+  - name: "Trent University"
+    base_url: "https://www.trentu.ca/"
+    focus_urls:
+      - "https://www.trentu.ca/programs/"
+      - "https://www.trentu.ca/futurestudents/undergraduate/requirements"
+      - "https://www.trentu.ca/studentfinances/tuition-fees"
+      - "https://www.trentu.ca/studentfinances/scholarships-awards-bursaries"
+  
+  - name: "University of Guelph"
+    base_url: "https://www.uoguelph.ca/"
+    focus_urls:
+      - "https://www.uoguelph.ca/admissions/undergraduate/programs"
+      - "https://www.uoguelph.ca/admissions/"
+      - "https://www.uoguelph.ca/registrar/studentfinance/fees"
+      - "https://www.uoguelph.ca/registrar/studentfinance/scholarships"
+  
+  - name: "Algonquin College"
+    base_url: "https://www.algonquincollege.com/"
+    focus_urls:
+      - "https://www.algonquincollege.com/programs/"
+      - "https://www.algonquincollege.com/international/admissions/"
+      - "https://www.algonquincollege.com/international/fees/"
+      - "https://www.algonquincollege.com/international/new-students/scholarships-and-bursaries/"
+  
+  - name: "Conestoga College"
+    base_url: "https://www.conestogac.on.ca/"
+    focus_urls:
+      - "https://www.conestogac.on.ca/programs"
+      - "https://www.conestogac.on.ca/admissions"
+      - "https://www.conestogac.on.ca/financial-services"
+      - "https://www.conestogac.on.ca/financial-services/awards"
+  
+  - name: "Capilano University"
+    base_url: "https://www.capilanou.ca/"
+    focus_urls:
+      - "https://www.capilanou.ca/programs--courses/"
+      - "https://www.capilanou.ca/admissions/"
+      - "https://www.capilanou.ca/admissions/fees--finances/"
+      - "https://www.capilanou.ca/admissions/fees--finances/financial-aid--awards/"
+  
+  - name: "Emily Carr University of Art + Design"
+    base_url: "https://www.ecuad.ca/"
+    focus_urls:
+      - "https://www.ecuad.ca/academics/programs"
+      - "https://www.ecuad.ca/admissions"
+      - "https://www.ecuad.ca/admissions/tuition-and-fees"
+      - "https://www.ecuad.ca/student-life/financial-aid"
+  
+  - name: "Vancouver Island University"
+    base_url: "https://www.viu.ca/"
+    focus_urls:
+      - "https://www.viu.ca/programs"
+      - "https://www.viu.ca/admissions"
+      - "https://www.viu.ca/tuition-scholarships-bursaries"
+      - "https://www.viu.ca/financial-aid-awards"
+  
+  - name: "British Columbia Institute of Technology"
+    base_url: "https://www.bcit.ca/"
+    focus_urls:
+      - "https://www.bcit.ca/programs/"
+      - "https://www.bcit.ca/admission/"
+      - "https://www.bcit.ca/financial-aid/"
+      - "https://www.bcit.ca/financial-aid/awards-scholarships-bursaries/"
+  
+  - name: "Concordia University"
+    base_url: "https://www.concordia.ca/"
+    focus_urls:
+      - "https://www.concordia.ca/academics/undergraduate/programs.html"
+      - "https://www.concordia.ca/admissions/undergraduate.html"
+      - "https://www.concordia.ca/admissions/tuition-fees.html"
+      - "https://www.concordia.ca/students/financial-support/scholarships-awards.html"
+  
+  - name: "Bishop's University"
+    base_url: "https://www.ubishops.ca/"
+    focus_urls:
+      - "https://www.ubishops.ca/academic-programs/"
+      - "https://www.ubishops.ca/future-current-students/admission/"
+      - "https://www.ubishops.ca/future-current-students/tuition-and-fees/"
+      - "https://www.ubishops.ca/future-current-students/money-matters/scholarships-awards-bursaries/"
+  
+  - name: "École Polytechnique de Montréal"
+    base_url: "https://www.polymtl.ca/"
+    focus_urls:
+      - "https://www.polymtl.ca/programmes/"
+      - "https://www.polymtl.ca/admission/"
+      - "https://www.polymtl.ca/registrariat/etudes/fraisscolarite"
+      - "https://www.polymtl.ca/aide-financiere/"
+  
+  - name: "MacEwan University"
+    base_url: "https://www.macewan.ca/"
+    focus_urls:
+      - "https://www.macewan.ca/programs/"
+      - "https://www.macewan.ca/admissions/"
+      - "https://www.macewan.ca/tuition-and-fees/"
+      - "https://www.macewan.ca/scholarships-and-financial-aid/"
+  
+  - name: "Athabasca University"
+    base_url: "https://www.athabascau.ca/"
+    focus_urls:
+      - "https://www.athabascau.ca/programs/index.html"
+      - "https://www.athabascau.ca/admissions/index.html"
+      - "https://www.athabascau.ca/students/financial-support/index.html"
+      - "https://www.athabascau.ca/registrar/tuition-fees/index.html"
+  
+  - name: "Brandon University"
+    base_url: "https://www.brandonu.ca/"
+    focus_urls:
+      - "https://www.brandonu.ca/programs/"
+      - "https://www.brandonu.ca/future-students/"
+      - "https://www.brandonu.ca/finance/tuition-info/"
+      - "https://www.brandonu.ca/scholarships-bursaries/"
+  
+  - name: "University of Winnipeg"
+    base_url: "https://www.uwinnipeg.ca/"
+    focus_urls:
+      - "https://www.uwinnipeg.ca/academics/index.html"
+      - "https://www.uwinnipeg.ca/future-student/index.html"
+      - "https://www.uwinnipeg.ca/fees/index.html"
+      - "https://www.uwinnipeg.ca/awards/index.html"
+  
+  - name: "St. Francis Xavier University"
+    base_url: "https://www.stfx.ca/"
+    focus_urls:
+      - "https://www.stfx.ca/academics"
+      - "https://www.stfx.ca/admissions"
+      - "https://www.stfx.ca/cost-financial-aid"
+      - "https://www.stfx.ca/bursaries-and-scholarships"
+  
+  - name: "Mount Allison University"
+    base_url: "https://www.mta.ca/"
+    focus_urls:
+      - "https://www.mta.ca/programs/"
+      - "https://www.mta.ca/admissions/"
+      - "https://www.mta.ca/fees/"
+      - "https://www.mta.ca/scholarships/" 
+      
+  # 50 Additional Canadian Institutions - March 2025 (Batch 3)
+  - name: "University of Windsor"
+    base_url: "https://www.uwindsor.ca/"
+    focus_urls:
+      - "https://www.uwindsor.ca/programs"
+      - "https://www.uwindsor.ca/registrar/1454/undergraduate-admissions"
+      - "https://www.uwindsor.ca/finance/student-accounts"
+      - "https://www.uwindsor.ca/studentawards/"
+  
+  - name: "Georgian College"
+    base_url: "https://www.georgiancollege.ca/"
+    focus_urls:
+      - "https://www.georgiancollege.ca/academics/programs/"
+      - "https://www.georgiancollege.ca/admissions/"
+      - "https://www.georgiancollege.ca/finance-and-fees/"
+      - "https://www.georgiancollege.ca/finance-and-fees/financial-aid/"
+  
+  - name: "Fanshawe College"
+    base_url: "https://www.fanshawec.ca/"
+    focus_urls:
+      - "https://www.fanshawec.ca/programs"
+      - "https://www.fanshawec.ca/admissions"
+      - "https://www.fanshawec.ca/paying-college"
+      - "https://www.fanshawec.ca/student-life/student-services/financial-aid"
+  
+  - name: "Kwantlen Polytechnic University"
+    base_url: "https://www.kpu.ca/"
+    focus_urls:
+      - "https://www.kpu.ca/programs"
+      - "https://www.kpu.ca/admission"
+      - "https://www.kpu.ca/finance/tuition"
+      - "https://www.kpu.ca/awards"
+  
+  - name: "Northern Alberta Institute of Technology"
+    base_url: "https://www.nait.ca/"
+    focus_urls:
+      - "https://www.nait.ca/programs"
+      - "https://www.nait.ca/admissions"
+      - "https://www.nait.ca/student-services/fees-and-finances"
+      - "https://www.nait.ca/student-services/scholarships-and-bursaries"
+  
+  - name: "Southern Alberta Institute of Technology"
+    base_url: "https://www.sait.ca/"
+    focus_urls:
+      - "https://www.sait.ca/programs-and-courses"
+      - "https://www.sait.ca/admissions"
+      - "https://www.sait.ca/student-life/tuition-and-financial-aid"
+      - "https://www.sait.ca/student-life/scholarships-and-awards"
+  
+  - name: "Mohawk College"
+    base_url: "https://www.mohawkcollege.ca/"
+    focus_urls:
+      - "https://www.mohawkcollege.ca/programs"
+      - "https://www.mohawkcollege.ca/admissions-information"
+      - "https://www.mohawkcollege.ca/financial-assistance"
+      - "https://www.mohawkcollege.ca/financial-assistance/awards-and-scholarships"
+  
+  - name: "Centennial College"
+    base_url: "https://www.centennialcollege.ca/"
+    focus_urls:
+      - "https://www.centennialcollege.ca/programs-courses"
+      - "https://www.centennialcollege.ca/admissions"
+      - "https://www.centennialcollege.ca/paying-for-college"
+      - "https://www.centennialcollege.ca/financial-aid"
+  
+  - name: "George Brown College"
+    base_url: "https://www.georgebrown.ca/"
+    focus_urls:
+      - "https://www.georgebrown.ca/programs"
+      - "https://www.georgebrown.ca/admissions"
+      - "https://www.georgebrown.ca/tuition-fees"
+      - "https://www.georgebrown.ca/financial-aid"
+  
+  - name: "Durham College"
+    base_url: "https://durhamcollege.ca/"
+    focus_urls:
+      - "https://durhamcollege.ca/programs"
+      - "https://durhamcollege.ca/admissions"
+      - "https://durhamcollege.ca/financial-info"
+      - "https://durhamcollege.ca/financial-info/financial-aid"
+  
+  - name: "University of Lethbridge"
+    base_url: "https://www.uleth.ca/"
+    focus_urls:
+      - "https://www.uleth.ca/programs"
+      - "https://www.uleth.ca/future-student/admissions"
+      - "https://www.uleth.ca/financial-services/students/fees"
+      - "https://www.uleth.ca/student-services/student-finance"
+  
+  - name: "Trinity Western University"
+    base_url: "https://www.twu.ca/"
+    focus_urls:
+      - "https://www.twu.ca/academics/programs"
+      - "https://www.twu.ca/admissions-aid"
+      - "https://www.twu.ca/academics/canadian-student-tuition-fees"
+      - "https://www.twu.ca/financial-aid"
+  
+  - name: "University of Northern British Columbia"
+    base_url: "https://www.unbc.ca/"
+    focus_urls:
+      - "https://www.unbc.ca/programs"
+      - "https://www.unbc.ca/apply"
+      - "https://www.unbc.ca/finance/fees"
+      - "https://www.unbc.ca/financial-aid"
+  
+  - name: "Nipissing University"
+    base_url: "https://www.nipissingu.ca/"
+    focus_urls:
+      - "https://www.nipissingu.ca/academics/programs"
+      - "https://www.nipissingu.ca/admissions"
+      - "https://www.nipissingu.ca/finance/student-financial-services"
+      - "https://www.nipissingu.ca/awards"
+  
+  - name: "Ontario Tech University"
+    base_url: "https://ontariotechu.ca/"
+    focus_urls:
+      - "https://ontariotechu.ca/programs"
+      - "https://ontariotechu.ca/admissions"
+      - "https://ontariotechu.ca/fees-and-tuition"
+      - "https://ontariotechu.ca/student-awards-financial-aid"
+  
+  - name: "University of the Fraser Valley"
+    base_url: "https://www.ufv.ca/"
+    focus_urls:
+      - "https://www.ufv.ca/programs/"
+      - "https://www.ufv.ca/admissions/"
+      - "https://www.ufv.ca/current-students/fees-and-tuition/"
+      - "https://www.ufv.ca/fineaid/"
+  
+  - name: "Laurentian University"
+    base_url: "https://laurentian.ca/"
+    focus_urls:
+      - "https://laurentian.ca/programs"
+      - "https://laurentian.ca/admissions"
+      - "https://laurentian.ca/fees-financing"
+      - "https://laurentian.ca/fees-financing/scholarships-bursaries"
+  
+  - name: "Royal Roads University"
+    base_url: "https://www.royalroads.ca/"
+    focus_urls:
+      - "https://www.royalroads.ca/programs"
+      - "https://www.royalroads.ca/admission"
+      - "https://www.royalroads.ca/admission/tuition-fees-and-funding"
+      - "https://www.royalroads.ca/admission/scholarships-and-awards"
+  
+  - name: "OCAD University"
+    base_url: "https://www.ocadu.ca/"
+    focus_urls:
+      - "https://www.ocadu.ca/academics/undergraduate-studies"
+      - "https://www.ocadu.ca/admissions"
+      - "https://www.ocadu.ca/services/financial-matters"
+      - "https://www.ocadu.ca/services/financial-matters/scholarships-and-awards"
+  
+  - name: "Red Deer Polytechnic"
+    base_url: "https://www.rdpolytech.ca/"
+    focus_urls:
+      - "https://www.rdpolytech.ca/programs"
+      - "https://www.rdpolytech.ca/admissions"
+      - "https://www.rdpolytech.ca/tuition-fees"
+      - "https://www.rdpolytech.ca/student-services/financial-help"
+  
+  - name: "Douglas College"
+    base_url: "https://www.douglascollege.ca/"
+    focus_urls:
+      - "https://www.douglascollege.ca/programs-courses"
+      - "https://www.douglascollege.ca/admissions"
+      - "https://www.douglascollege.ca/current-students/fees-financing"
+      - "https://www.douglascollege.ca/financial-aid"
+  
+  - name: "Mount Saint Vincent University"
+    base_url: "https://www.msvu.ca/"
+    focus_urls:
+      - "https://www.msvu.ca/academics/programs/"
+      - "https://www.msvu.ca/admissions/"
+      - "https://www.msvu.ca/fees-and-financing/"
+      - "https://www.msvu.ca/campus-life/money-matters/financial-aid/"
+  
+  - name: "Saint Mary's University"
+    base_url: "https://www.smu.ca/"
+    focus_urls:
+      - "https://www.smu.ca/academics/programs.html"
+      - "https://www.smu.ca/future-students/how-to-apply.html"
+      - "https://smu.ca/tuition-and-fees/"
+      - "https://smu.ca/student-services/financial-aid/"
+  
+  - name: "Université de Sherbrooke"
+    base_url: "https://www.usherbrooke.ca/"
+    focus_urls:
+      - "https://www.usherbrooke.ca/admission/programmes"
+      - "https://www.usherbrooke.ca/admission/"
+      - "https://www.usherbrooke.ca/etudiants/finances/"
+      - "https://www.usherbrooke.ca/etudiants/finances/bourses/"
+  
+  - name: "Camosun College"
+    base_url: "https://camosun.ca/"
+    focus_urls:
+      - "https://camosun.ca/programs-courses"
+      - "https://camosun.ca/admissions"
+      - "https://camosun.ca/financial-aid-costs"
+      - "https://camosun.ca/financial-aid-costs/financial-aid"
+  
+  - name: "Université de Moncton"
+    base_url: "https://www.umoncton.ca/"
+    focus_urls:
+      - "https://www.umoncton.ca/programmes/"
+      - "https://www.umoncton.ca/admissions/"
+      - "https://www.umoncton.ca/droits-scolarite-bourses/"
+      - "https://www.umoncton.ca/bourses/"
+  
+  - name: "Saskatchewan Polytechnic"
+    base_url: "https://saskpolytech.ca/"
+    focus_urls:
+      - "https://saskpolytech.ca/programs-courses/"
+      - "https://saskpolytech.ca/admissions/"
+      - "https://saskpolytech.ca/admissions/tuition-fees/"
+      - "https://saskpolytech.ca/admissions/resources/scholarships-awards.aspx"
+  
+  - name: "Redeemer University"
+    base_url: "https://www.redeemer.ca/"
+    focus_urls:
+      - "https://www.redeemer.ca/programs/"
+      - "https://www.redeemer.ca/admissions/"
+      - "https://www.redeemer.ca/tuition-fees/"
+      - "https://www.redeemer.ca/tuition-fees/financial-aid/"
+  
+  - name: "Langara College"
+    base_url: "https://langara.ca/"
+    focus_urls:
+      - "https://langara.ca/programs-and-courses/"
+      - "https://langara.ca/admissions/"
+      - "https://langara.ca/student-services/financial-aid/"
+      - "https://langara.ca/registration-and-records/financial-information/"
+  
+  - name: "Nova Scotia Community College"
+    base_url: "https://www.nscc.ca/"
+    focus_urls:
+      - "https://www.nscc.ca/programs-and-courses/"
+      - "https://www.nscc.ca/admissions/"
+      - "https://www.nscc.ca/admissions/cost-and-financial-aid/"
+      - "https://www.nscc.ca/admissions/scholarships-and-bursaries/"
+  
+  - name: "Lambton College"
+    base_url: "https://www.lambtoncollege.ca/"
+    focus_urls:
+      - "https://www.lambtoncollege.ca/programs/"
+      - "https://www.lambtoncollege.ca/admissions/"
+      - "https://www.lambtoncollege.ca/Admissions/Fees/"
+      - "https://www.lambtoncollege.ca/Financial_Aid/"
+  
+  - name: "College of the North Atlantic"
+    base_url: "https://www.cna.nl.ca/"
+    focus_urls:
+      - "https://www.cna.nl.ca/programs-courses/"
+      - "https://www.cna.nl.ca/admissions/"
+      - "https://www.cna.nl.ca/Student-Support/Fees-and-Charges.aspx"
+      - "https://www.cna.nl.ca/Student-Support/Financial-Assistance.aspx"
+  
+  - name: "Niagara College"
+    base_url: "https://www.niagaracollege.ca/"
+    focus_urls:
+      - "https://www.niagaracollege.ca/programs/"
+      - "https://www.niagaracollege.ca/admissions/"
+      - "https://www.niagaracollege.ca/fees-finances/"
+      - "https://www.niagaracollege.ca/fees-finances/financial-aid/"
+  
+  - name: "Confederation College"
+    base_url: "https://www.confederationcollege.ca/"
+    focus_urls:
+      - "https://www.confederationcollege.ca/programs"
+      - "https://www.confederationcollege.ca/admissions"
+      - "https://www.confederationcollege.ca/tuition-and-fees"
+      - "https://www.confederationcollege.ca/financial-aid"
+  
+  - name: "Holland College"
+    base_url: "https://www.hollandcollege.com/"
+    focus_urls:
+      - "https://www.hollandcollege.com/programs/index.html"
+      - "https://www.hollandcollege.com/admissions/index.html"
+      - "https://www.hollandcollege.com/admissions/fees-and-finances/index.html"
+      - "https://www.hollandcollege.com/student-services/financial-assistance/index.html"
+  
+  - name: "Northern College"
+    base_url: "https://www.northernc.on.ca/"
+    focus_urls:
+      - "https://www.northernc.on.ca/programs/"
+      - "https://www.northernc.on.ca/admission-process/"
+      - "https://www.northernc.on.ca/students/fees/"
+      - "https://www.northernc.on.ca/financial-assistance/"
+  
+  - name: "Medicine Hat College"
+    base_url: "https://www.mhc.ab.ca/"
+    focus_urls:
+      - "https://www.mhc.ab.ca/ProgramsandCourses"
+      - "https://www.mhc.ab.ca/FutureStudents/Admissions"
+      - "https://www.mhc.ab.ca/FutureStudents/Fees"
+      - "https://www.mhc.ab.ca/FutureStudents/FinancialAid"
+  
+  - name: "St. Clair College"
+    base_url: "https://www.stclaircollege.ca/"
+    focus_urls:
+      - "https://www.stclaircollege.ca/programs"
+      - "https://www.stclaircollege.ca/admissions"
+      - "https://www.stclaircollege.ca/financial-aid"
+      - "https://www.stclaircollege.ca/financial-aid/tuition-fees"
+  
+  - name: "Lakeland College"
+    base_url: "https://www.lakelandcollege.ca/"
+    focus_urls:
+      - "https://www.lakelandcollege.ca/academics"
+      - "https://www.lakelandcollege.ca/admissions"
+      - "https://www.lakelandcollege.ca/students/financial-aid"
+      - "https://www.lakelandcollege.ca/admissions/tuition-and-fees"
+  
+  - name: "University of King's College"
+    base_url: "https://ukings.ca/"
+    focus_urls:
+      - "https://ukings.ca/programs/"
+      - "https://ukings.ca/admissions/"
+      - "https://ukings.ca/finances/"
+      - "https://ukings.ca/finances/scholarships-and-bursaries/"
+  
+  - name: "Bow Valley College"
+    base_url: "https://bowvalleycollege.ca/"
+    focus_urls:
+      - "https://bowvalleycollege.ca/programs"
+      - "https://bowvalleycollege.ca/admissions"
+      - "https://bowvalleycollege.ca/student-resources/financial-services"
+      - "https://bowvalleycollege.ca/student-resources/financial-services/funding-your-education"
+  
+  - name: "Lethbridge College"
+    base_url: "https://lethbridgecollege.ca/"
+    focus_urls:
+      - "https://lethbridgecollege.ca/programs"
+      - "https://lethbridgecollege.ca/departments/admissions"
+      - "https://lethbridgecollege.ca/departments/financial-services"
+      - "https://lethbridgecollege.ca/departments/financial-aid-and-awards"
+  
+  - name: "Okanagan College"
+    base_url: "https://www.okanagan.bc.ca/"
+    focus_urls:
+      - "https://www.okanagan.bc.ca/programs"
+      - "https://www.okanagan.bc.ca/becoming-a-student"
+      - "https://www.okanagan.bc.ca/tuition-and-fees"
+      - "https://www.okanagan.bc.ca/financial-aid-and-awards"
+  
+  - name: "College of New Caledonia"
+    base_url: "https://www.cnc.bc.ca/"
+    focus_urls:
+      - "https://www.cnc.bc.ca/programs-courses"
+      - "https://www.cnc.bc.ca/admissions"
+      - "https://www.cnc.bc.ca/admissions/fees-costs"
+      - "https://www.cnc.bc.ca/services/financial-aid"
+  
+  - name: "New Brunswick Community College"
+    base_url: "https://nbcc.ca/"
+    focus_urls:
+      - "https://nbcc.ca/programs-courses"
+      - "https://nbcc.ca/admissions"
+      - "https://nbcc.ca/fees-and-financial-aid"
+      - "https://nbcc.ca/scholarships-bursaries"
+  
+  - name: "Selkirk College"
+    base_url: "https://www.selkirk.ca/"
+    focus_urls:
+      - "https://www.selkirk.ca/programs-courses"
+      - "https://www.selkirk.ca/admissions"
+      - "https://www.selkirk.ca/tuition-and-fees"
+      - "https://www.selkirk.ca/financial-aid"
+  
+  - name: "St. Lawrence College"
+    base_url: "https://www.stlawrencecollege.ca/"
+    focus_urls:
+      - "https://www.stlawrencecollege.ca/programs-and-courses"
+      - "https://www.stlawrencecollege.ca/admissions"
+      - "https://www.stlawrencecollege.ca/pay-for-college"
+      - "https://www.stlawrencecollege.ca/financial-aid"
+  
+  - name: "Aurora College"
+    base_url: "https://www.auroracollege.nt.ca/"
+    focus_urls:
+      - "https://www.auroracollege.nt.ca/programs/"
+      - "https://www.auroracollege.nt.ca/admissions/"
+      - "https://www.auroracollege.nt.ca/admissions/tuition-and-fees/"
+      - "https://www.auroracollege.nt.ca/admissions/financial-assistance/"
+  
+  - name: "Nunavut Arctic College"
+    base_url: "https://www.arcticcollege.ca/"
+    focus_urls:
+      - "https://www.arcticcollege.ca/programs"
+      - "https://www.arcticcollege.ca/admissions"
+      - "https://www.arcticcollege.ca/fees"
+      - "https://www.arcticcollege.ca/financial-assistance"
+  
+  - name: "Yukon University"
+    base_url: "https://www.yukonu.ca/"
+    focus_urls:
+      - "https://www.yukonu.ca/programs"
+      - "https://www.yukonu.ca/admissions"
+      - "https://www.yukonu.ca/admissions/tuition-fees"
+      - "https://www.yukonu.ca/student-life/financial-assistance" 

@@ -669,6 +669,49 @@ To learn more about the web UI, see the [UI README](ui/README.md).
 
 ## Development
 
+### Using the Start Script
+
+The project includes a convenient `start-kevin.sh` script to manage all project services easily. This script helps you control the MongoDB database, FastAPI backend, and Next.js UI components of the application.
+
+```bash
+# Start all services (MongoDB, FastAPI backend, and Next.js UI)
+./start-kevin.sh
+
+# Start a specific service only
+./start-kevin.sh -a start -s db    # Start only MongoDB
+./start-kevin.sh -a start -s api   # Start only the FastAPI backend
+./start-kevin.sh -a start -s ui    # Start only the Next.js UI
+
+# Stop services
+./start-kevin.sh -a stop -s all    # Stop all services
+./start-kevin.sh -a stop -s api    # Stop only the FastAPI backend
+./start-kevin.sh -a stopall        # Quick command to stop all services
+
+# Restart services
+./start-kevin.sh -a restart -s ui  # Restart the Next.js UI
+./start-kevin.sh -a restart -s all # Restart all services
+
+# View logs
+./start-kevin.sh -a logs -s api    # View FastAPI backend logs
+./start-kevin.sh -a logs -s ui     # View Next.js UI logs
+./start-kevin.sh -a logs -s db     # View MongoDB logs
+./start-kevin.sh -a logs           # Interactive menu to choose which logs to view
+```
+
+All logs are stored in the `./logs` directory, allowing you to monitor each component's output.
+
+The script offers these key features:
+- **Service management**: Start, stop, and restart each component independently
+- **Streamlined workflow**: Simple commands for common operations
+- **Log viewing**: Easy access to logs for debugging
+- **Process management**: Tracks PIDs to ensure clean startups and shutdowns
+
+For more details about the available options:
+
+```bash
+./start-kevin.sh --help
+```
+
 ### Running the Backend
 
 ```bash
