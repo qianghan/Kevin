@@ -46,11 +46,19 @@ vector_db:
   similarity_top_k: 3
   search_type: "mmr"
 
+# Semantic cache configuration
+semantic_cache:
+  enabled: true
+  model_name: "sentence-transformers/all-MiniLM-L6-v2"
+  similarity_threshold: 0.92
+  max_cache_size: 1000
+  ttl_seconds: 86400  # 24 hours
+  cache_file: "./data/cache/semantic_cache.json"
+  log_file: "./logs/semantic_cache.log"
+
 # Retrieval configuration
 retrieval:
   top_k: 3
-  fetch_k: 6
-  score_threshold: 0.25
 
 # LLM configuration
 llm:

@@ -15,7 +15,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.openapi.utils import get_openapi
 
-from src.api.routers import chat, search, admin, documents
+from .routers import chat, search, admin, documents
+import sys
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)

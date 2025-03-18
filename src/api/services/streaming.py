@@ -23,12 +23,15 @@ class StreamEvent:
     THINKING_START = "thinking_start"
     THINKING_UPDATE = "thinking_update"
     THINKING_END = "thinking_end"
+    ANSWER = "answer"
     ANSWER_START = "answer_start"
     ANSWER_CHUNK = "answer_chunk"
     ANSWER_END = "answer_end"
     DOCUMENT = "document"
+    DOCUMENTS = "documents"
     ERROR = "error"
     DONE = "done"
+    CACHED = "cached"
 
 
 class StreamManager:
@@ -152,11 +155,25 @@ class StreamCallbackHandler:
             self.stream_manager.add_event(StreamEvent.ANSWER_END, {}),
             self.loop
         )
+    
+    def on_answer(self, answer: str) -> None:
+        """Called when a complete answer is available (e.g., from cache)."""
+        asyncio.run_coroutine_threadsafe(
+            self.stream_manager.add_event(StreamEvent.ANSWER, {"answer": answer}),
+            self.loop
+        )
         
     def on_document(self, document: Dict[str, Any]) -> None:
-        """Called when a document is retrieved."""
+        """Called when a document is available."""
         asyncio.run_coroutine_threadsafe(
             self.stream_manager.add_event(StreamEvent.DOCUMENT, {"document": document}),
+            self.loop
+        )
+    
+    def on_documents(self, documents: List[Dict[str, Any]]) -> None:
+        """Called when multiple documents are available at once."""
+        asyncio.run_coroutine_threadsafe(
+            self.stream_manager.add_event(StreamEvent.DOCUMENTS, {"documents": documents}),
             self.loop
         )
         
@@ -167,10 +184,10 @@ class StreamCallbackHandler:
             self.loop
         )
         
-    def on_done(self, data: Dict[str, Any]) -> None:
-        """Called when processing is complete."""
+    def on_complete(self) -> None:
+        """Called when the response is complete."""
         asyncio.run_coroutine_threadsafe(
-            self.stream_manager.add_event(StreamEvent.DONE, data),
+            self.stream_manager.add_event(StreamEvent.DONE, {}),
             self.loop
         )
 
@@ -216,22 +233,13 @@ class SyncToAsyncAdapter:
         """
         try:
             # Run the function
-            result = func(*args, **kwargs)
+            func(*args, **kwargs)
             
-            # Send a DONE event
-            if isinstance(result, tuple) and len(result) >= 5:
-                answer, conversation_id, thinking_steps, documents, duration = result[:5]
-                done_data = {
-                    "answer": answer,
-                    "conversation_id": conversation_id,
-                    "duration_seconds": duration
-                }
-                asyncio.run_coroutine_threadsafe(
-                    self.stream_manager.add_event(StreamEvent.DONE, done_data),
-                    self.loop
-                )
+            # Note: We don't need to add a DONE event here anymore,
+            # as it's now handled by the callback handler in process_chat
+            
         except Exception as e:
-            logger.error(f"Error in background task: {e}")
+            logger.error(f"Error in background task: {e}", exc_info=True)
             # Send an ERROR event
             asyncio.run_coroutine_threadsafe(
                 self.stream_manager.add_event(StreamEvent.ERROR, {"error": str(e)}),

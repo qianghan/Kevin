@@ -7,9 +7,14 @@ This module provides API endpoints for chat functionality.
 import time
 import asyncio
 from typing import Dict, Any, List, Optional, Tuple
+import sys
+from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks, Request
 from fastapi.responses import StreamingResponse
+
+# Add a path fix to ensure src is in the Python path
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
 from src.api.models import ChatRequest, ChatResponse, ErrorResponse
 from src.api.services.chat import process_chat, get_conversation_history

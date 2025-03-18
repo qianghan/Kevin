@@ -1,0 +1,12 @@
+event: thinking_start
+data: {"query": "test", "cached": true}
+
+event: thinking_update
+data: {"type": "start", "time": "14:08:07", "description": "Starting query processing", "duration_ms": 0, "content": ""}
+
+event: answer
+data: {"answer": "The term \"test\" can refer to different concepts depending on the context. Based on the retrieved documents:\n\n1. **General Definition**: A test is a means of evaluating or measuring skills, knowledge, intelligence, or capacities. It can also refer to a procedure or criterion used to identify or evaluate something. [Source: Document 1]\n\n2. **Internet Speed Test**: \n   - **FAST.com**: This is a tool that estimates your current internet speed, focusing on download speed. It also provides upload speed and latency measurements. [Source: Document 2]\n   - **Speedtest by Ookla**: This is another tool for measuring broadband speed, but the document does not provide specific details about its functionality. [Source: Document 3]\n\nIf you are looking for information about academic tests, admissions tests, or other specific types of tests, the provided documents do not contain relevant details. Let me know if you need further clarification or assistance!"}
+
+event: done
+data: {}
+

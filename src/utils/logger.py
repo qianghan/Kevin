@@ -10,6 +10,8 @@ import json
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
 from pythonjsonlogger.jsonlogger import JsonFormatter
+import yaml
+from pathlib import Path
 
 # Create logs directory if it doesn't exist
 logs_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'logs')
@@ -264,3 +266,49 @@ def get_all_loggers():
         Dictionary of logger names and logger objects
     """
     return LOGGERS
+
+def get_semantic_cache_logger():
+    """
+    Get the dedicated semantic cache logger.
+    
+    Returns:
+        logging.Logger: The semantic cache logger
+    """
+    # Load config to check if specific log file is defined
+    try:
+        with open("config.yaml", 'r') as file:
+            config = yaml.safe_load(file)
+            
+        cache_config = config.get('semantic_cache', {})
+        log_file = cache_config.get('log_file', "logs/semantic_cache.log")
+        
+        # Ensure directory exists
+        log_dir = os.path.dirname(log_file)
+        if log_dir:
+            os.makedirs(log_dir, exist_ok=True)
+        
+        # Create a new handler with the configured log file
+        handler = RotatingFileHandler(
+            log_file,
+            maxBytes=10485760,  # 10MB
+            backupCount=5
+        )
+        handler.setFormatter(logging.Formatter(
+            "%(asctime)s - %(levelname)s - %(message)s"
+        ))
+        
+        # Create a specific logger
+        cache_logger = logging.getLogger("kevin.semantic_cache")
+        
+        # Remove existing handlers to avoid duplicates
+        for h in cache_logger.handlers[:]:
+            cache_logger.removeHandler(h)
+            
+        # Add the new handler
+        cache_logger.addHandler(handler)
+        
+        return cache_logger
+    except Exception as e:
+        # Fallback to default logger
+        logger.error(f"Error configuring semantic cache logger: {e}")
+        return semantic_cache_logger

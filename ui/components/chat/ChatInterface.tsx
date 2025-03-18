@@ -299,6 +299,12 @@ export default function ChatInterface({
       handleAnswerChunk(e as MessageEvent);
     });
     
+    // Add handler for the plain 'answer' event to handle full answers (e.g., from cache)
+    eventSource.addEventListener('answer', (e) => {
+      console.log('Answer event received');
+      handleAnswer(e as MessageEvent);
+    });
+    
     eventSource.addEventListener('document', (e) => {
       console.log('Document event received');
       handleDocument(e as MessageEvent);
@@ -484,6 +490,48 @@ export default function ChatInterface({
       }
     } catch (err) {
       console.error('Error parsing answer_chunk event', err);
+    }
+  };
+
+  // Handler for the full answer event
+  const handleAnswer = (e: MessageEvent) => {
+    try {
+      const data = JSON.parse(e.data) as { answer?: string };
+      
+      // Only use this if we haven't accumulated content from chunks
+      if (!accumulatedContentRef.current || accumulatedContentRef.current.trim().length === 0) {
+        console.log('Using full answer as accumulated content was empty');
+        
+        // Get the answer from the event data
+        const fullAnswer = data.answer || '';
+        
+        if (fullAnswer && fullAnswer.trim().length > 0) {
+          // Update both the reference and the displayed message
+          accumulatedContentRef.current = fullAnswer;
+          setStreamingMessage(fullAnswer);
+          
+          // Add a thinking step to show we received the full answer
+          const answerStep = {
+            type: 'thinking',
+            description: 'Received complete answer from server',
+            time: new Date().toTimeString().split(' ')[0],
+            duration_ms: 0
+          };
+          
+          setThinkingSteps(prev => {
+            const isDuplicate = prev.some(step => step.description === answerStep.description);
+            if (!isDuplicate) {
+              return [...prev, answerStep];
+            }
+            return prev;
+          });
+        }
+      } else {
+        console.log('Ignoring full answer as we already have accumulated content:', 
+          accumulatedContentRef.current.length);
+      }
+    } catch (err) {
+      console.error('Error parsing answer event', err);
     }
   };
 
