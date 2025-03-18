@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { Toaster } from 'react-hot-toast';
 
 export default function DashboardLayout({
   children,
@@ -45,6 +46,31 @@ export default function DashboardLayout({
 
   return (
     <div className="flex h-screen bg-gray-100">
+      {/* Toaster for notifications */}
+      <Toaster 
+        position="top-right"
+        toastOptions={{
+          duration: 3000,
+          style: {
+            background: '#FFFFFF',
+            color: '#333333',
+            boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+            borderRadius: '0.5rem',
+            padding: '1rem',
+          },
+          success: {
+            style: {
+              border: '1px solid #10B981',
+            },
+          },
+          error: {
+            style: {
+              border: '1px solid #EF4444',
+            },
+          },
+        }}
+      />
+
       {/* Sidebar Toggle Button - Visible when collapsed */}
       {sidebarCollapsed && (
         <button 

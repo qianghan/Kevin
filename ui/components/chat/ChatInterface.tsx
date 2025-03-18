@@ -75,6 +75,9 @@ export default function ChatInterface({
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
 
+  // Add a ref to track if a message has been added via the answer event
+  const messageAddedViaAnswerEventRef = useRef(false);
+
   // Group messages into exchanges (user + assistant pairs)
   const messageExchanges = useMemo(() => {
     const exchanges: ChatMessage[][] = [];
@@ -134,8 +137,10 @@ export default function ChatInterface({
     }
   }, [messages]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (event?: React.FormEvent<HTMLFormElement> | React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event) {
+      event.preventDefault();
+    }
     
     if (!input.trim() || isLoading) return;
     
@@ -146,7 +151,22 @@ export default function ChatInterface({
       timestamp: new Date()
     };
     
-    setMessages(prev => [...prev, userMessage]);
+    // Add the message to the UI state
+    setMessages(prev => {
+      const updatedMessages = [...prev, userMessage];
+      
+      // If we have a conversation ID, save the message to the database immediately
+      if (conversationId) {
+        console.log('Saving user message to database immediately');
+        saveConversationToDatabase(conversationId, updatedMessages)
+          .catch(err => console.error('Failed to save user message:', err));
+      } else {
+        console.log('No conversation ID yet, will save after response');
+      }
+      
+      return updatedMessages;
+    });
+    
     setIsLoading(true);
     setInput('');
     
@@ -174,6 +194,9 @@ export default function ChatInterface({
     
     // Reset the accumulated content ref
     accumulatedContentRef.current = '';
+    
+    // Reset the message added via answer event flag
+    messageAddedViaAnswerEventRef.current = false;
     
     // Create request for Kevin API
     const chatRequest: ChatRequest = {
@@ -497,7 +520,7 @@ export default function ChatInterface({
   const handleAnswer = (e: MessageEvent) => {
     try {
       // Use a more specific type that only includes the properties we need
-      const data = JSON.parse(e.data) as { answer?: string };
+      const data = JSON.parse(e.data) as { answer?: string; conversation_id?: string };
       
       console.log('Full answer event received');
       
@@ -527,6 +550,39 @@ export default function ChatInterface({
           }
           return prev;
         });
+        
+        // Save the answer to the database if we have a conversation_id
+        // This ensures the answer is saved even if the done event doesn't work properly
+        if (data.conversation_id || conversationId) {
+          const chatId = data.conversation_id || conversationId;
+          if (chatId) {
+            console.log('Saving answer from answer event with conversation_id:', chatId);
+            
+            // Create the assistant message
+            const assistantMessage: ChatMessage = {
+              role: 'assistant',
+              content: fullAnswer,
+              timestamp: new Date(),
+              thinkingSteps: [...thinkingSteps],
+            };
+            
+            // Add message to chat history and save
+            setMessages(prevMessages => {
+              const updatedMessages = [...prevMessages, assistantMessage];
+              
+              // Save the conversation to the database in the background
+              saveConversationToDatabase(chatId, updatedMessages)
+                .catch(err => console.error('Failed to save conversation from answer event:', err));
+              
+              // Set the flag to indicate we've added a message via the answer event
+              messageAddedViaAnswerEventRef.current = true;
+              
+              return updatedMessages;
+            });
+          } else {
+            console.warn('No conversation_id available, cannot save answer yet');
+          }
+        }
       } else {
         console.warn('Received empty answer in answer event');
       }
@@ -568,6 +624,25 @@ export default function ChatInterface({
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
         eventSourceRef.current = null;
+      }
+      
+      // Check if the message was already added by the answer event
+      if (messageAddedViaAnswerEventRef.current) {
+        console.log('Message already added by answer event, skipping duplicate addition');
+        // Reset the flag for the next conversation
+        messageAddedViaAnswerEventRef.current = false;
+        
+        // Still need to clean up the streaming state
+        setTimeout(() => {
+          console.log('Timeout executed - clearing streaming state');
+          setStreamingMessage('');
+          setStreamingId(null);
+          setThinkingSteps([]);
+          setIsLoading(false);
+          setIsThinking(false); // Finally clear the thinking state
+        }, 500);
+        
+        return;
       }
       
       if (!finalContent || finalContent.trim().length === 0) {
@@ -679,6 +754,9 @@ export default function ChatInterface({
     
     setIsLoading(false);
     
+    // Reset the answer event flag
+    messageAddedViaAnswerEventRef.current = false;
+    
     // Close the event source
     if (eventSourceRef.current) {
       eventSourceRef.current.close();
@@ -783,6 +861,7 @@ export default function ChatInterface({
     setThinkingSteps([]);
     setLastSavedHash(''); // Reset the hash for the new conversation
     accumulatedContentRef.current = '';
+    messageAddedViaAnswerEventRef.current = false; // Reset the answer event flag
     
     // Reset search mode
     setIsSearchMode(false);
