@@ -1,0 +1,12 @@
+event: thinking_start
+data: {"query": "Hello"}
+
+event: thinking_update
+data: {"type": "start", "time": "14:22:25", "description": "Starting query processing", "duration_ms": 0, "content": ""}
+
+event: answer
+data: {"answer": "Hello! Based on the documents, \"hello\" is an expression or gesture of greeting, often used when meeting or greeting someone. It can also be used to express surprise or to answer the telephone. For example, \"Hello, Paul. I haven't seen you for ages.\" [Source: [Merriam-Webster](https://www.merriam-webster.com/dictionary/hello), [Cambridge English Dictionary](https://dictionary.cambridge.org/us/dictionary/english/hello)].\n\nIf you have any specific questions about Canadian universities, feel free to ask!"}
+
+event: done
+data: {}
+
