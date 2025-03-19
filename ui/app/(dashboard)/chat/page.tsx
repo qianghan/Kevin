@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import ChatInterface from '@/components/chat/ChatInterface';
 import { ObjectId } from 'mongodb';
 import { ChatMessage } from '@/models/ChatSession';
-import { chatApi } from '@/lib/api/kevin';
+import { useChat } from '@/hooks/useChat';
 
 export default function ChatPage() {
   const { data: session, status } = useSession();
@@ -15,6 +15,9 @@ export default function ChatPage() {
   const [initialMessages, setInitialMessages] = useState<ChatMessage[]>([]);
   const router = useRouter();
   const searchParams = useSearchParams();
+  
+  // Use the Chat service through our custom hook
+  const { getConversation } = useChat();
   
   useEffect(() => {
     // Check if user is authenticated
@@ -36,33 +39,41 @@ export default function ChatPage() {
   const loadChatSession = async (id: string) => {
     setIsLoading(true);
     try {
-      // Load chat history for this session
-      const history = await chatApi.getConversationHistory(id);
+      console.log(`Loading chat session with ID: ${id}`);
+      // Load chat history using the ChatService
+      const conversation = await getConversation(id);
       
-      if (history && history.messages && history.messages.length > 0) {
-        // Convert the history format to our ChatMessage format
-        const formattedMessages: ChatMessage[] = history.messages.map((msg: any) => ({
-          role: msg.role,
-          content: msg.content,
-          timestamp: new Date(msg.timestamp || Date.now())
+      if (!conversation) {
+        console.error(`No conversation found for ID: ${id}`);
+        // If conversation doesn't exist, reset to new chat
+        handleNewSession('new');
+        return;
+      }
+      
+      console.log(`Retrieved conversation with title: ${conversation.title}`, {
+        messageCount: conversation.messages?.length || 0,
+        hasContextSummary: !!conversation.contextSummary
+      });
+      
+      if (conversation.messages && conversation.messages.length > 0) {
+        // Ensure messages are in the correct format
+        const formattedMessages = conversation.messages.map(msg => ({
+          role: msg.role || 'assistant',
+          content: msg.content || '',
+          timestamp: msg.timestamp instanceof Date ? msg.timestamp : new Date(msg.timestamp || Date.now()),
+          thinkingSteps: msg.thinkingSteps || [],
+          documents: msg.documents || []
         }));
         
         setInitialMessages(formattedMessages);
+        console.log(`Loaded ${formattedMessages.length} messages for conversation ${id}`);
       } else {
         console.log("No messages found in history or empty history returned");
         setInitialMessages([]);
-        
-        // If conversation doesn't exist, reset to new chat
-        if (!history || Object.keys(history).length === 0) {
-          handleNewSession('new');
-          return;
-        }
       }
     } catch (error) {
-      console.error('Error loading chat session:', error);
+      console.error('Error loading chat session:', error instanceof Error ? error.message : String(error));
       setInitialMessages([]);
-      
-      // Show error toast or notification here if desired
       
       // Reset to new chat on error
       handleNewSession('new');

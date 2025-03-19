@@ -12,6 +12,8 @@ A Next.js-based web application for the Kevin.AI assistant, providing a modern i
 - **Session Management**: Create and manage multiple chat sessions
 - **Family Management**: Parents can manage students and other parent partners
 - **MongoDB Integration**: Persistent storage of users, chat sessions, and messages
+- **Service Abstraction Layer**: Clean separation of concerns with frontend and backend service layers
+- **Robust Error Handling**: Consistent error handling and logging across all services
 
 ## Getting Started
 
@@ -66,108 +68,147 @@ This application is optimized for deployment on Vercel:
 - `lib/`: Utility functions and services
 - `models/`: MongoDB schema models
 - `public/`: Static assets
+- `services/`: Service abstraction layers
+  - `api/`: Backend API services
+  - `db/`: Database services
 
-## UI Architecture
+## Architecture Overview
+
+### Service Abstraction Layers
+
+The application implements a multi-layered service architecture that separates concerns and improves maintainability:
+
+#### 1. Frontend Service Layer (`ChatService`)
+- Provides a clean API for UI components to interact with the backend
+- Handles error management and retry logic
+- Implements consistent logging across all operations
+- Abstracts away API implementation details from the UI
+
+#### 2. Backend Service Layer
+- **API Services** (`BackendApiService`, `ApiChatService`)
+  - Manages HTTP communication with backend APIs
+  - Implements robust error handling and request retries
+  - Provides structured logging of requests and responses
+  - Standardizes API responses for frontend consumption
+
+- **Database Services** (`ChatSessionService`)
+  - Encapsulates database operations and queries
+  - Handles connection management
+  - Implements data validation and error handling
+  - Provides consistent logging for database operations
+
+### Detailed Service Architecture
 
 ```
-┌───────────────────────────────────────────────────────┐
-│                  Next.js Application                  │
-└───────────────────────────────────────────────────────┘
-                            │
-┌──────────────┬────────────┴───────────┬───────────────┐
-│              │                        │               │
-▼              ▼                        ▼               ▼
-┌──────────┐ ┌────────────────┐  ┌─────────────┐  ┌────────────┐
-│  App     │ │  Components    │  │   Lib       │  │  Models    │
-│  Router  │ │                │  │             │  │            │
-└──────────┘ └────────────────┘  └─────────────┘  └────────────┘
-     │               │                  │                │
-     ▼               ▼                  ▼                ▼
-┌──────────┐ ┌────────────────┐  ┌─────────────┐  ┌────────────┐
-│ Pages    │ │ Auth           │  │ API Client  │  │ User       │
-│          │ │ Chat           │  │ Auth Utils  │  │ ChatSession│
-│ - Home   │ │ Dashboard      │  │ DB Utils    │  │            │
-│ - Auth   │ │ UI Components  │  │ Utilities   │  │            │
-│ - Dash   │ │ Forms          │  │             │  │            │
-└──────────┘ └────────────────┘  └─────────────┘  └────────────┘
-                                        │
-                                        ▼
-                              ┌─────────────────────┐
-                              │  Kevin FastAPI      │
-                              │  Backend            │
-                              └─────────────────────┘
+┌───────────────────────────────────────────────────────────────────────────┐
+│                                 UI Layer                                   │
+│                                                                           │
+│  ┌─────────────┐  ┌────────────────┐  ┌────────────────┐  ┌─────────────┐ │
+│  │ Chat Page   │  │ Sessions Page  │  │ Dashboard Page │  │ Other Pages │ │
+│  └──────┬──────┘  └────────┬───────┘  └────────┬───────┘  └─────┬───────┘ │
+└─────────┼───────────────────┼────────────────────┼──────────────┼─────────┘
+          │                   │                    │              │
+          │                   │                    │              │
+          ▼                   ▼                    ▼              ▼
+┌───────────────────────────────────────────────────────────────────────────┐
+│                         Frontend Service Layer                             │
+│                                                                           │
+│  ┌─────────────────────────────────────────────────────────────────────┐  │
+│  │                          ChatService                                 │  │
+│  │                                                                      │  │
+│  │  ┌──────────────┐  ┌───────────────┐  ┌─────────────────────────┐   │  │
+│  │  │saveConversation│ │getConversation│  │...other service methods │   │  │
+│  │  └──────────────┘  └───────────────┘  └─────────────────────────┘   │  │
+│  └────────────────────────────────────┬──────────────────────────────────┘  │
+└────────────────────────────────────────┼──────────────────────────────────┘
+                                         │
+                                         ▼
+┌───────────────────────────────────────────────────────────────────────────┐
+│                         Backend Service Layer                              │
+│                                                                           │
+│  ┌─────────────────────┐          ┌───────────────────────────────────┐   │
+│  │   API Services      │          │      Database Services            │   │
+│  │                     │          │                                   │   │
+│  │  ┌───────────────┐  │          │  ┌─────────────────────────────┐ │   │
+│  │  │BackendApiService│──┐        │  │      ChatSessionService     │ │   │
+│  │  └───────────────┘  │ │        │  │                             │ │   │
+│  │         ▲           │ │        │  │ ┌─────────────┐ ┌─────────┐ │ │   │
+│  │         │           │ │        │  │ │saveSession  │ │getConv...│ │ │   │
+│  │  ┌───────────────┐  │ │        │  │ └─────────────┘ └─────────┘ │ │   │
+│  │  │ ApiChatService │◀─┘ │        │  └──────────────┬──────────────┘ │   │
+│  │  └───────────────┘    │        │                 │                │   │
+│  └─────────┬─────────────┘        └─────────────────┼────────────────┘   │
+└────────────┼──────────────────────────────────────┬─┼────────────────────┘
+             │                                      │ │
+             ▼                                      │ │
+┌────────────────────────┐                          │ │
+│                        │                          │ │
+│    Next.js API Routes  │◀─────────────────────────┘ │
+│                        │                            │
+└───────────┬────────────┘                            │
+            │                                         │
+            ▼                                         │
+┌────────────────────────┐                            │
+│                        │                            │
+│   Kevin.AI FastAPI     │                            │
+│                        │                            │
+└───────────┬────────────┘                            │
+            │                                         │
+            ▼                                         ▼
+┌────────────────────────┐            ┌────────────────────────┐
+│                        │            │                        │
+│   External Services    │            │      MongoDB           │
+│   (DeepSeek, Tavily)   │            │                        │
+│                        │            │                        │
+└────────────────────────┘            └────────────────────────┘
 ```
 
-### Detailed Architecture Explanation
+### Data Flow
 
-#### 1. App Router Structure (App Directory)
-- **Modern Next.js 13+ App Router** - Uses the new file-based routing system
-- **Route Groups**:
-  - `(auth)`: Contains authentication-related pages like login, signup
-  - `(dashboard)`: Contains protected pages that require authentication
-  - `api`: API routes for server-side operations, including NextAuth endpoints
+1. **UI Layer to Frontend Service**:
+   - UI components call methods from the `ChatService`
+   - Frontend service handles error display, loading states, and data formatting
 
-#### 2. Component Architecture (Components Directory)
-- **Component Categories**:
-  - `auth/`: Authentication components including SessionProvider
-  - `chat/`: Chat interface components for interacting with Kevin.AI
-  - `dashboard/`: Admin and user dashboard components
-  - `forms/`: Reusable form components
-  - `ui/`: Reusable UI elements (buttons, cards, modals, etc.)
+2. **Frontend Service to Backend Services**:
+   - `ChatService` delegates to appropriate backend services
+   - API services handle HTTP communication
+   - Database services handle direct database operations
 
-#### 3. Library Layer (Lib Directory)
-- **Service Categories**:
-  - `api/`: API client for communicating with the Kevin FastAPI backend
-  - `auth/`: Authentication utilities and NextAuth configuration
-  - `db/`: Database connection and utilities for MongoDB
-  - `utils/`: General utility functions and context summarization
+3. **Backend Services to External Systems**:
+   - API services communicate with Next.js API routes or external APIs
+   - Database services interact directly with MongoDB
 
-#### 4. Data Models (Models Directory)
-- **MongoDB Schemas**:
-  - `User.ts`: User model with role-based permissions
-  - `ChatSession.ts`: Chat session model for storing conversations and context summaries
+4. **Response Flow**:
+   - Data returns through the same layers with appropriate transformations
+   - Errors are handled at each layer with proper logging and user-friendly messages
 
-#### 5. Authentication Flow
-```
-┌─────────┐     ┌─────────────┐     ┌───────────┐     ┌────────────┐
-│  Login  │────▶│  NextAuth   │────▶│  JWT      │────▶│ Protected  │
-│  Page   │     │  Provider   │     │  Session  │     │ Routes     │
-└─────────┘     └─────────────┘     └───────────┘     └────────────┘
-      │                │
-      │                ▼
-┌─────▼──────┐  ┌─────────────┐
-│  OAuth     │  │  MongoDB    │
-│  Providers │  │  User Data  │
-└────────────┘  └─────────────┘
-```
+### Service Responsibilities
 
-#### 6. Chat Interface Flow
-```
-┌─────────────┐    ┌────────────┐    ┌────────────┐    ┌───────────┐
-│ Chat        │───▶│ API Client │───▶│ Kevin      │───▶│ Stream    │
-│ Interface   │    │            │    │ Backend    │    │ Response  │
-└─────────────┘    └────────────┘    └────────────┘    └───────────┘
-       │                │                                    │
-       │                │                                    │
-       │                ▼                                    │
-       │         ┌────────────┐                             │
-       │         │ Context    │                             │
-       │         │ Summary    │                             │
-       │         └────────────┘                             │
-       │                │                                   │
-       ▼                ▼                                   ▼
-┌─────────────┐  ┌────────────┐               ┌───────────────┐
-│ Chat        │◀─┤ Database   │◀──────────────│ Update UI     │
-│ History     │  │ Storage    │               │ with Response │
-└─────────────┘  └────────────┘               └───────────────┘
-```
+#### Frontend Service (`ChatService`)
+- **User Interaction**: Provides methods for all chat-related operations
+- **Error Handling**: Gracefully handles errors for improved user experience
+- **Retry Logic**: Implements automatic retries for network-related failures
+- **Data Formatting**: Ensures consistent data structures for UI components
 
-#### 7. State Management
-- **Client-side State**: React hooks and context API
-- **Server-side State**: MongoDB for persistence
-- **Session State**: NextAuth.js SessionProvider
+#### API Services
+- **`BackendApiService`**:
+  - General-purpose HTTP client with robust error handling
+  - Implements retry mechanisms for transient failures
+  - Provides detailed logging of requests and responses
+  - Standardizes error responses
 
-## Authentication Flow
+- **`ApiChatService`**:
+  - Chat-specific API operations using `BackendApiService`
+  - Handles data transformation for API endpoints
+  - Implements specific error handling for chat operations
+
+#### Database Services (`ChatSessionService`)
+- **Data Access**: Encapsulates all MongoDB operations
+- **Validation**: Validates data before persistence
+- **Error Management**: Handles database-specific errors
+- **Performance Logging**: Tracks query performance
+
+### Authentication Flow
 
 1. Users sign in with Google, Facebook, or email/password
 2. New users are directed to the registration page to select their role (student or parent)
@@ -205,6 +246,17 @@ Recent UI improvements include:
 - **Enhanced Interaction**: Hover effects, copy buttons, and better spacing for improved usability
 - **Responsive Design**: Adaptable layout that works well on mobile and desktop devices
 - **Visual Hierarchy**: Better distinction between user and assistant messages for easier conversation reading
+
+### Logging and Error Handling
+
+The application implements comprehensive logging and error handling:
+
+- **Structured Logging**: Consistent format with contextual information
+- **Error Classification**: Categorized errors for better debugging
+- **Request Tracing**: Request IDs for tracking issues across services
+- **Performance Metrics**: Timing information for operations
+- **Client-Side Feedback**: User-friendly error messages
+- **Retry Mechanisms**: Automatic retries for transient failures
 
 ## License
 

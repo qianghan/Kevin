@@ -1,202 +1,129 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth/next';
-import { authOptions } from '@/lib/auth/auth-options';
-import dbConnect from '@/lib/db/connection';
-import ChatSession from '@/models/ChatSession';
-import mongoose from 'mongoose';
+import { NextRequest } from 'next/server';
+import ChatSessionService from '@/lib/services/db/ChatSessionService';
+import { 
+  createProtectedHandler, 
+  createSuccessResponse, 
+  createErrorResponse 
+} from '@/lib/api/middleware';
 
-export async function GET(request: NextRequest) {
-  try {
-    // Get the session and check authentication
-    const session = await getServerSession(authOptions);
+/**
+ * Handle GET request to list chat sessions
+ */
+async function handleListSessions(req: NextRequest, params: Record<string, any>) {
+  // Get user ID from session
+  const userId = params.user.id;
+  
+  // Get search and sort parameters from query
+  const searchQuery = params.query.search;
+  const sortBy = params.query.sortBy || 'updatedAt'; // Default sort by updatedAt
+  const sortOrder = params.query.sortOrder === 'asc' ? 'asc' : 'desc'; // Default sort order is descending
+  
+  // Use the ChatSessionService to list conversations
+  const sessionsFromDb = await ChatSessionService.listConversations(
+    userId,
+    {
+      search: searchQuery,
+      sortBy,
+      sortOrder
+    }
+  );
+  
+  // Transform sessions to ensure consistent structure
+  const sessions = sessionsFromDb.map((session: any) => {
+    // Handle ObjectId conversion to string
+    const id = session._id?.toString() || session.id?.toString() || '';
     
-    if (!session || !session.user) {
-      return NextResponse.json(
-        { error: 'Authentication required' },
-        { status: 401 }
-      );
+    // Handle conversation ID field which might be in different formats
+    const conversation_id = session.conversationId?.toString() || session.conversation_id?.toString() || '';
+    
+    // Handle dates in ISO format
+    let created_at, updated_at;
+    
+    try {
+      created_at = session.createdAt instanceof Date ? 
+        session.createdAt.toISOString() : 
+        new Date(session.createdAt || session.created_at).toISOString();
+    } catch (e) {
+      created_at = new Date().toISOString();
     }
     
-    // Connect to the database
-    await dbConnect();
+    try {
+      updated_at = session.updatedAt instanceof Date ? 
+        session.updatedAt.toISOString() : 
+        new Date(session.updatedAt || session.updated_at).toISOString();
+    } catch (e) {
+      updated_at = new Date().toISOString();
+    }
     
-    // Get userId from session
-    const userId = session.user.id;
-    
-    // Get search and sort parameters from URL
-    const searchParams = request.nextUrl.searchParams;
-    const searchQuery = searchParams.get('search');
-    const sortBy = searchParams.get('sortBy') || 'updatedAt'; // Default sort by updatedAt
-    const sortOrder = searchParams.get('sortOrder') === 'asc' ? 1 : -1; // Default sort order is descending
-
-    // Build the query
-    const query: any = { 
-      userId: new mongoose.Types.ObjectId(userId),
-      isActive: true 
+    return {
+      id,
+      title: session.title || 'Untitled Chat',
+      conversation_id,
+      created_at,
+      updated_at
     };
-
-    // Add title search if query parameter is provided
-    if (searchQuery) {
-      query.title = { $regex: searchQuery, $options: 'i' }; // Case-insensitive search
-    }
-    
-    // Create sort object
-    const sort: any = {};
-    sort[sortBy === 'createdAt' ? 'createdAt' : 'updatedAt'] = sortOrder;
-    
-    // Get all active sessions for the user with filtering and sorting
-    const chatSessions = await ChatSession.find(query)
-      .sort(sort)
-      .select('_id title conversationId createdAt updatedAt');
-    
-    // Format the response
-    const formattedSessions = chatSessions.map(session => ({
-      id: session._id,
-      title: session.title,
-      conversation_id: session.conversationId,
-      created_at: session.createdAt,
-      updated_at: session.updatedAt
-    }));
-    
-    return NextResponse.json({
-      sessions: formattedSessions
-    });
-    
-  } catch (error) {
-    console.error('Error listing chat sessions:', error);
-    return NextResponse.json(
-      { error: 'Failed to list chat sessions' },
-      { status: 500 }
-    );
-  }
+  });
+  
+  // Return with consistent response structure
+  return createSuccessResponse({ sessions });
 }
 
-// PATCH endpoint to update session title
-export async function PATCH(request: NextRequest) {
-  try {
-    // Get the session and check authentication
-    const session = await getServerSession(authOptions);
-    
-    if (!session || !session.user) {
-      return NextResponse.json(
-        { error: 'Authentication required' },
-        { status: 401 }
-      );
-    }
-    
-    // Connect to the database
-    await dbConnect();
-    
-    // Get userId from session
-    const userId = session.user.id;
-    
-    // Get request body
-    const body = await request.json();
-    const { sessionId, title } = body;
-    
-    if (!sessionId || !title) {
-      return NextResponse.json(
-        { error: 'Session ID and title are required' },
-        { status: 400 }
-      );
-    }
-    
-    // Find the session and verify ownership
-    const chatSession = await ChatSession.findOne({
-      _id: sessionId,
-      userId: new mongoose.Types.ObjectId(userId),
-      isActive: true
-    });
-    
-    if (!chatSession) {
-      return NextResponse.json(
-        { error: 'Session not found or access denied' },
-        { status: 404 }
-      );
-    }
-    
-    // Update the title
-    chatSession.title = title;
-    await chatSession.save();
-    
-    return NextResponse.json({
-      success: true,
-      session: {
-        id: chatSession._id,
-        title: chatSession.title,
-        conversation_id: chatSession.conversationId,
-        created_at: chatSession.createdAt,
-        updated_at: chatSession.updatedAt
-      }
-    });
-    
-  } catch (error) {
-    console.error('Error updating chat session:', error);
-    return NextResponse.json(
-      { error: 'Failed to update chat session' },
-      { status: 500 }
-    );
+/**
+ * Handle DELETE request to delete a chat session
+ */
+async function handleDeleteSession(req: NextRequest, params: Record<string, any>) {
+  // Get session ID from query parameters
+  const sessionId = params.query.id;
+  
+  // Validate session ID
+  if (!sessionId) {
+    return createErrorResponse('Missing session ID', 400);
   }
+  
+  // Get user ID from session
+  const userId = params.user.id;
+  
+  // Use the ChatSessionService to delete the conversation
+  const result = await ChatSessionService.deleteConversation(userId, sessionId);
+  
+  if (!result.success) {
+    return createErrorResponse(result.message, 404);
+  }
+  
+  return createSuccessResponse({ message: result.message });
 }
 
-// DELETE endpoint to soft delete a session
-export async function DELETE(request: NextRequest) {
-  try {
-    // Get the session and check authentication
-    const session = await getServerSession(authOptions);
-    
-    if (!session || !session.user) {
-      return NextResponse.json(
-        { error: 'Authentication required' },
-        { status: 401 }
-      );
-    }
-    
-    // Connect to the database
-    await dbConnect();
-    
-    // Get userId from session
-    const userId = session.user.id;
-    
-    // Get sessionId from the URL
-    const searchParams = request.nextUrl.searchParams;
-    const sessionId = searchParams.get('id');
-    
-    if (!sessionId) {
-      return NextResponse.json(
-        { error: 'Session ID is required' },
-        { status: 400 }
-      );
-    }
-    
-    // Find the session and verify ownership
-    const chatSession = await ChatSession.findOne({
-      _id: sessionId,
-      userId: new mongoose.Types.ObjectId(userId),
-      isActive: true
-    });
-    
-    if (!chatSession) {
-      return NextResponse.json(
-        { error: 'Session not found or access denied' },
-        { status: 404 }
-      );
-    }
-    
-    // Soft delete by setting isActive to false
-    chatSession.isActive = false;
-    await chatSession.save();
-    
-    return NextResponse.json({
-      success: true,
-      message: 'Session successfully deleted'
-    });
-    
-  } catch (error) {
-    console.error('Error deleting chat session:', error);
-    return NextResponse.json(
-      { error: 'Failed to delete chat session' },
-      { status: 500 }
-    );
+/**
+ * Handle PATCH request to update a chat session title
+ */
+async function handleUpdateSession(req: NextRequest, params: Record<string, any>) {
+  // Parse request body
+  const body = await req.json();
+  const { sessionId, title } = body;
+  
+  // Validate required parameters
+  if (!sessionId || !title) {
+    return createErrorResponse('Missing required parameters: sessionId and title', 400);
   }
-} 
+  
+  // Get user ID from session
+  const userId = params.user.id;
+  
+  // Use the ChatSessionService to update the title
+  const result = await ChatSessionService.updateConversationTitle(
+    userId,
+    sessionId,
+    title
+  );
+  
+  if (!result.success) {
+    return createErrorResponse(result.message, 404);
+  }
+  
+  return createSuccessResponse({ success: true, message: result.message });
+}
+
+// Export the handlers with middleware protection
+export const GET = createProtectedHandler(handleListSessions);
+export const DELETE = createProtectedHandler(handleDeleteSession);
+export const PATCH = createProtectedHandler(handleUpdateSession); 

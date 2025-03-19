@@ -2,16 +2,37 @@ import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import ChatInterface from '../../../components/chat/ChatInterface';
+import { ChatMessage } from '@/models/ChatSession';
 
-// Mock the API client
-jest.mock('@/lib/api/kevin', () => ({
-  chatApi: {
-    sendMessage: jest.fn().mockResolvedValue({
-      message: 'Mock response message',
-      sessionId: 'mock-session-id'
-    }),
-    getStreamUrl: jest.fn().mockReturnValue('/api/proxy/chat/stream')
+// Extend Jest matchers
+declare global {
+  namespace jest {
+    interface Matchers<R> {
+      toBeInTheDocument(): R;
+    }
   }
+}
+
+// Mock the ChatService and hooks
+jest.mock('@/services/ChatService', () => ({
+  chatService: {
+    query: jest.fn().mockResolvedValue({
+      answer: 'Mock response message',
+      conversation_id: 'mock-session-id'
+    }),
+    getStreamUrl: jest.fn().mockReturnValue('/api/chat/stream')
+  }
+}));
+
+jest.mock('@/hooks/useChat', () => ({
+  useChat: () => ({
+    saveConversation: jest.fn().mockResolvedValue(true),
+    getConversation: jest.fn().mockResolvedValue({
+      messages: [],
+      conversation_id: 'mock-session-id'
+    }),
+    isSaving: false
+  })
 }));
 
 // Mock the Event Source
@@ -79,7 +100,7 @@ describe('ChatInterface', () => {
   });
   
   it('displays initial messages if provided', () => {
-    const initialMessages = [
+    const initialMessages: ChatMessage[] = [
       { role: 'user', content: 'Hello', timestamp: new Date() },
       { role: 'assistant', content: 'Hi there!', timestamp: new Date() }
     ];

@@ -1,9 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server';
-import axios from 'axios';
+import { NextRequest } from 'next/server';
+import { backendApiService } from '@/lib/services/BackendApiService';
+import { createSuccessResponse, createErrorResponse } from '@/lib/api/middleware';
 
-// Define the base URL for Kevin API
-const KEVIN_API_URL = process.env.NEXT_PUBLIC_KEVIN_API_URL || 'http://localhost:8000';
-
+/**
+ * Handle POST request to chat query endpoint
+ */
 export async function POST(request: NextRequest) {
   try {
     // Parse the request body
@@ -14,22 +15,19 @@ export async function POST(request: NextRequest) {
       stream: body.stream 
     });
 
-    // Forward the request to the backend
-    const response = await axios.post(`${KEVIN_API_URL}/api/chat/query`, body, {
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
+    // Forward the request to the backend using the BackendApiService
+    const result = await backendApiService.query(body);
+    
     // Return the response
-    return NextResponse.json(response.data);
-  } catch (error: any) {
-    console.error('Error in /api/chat/query:', error.message);
+    return createSuccessResponse(result);
+  } catch (error) {
+    console.error('Error in /api/chat/query:', error instanceof Error ? error.message : String(error));
     
     // Return an error response
-    return NextResponse.json(
-      { error: 'Error processing chat query', details: error.message },
-      { status: 500 }
+    return createErrorResponse(
+      'Error processing chat query', 
+      500, 
+      { details: error instanceof Error ? error.message : String(error) }
     );
   }
 } 

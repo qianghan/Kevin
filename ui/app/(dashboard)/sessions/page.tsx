@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { format } from 'date-fns';
 import axios from 'axios';
 import { toast } from 'react-hot-toast';
+import { useChat } from '@/hooks/useChat';
 
 // Interface for a chat session
 interface ChatSession {
@@ -39,6 +40,15 @@ export default function SessionsPage() {
   const [newTitle, setNewTitle] = useState('');
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
   const editInputRef = useRef<HTMLInputElement>(null);
+  
+  // Use the chat service through our custom hook
+  const { 
+    listConversations, 
+    deleteConversation,
+    updateConversationTitle,
+    isLoading: isServiceLoading,
+    isDeleting: isServiceDeleting
+  } = useChat();
 
   const sortOptions: SortOption[] = [
     { field: 'updatedAt', order: 'desc', label: 'Last Updated (newest first)' },
@@ -47,27 +57,37 @@ export default function SessionsPage() {
     { field: 'createdAt', order: 'asc', label: 'Created Date (oldest first)' },
   ];
 
-  // Load sessions with search and sort parameters
+  // Load sessions with search and sort parameters using the ChatService
   const loadSessions = async () => {
     setIsLoading(true);
     try {
-      // Build query parameters
-      const params = new URLSearchParams();
-      if (searchQuery.trim()) {
-        params.append('search', searchQuery.trim());
-      }
-      params.append('sortBy', sortOption.field);
-      params.append('sortOrder', sortOption.order);
-
-      // Fetch user's chat sessions from the API
-      const response = await axios.get(`/api/chat/sessions?${params.toString()}`);
-      if (response.data && response.data.sessions) {
-        setChatSessions(response.data.sessions);
-      } else {
-        setChatSessions([]);
-      }
+      console.log('Loading sessions with options:', {
+        search: searchQuery.trim() || undefined,
+        sortBy: sortOption.field,
+        sortOrder: sortOption.order
+      });
+      
+      // Use the ChatService to fetch sessions
+      const sessions = await listConversations({
+        search: searchQuery.trim() || undefined,
+        sortBy: sortOption.field,
+        sortOrder: sortOption.order
+      });
+      
+      // Map sessions to the format expected by the component
+      const formattedSessions = sessions.map(session => ({
+        id: session.id,
+        title: session.title,
+        conversation_id: session.conversation_id,
+        // Use toISOString for consistent date formatting
+        created_at: session.created_at.toISOString(),
+        updated_at: session.updated_at.toISOString()
+      }));
+      
+      setChatSessions(formattedSessions);
+      console.log(`Loaded ${formattedSessions.length} sessions`);
     } catch (error) {
-      console.error('Error loading chat sessions:', error);
+      console.error('Error loading chat sessions:', error instanceof Error ? error.message : String(error));
       toast.error('Failed to load chat sessions');
       setChatSessions([]);
     } finally {
@@ -96,8 +116,14 @@ export default function SessionsPage() {
 
   const formatDate = (dateString: string) => {
     try {
-      return format(new Date(dateString), 'MMM dd, yyyy h:mm a');
+      // Client-side formatting for display only
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) {
+        return 'Invalid date';
+      }
+      return format(date, 'MMM dd, yyyy h:mm a');
     } catch (error) {
+      console.error('Date formatting error:', error);
       return 'Unknown date';
     }
   };
@@ -119,12 +145,10 @@ export default function SessionsPage() {
 
   const saveTitle = async (sessionId: string) => {
     try {
-      const response = await axios.patch('/api/chat/sessions', {
-        sessionId,
-        title: newTitle.trim() || 'Untitled Chat'
-      });
+      // Use the ChatService to update the title
+      const success = await updateConversationTitle(sessionId, newTitle.trim() || 'Untitled Chat');
 
-      if (response.data.success) {
+      if (success) {
         // Update the local state
         setChatSessions(prev => 
           prev.map(session => 
@@ -135,10 +159,10 @@ export default function SessionsPage() {
         );
         toast.success('Title updated');
       } else {
-        throw new Error(response.data.error || 'Failed to update title');
+        throw new Error('Failed to update title');
       }
     } catch (error) {
-      console.error('Error updating session title:', error);
+      console.error('Error updating session title:', error instanceof Error ? error.message : String(error));
       toast.error('Failed to update title');
     } finally {
       setEditingSession(null);
@@ -146,23 +170,25 @@ export default function SessionsPage() {
     }
   };
 
-  const deleteSession = async (sessionId: string) => {
+  const handleDeleteSession = async (sessionId: string) => {
     if (!window.confirm('Are you sure you want to delete this session?')) {
       return;
     }
 
     setIsDeleting(sessionId);
     try {
-      const response = await axios.delete(`/api/chat/sessions?id=${sessionId}`);
-      if (response.data.success) {
+      // Use the ChatService for deletion
+      const success = await deleteConversation(sessionId);
+      
+      if (success) {
         // Remove from local state
         setChatSessions(prev => prev.filter(session => session.id !== sessionId));
         toast.success('Session deleted');
       } else {
-        throw new Error(response.data.error || 'Failed to delete session');
+        throw new Error('Failed to delete session');
       }
     } catch (error) {
-      console.error('Error deleting session:', error);
+      console.error('Error deleting session:', error instanceof Error ? error.message : String(error));
       toast.error('Failed to delete session');
     } finally {
       setIsDeleting(null);
@@ -182,7 +208,7 @@ export default function SessionsPage() {
     setSortOption(sortOptions[selectedIndex]);
   };
 
-  if (status === 'loading' || isLoading) {
+  if (status === 'loading' || isLoading || isServiceLoading) {
     return (
       <div className="flex justify-center items-center h-64">
         <div className="text-center">
@@ -328,7 +354,7 @@ export default function SessionsPage() {
                           </svg>
                         </button>
                         <button
-                          onClick={() => deleteSession(chatSession.id)}
+                          onClick={() => handleDeleteSession(chatSession.id)}
                           className="text-red-600 hover:text-red-900"
                           title="Delete session"
                           disabled={isDeleting !== null}
