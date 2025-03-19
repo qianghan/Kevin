@@ -152,20 +152,7 @@ export default function ChatInterface({
     };
     
     // Add the message to the UI state
-    setMessages(prev => {
-      const updatedMessages = [...prev, userMessage];
-      
-      // If we have a conversation ID, save the message to the database immediately
-      if (conversationId) {
-        console.log('Saving user message to database immediately');
-        saveConversationToDatabase(conversationId, updatedMessages)
-          .catch(err => console.error('Failed to save user message:', err));
-      } else {
-        console.log('No conversation ID yet, will save after response');
-      }
-      
-      return updatedMessages;
-    });
+    setMessages(prev => [...prev, userMessage]);
     
     setIsLoading(true);
     setInput('');
@@ -551,37 +538,13 @@ export default function ChatInterface({
           return prev;
         });
         
-        // Save the answer to the database if we have a conversation_id
-        // This ensures the answer is saved even if the done event doesn't work properly
-        if (data.conversation_id || conversationId) {
-          const chatId = data.conversation_id || conversationId;
-          if (chatId) {
-            console.log('Saving answer from answer event with conversation_id:', chatId);
-            
-            // Create the assistant message
-            const assistantMessage: ChatMessage = {
-              role: 'assistant',
-              content: fullAnswer,
-              timestamp: new Date(),
-              thinkingSteps: [...thinkingSteps],
-            };
-            
-            // Add message to chat history and save
-            setMessages(prevMessages => {
-              const updatedMessages = [...prevMessages, assistantMessage];
-              
-              // Save the conversation to the database in the background
-              saveConversationToDatabase(chatId, updatedMessages)
-                .catch(err => console.error('Failed to save conversation from answer event:', err));
-              
-              // Set the flag to indicate we've added a message via the answer event
-              messageAddedViaAnswerEventRef.current = true;
-              
-              return updatedMessages;
-            });
-          } else {
-            console.warn('No conversation_id available, cannot save answer yet');
-          }
+        // Set the flag to indicate we've added a message via the answer event
+        // But don't add it to messages array yet - let handleDone do that
+        messageAddedViaAnswerEventRef.current = true;
+        
+        // Store the conversation_id if we have it
+        if (data.conversation_id) {
+          setConversationId(data.conversation_id);
         }
       } else {
         console.warn('Received empty answer in answer event');
@@ -626,25 +589,6 @@ export default function ChatInterface({
         eventSourceRef.current = null;
       }
       
-      // Check if the message was already added by the answer event
-      if (messageAddedViaAnswerEventRef.current) {
-        console.log('Message already added by answer event, skipping duplicate addition');
-        // Reset the flag for the next conversation
-        messageAddedViaAnswerEventRef.current = false;
-        
-        // Still need to clean up the streaming state
-        setTimeout(() => {
-          console.log('Timeout executed - clearing streaming state');
-          setStreamingMessage('');
-          setStreamingId(null);
-          setThinkingSteps([]);
-          setIsLoading(false);
-          setIsThinking(false); // Finally clear the thinking state
-        }, 500);
-        
-        return;
-      }
-      
       if (!finalContent || finalContent.trim().length === 0) {
         console.error('Empty message content detected, not adding to chat. Ref content:', 
           finalContent ? 'empty string' : 'null/undefined');
@@ -681,18 +625,10 @@ export default function ChatInterface({
       // Add message to chat history
       console.log('Adding message to chat history with content length:', finalContent.length);
       
-      // First add the message to the chat history
-      setMessages(prevMessages => {
-        const updatedMessages = [...prevMessages, assistantMessage];
-        
-        // Save the conversation to the database in the background
-        if (data.conversation_id) {
-          saveConversationToDatabase(data.conversation_id, updatedMessages)
-            .catch(err => console.error('Failed to save conversation:', err));
-        }
-        
-        return updatedMessages;
-      });
+      // Add the message to the chat history
+      setMessages(prevMessages => [...prevMessages, assistantMessage]);
+      
+      // Don't save here - only save when starting a new chat
       
       // Then clear the streaming message state after a delay
       setTimeout(() => {
@@ -702,6 +638,7 @@ export default function ChatInterface({
         setThinkingSteps([]);
         setIsLoading(false);
         setIsThinking(false); // Finally clear the thinking state
+        messageAddedViaAnswerEventRef.current = false; // Reset the answer event flag
       }, 500);
       
     } catch (err) {
@@ -826,13 +763,10 @@ export default function ChatInterface({
     
     try {
       // If we have messages and a conversation ID, save the current session
-      if (messages.length > 0) {
+      if (messages.length > 0 && conversationId) {
         setIsSaving(true);
         
-        // Generate a temporary conversation ID if we don't have one
-        const chatId = conversationId || `temp-${Date.now()}`;
-        
-        console.log('Saving session before starting new chat, conversationId:', chatId);
+        console.log('Saving session before starting new chat, conversationId:', conversationId);
         
         // Get current hash - may already be saved from previous assistant message
         const currentHash = generateMessageHash(messages);
@@ -840,11 +774,11 @@ export default function ChatInterface({
           console.log('Chat already saved with current messages, skipping duplicate save');
         } else {
           // Save the current conversation to the database
-          await saveConversationToDatabase(chatId, messages);
+          await saveConversationToDatabase(conversationId, messages);
           console.log('Session saved successfully before starting new chat');
         }
       } else {
-        console.log('No messages to save before starting new chat');
+        console.log('No messages to save or no conversation ID before starting new chat');
       }
     } catch (error) {
       console.error('Error saving session before new chat:', error);
