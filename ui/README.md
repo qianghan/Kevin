@@ -74,190 +74,610 @@ This application is optimized for deployment on Vercel:
 
 ## Architecture Overview
 
-### Service Abstraction Layers
-
-The application implements a multi-layered service architecture that separates concerns and improves maintainability:
-
-#### 1. Frontend Service Layer (`ChatService`)
-- Provides a clean API for UI components to interact with the backend
-- Handles error management and retry logic
-- Implements consistent logging across all operations
-- Abstracts away API implementation details from the UI
-
-#### 2. Backend Service Layer
-- **API Services** (`BackendApiService`, `ApiChatService`)
-  - Manages HTTP communication with backend APIs
-  - Implements robust error handling and request retries
-  - Provides structured logging of requests and responses
-  - Standardizes API responses for frontend consumption
-
-- **Database Services** (`ChatSessionService`)
-  - Encapsulates database operations and queries
-  - Handles connection management
-  - Implements data validation and error handling
-  - Provides consistent logging for database operations
-
-### Detailed Service Architecture
+The Kevin Chat UI is built with Next.js and follows a modular, component-based architecture with clean separation of concerns:
 
 ```
-┌───────────────────────────────────────────────────────────────────────────┐
-│                                 UI Layer                                   │
-│                                                                           │
-│  ┌─────────────┐  ┌────────────────┐  ┌────────────────┐  ┌─────────────┐ │
-│  │ Chat Page   │  │ Sessions Page  │  │ Dashboard Page │  │ Other Pages │ │
-│  └──────┬──────┘  └────────┬───────┘  └────────┬───────┘  └─────┬───────┘ │
-└─────────┼───────────────────┼────────────────────┼──────────────┼─────────┘
-          │                   │                    │              │
-          │                   │                    │              │
-          ▼                   ▼                    ▼              ▼
-┌───────────────────────────────────────────────────────────────────────────┐
-│                         Frontend Service Layer                             │
-│                                                                           │
-│  ┌─────────────────────────────────────────────────────────────────────┐  │
-│  │                          ChatService                                 │  │
-│  │                                                                      │  │
-│  │  ┌──────────────┐  ┌───────────────┐  ┌─────────────────────────┐   │  │
-│  │  │saveConversation│ │getConversation│  │...other service methods │   │  │
-│  │  └──────────────┘  └───────────────┘  └─────────────────────────┘   │  │
-│  └────────────────────────────────────┬──────────────────────────────────┘  │
-└────────────────────────────────────────┼──────────────────────────────────┘
-                                         │
-                                         ▼
-┌───────────────────────────────────────────────────────────────────────────┐
-│                         Backend Service Layer                              │
-│                                                                           │
-│  ┌─────────────────────┐          ┌───────────────────────────────────┐   │
-│  │   API Services      │          │      Database Services            │   │
-│  │                     │          │                                   │   │
-│  │  ┌───────────────┐  │          │  ┌─────────────────────────────┐ │   │
-│  │  │BackendApiService│──┐        │  │      ChatSessionService     │ │   │
-│  │  └───────────────┘  │ │        │  │                             │ │   │
-│  │         ▲           │ │        │  │ ┌─────────────┐ ┌─────────┐ │ │   │
-│  │         │           │ │        │  │ │saveSession  │ │getConv...│ │ │   │
-│  │  ┌───────────────┐  │ │        │  │ └─────────────┘ └─────────┘ │ │   │
-│  │  │ ApiChatService │◀─┘ │        │  └──────────────┬──────────────┘ │   │
-│  │  └───────────────┘    │        │                 │                │   │
-│  └─────────┬─────────────┘        └─────────────────┼────────────────┘   │
-└────────────┼──────────────────────────────────────┬─┼────────────────────┘
-             │                                      │ │
-             ▼                                      │ │
-┌────────────────────────┐                          │ │
-│                        │                          │ │
-│    Next.js API Routes  │◀─────────────────────────┘ │
-│                        │                            │
-└───────────┬────────────┘                            │
-            │                                         │
-            ▼                                         │
-┌────────────────────────┐                            │
-│                        │                            │
-│   Kevin.AI FastAPI     │                            │
-│                        │                            │
-└───────────┬────────────┘                            │
-            │                                         │
-            ▼                                         ▼
-┌────────────────────────┐            ┌────────────────────────┐
-│                        │            │                        │
-│   External Services    │            │      MongoDB           │
-│   (DeepSeek, Tavily)   │            │                        │
-│                        │            │                        │
-└────────────────────────┘            └────────────────────────┘
+ui/
+├── app/                    # Next.js app router
+│   └── api/                # API routes
+├── features/
+│   └── chat/               # Chat feature
+│       ├── adapters/       # Adapters connecting context to UI
+│       ├── components/     # UI components
+│       │   └── default/    # Default implementation of UI components
+│       ├── context/        # Context providers
+│       └── types/          # TypeScript types
+├── lib/
+│   ├── services/           # Service layer
+│   │   ├── BackendApiService.ts  # Backend communication
+│   │   └── db/             # Database services
+│   └── types/              # Shared types
+└── models/                 # Data models
 ```
 
-### Data Flow
+### Component Architecture Diagram
 
-1. **UI Layer to Frontend Service**:
-   - UI components call methods from the `ChatService`
-   - Frontend service handles error display, loading states, and data formatting
+```
+┌─────────────────────────┐
+│     Next.js Pages       │
+└──────────┬──────────────┘
+           │ Renders
+           ▼
+┌──────────────────────────────────────────────────┐
+│                 ChatAdapter                       │
+│  ┌───────────────┐      ┌────────────────────┐   │
+│  │ ChatProvider  │──────│ ChatAdapterInner   │   │
+│  └───────────────┘      └────────┬───────────┘   │
+└────────────────────────────────┬─┼───────────────┘
+                                 │ │ Renders Components
+                                 │ │
+          ┌────────────────────┬─┘ └─┬────────────────────┬───────────────────┐
+          │                    │     │                    │                   │
+          ▼                    ▼     ▼                    ▼                   ▼
+┌─────────────────┐   ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│ ChatContainer   │   │ ChatHeader      │    │ChatMessageList  │    │ ChatInput       │
+└─────────────────┘   └─────────────────┘    └─────────────────┘    └─────────────────┘
+          │                    │                    │                        │
+          │                    │                    │                        │
+          └────────────────────┼────────────────────┼────────────────────────┘
+                               │                    │
+                               │                    │
+                               ▼                    ▼
+┌──────────────────────────────────────────────────────────────────────────────────┐
+│                                ChatContext                                        │
+│  ┌─────────────┐  ┌──────────────┐  ┌────────────────┐  ┌─────────────────────┐  │
+│  │ State       │  │ Messages     │  │ API            │  │ Event Streaming     │  │
+│  │ Management  │  │ Handling     │  │ Communication  │  │ & Session Management │  │
+│  └─────────────┘  └──────────────┘  └────────────────┘  └─────────────────────┘  │
+└──────────────────────────────────────────┬───────────────────────────────────────┘
+                                           │ API Calls
+                                           ▼
+┌──────────────────────────────────────────────────────────────────────────────────┐
+│                               Backend Services                                    │
+│     ┌────────────────┐      ┌────────────────┐      ┌────────────────┐           │
+│     │/api/chat/query │      │/api/chat/save  │      │/api/chat/sessions│         │
+│     └────────────────┘      └────────────────┘      └────────────────┘           │
+└──────────────────────────────────────────────────────────────────────────────────┘
+```
 
-2. **Frontend Service to Backend Services**:
-   - `ChatService` delegates to appropriate backend services
-   - API services handle HTTP communication
-   - Database services handle direct database operations
+## Core Concepts
 
-3. **Backend Services to External Systems**:
-   - API services communicate with Next.js API routes or external APIs
-   - Database services interact directly with MongoDB
+### 1. Context-Based State Management
 
-4. **Response Flow**:
-   - Data returns through the same layers with appropriate transformations
-   - Errors are handled at each layer with proper logging and user-friendly messages
+The chat state is managed through React Context (`ChatContext`), which provides:
 
-### Service Responsibilities
+- Messages state and management
+- Loading and thinking states
+- Streaming message handling
+- Chat session operations (save, update, start new)
+- Backend communication via EventSource for streaming responses
 
-#### Frontend Service (`ChatService`)
-- **User Interaction**: Provides methods for all chat-related operations
-- **Error Handling**: Gracefully handles errors for improved user experience
-- **Retry Logic**: Implements automatic retries for network-related failures
-- **Data Formatting**: Ensures consistent data structures for UI components
+### 2. Adapter Pattern
 
-#### API Services
-- **`BackendApiService`**:
-  - General-purpose HTTP client with robust error handling
-  - Implements retry mechanisms for transient failures
-  - Provides detailed logging of requests and responses
-  - Standardizes error responses
+The `ChatAdapter` connects the context to UI components, enabling:
 
-- **`ApiChatService`**:
-  - Chat-specific API operations using `BackendApiService`
-  - Handles data transformation for API endpoints
-  - Implements specific error handling for chat operations
+- Loose coupling between business logic and UI
+- Easy swapping of UI components
+- Reuse of business logic across different UIs
 
-#### Database Services (`ChatSessionService`)
-- **Data Access**: Encapsulates all MongoDB operations
-- **Validation**: Validates data before persistence
-- **Error Management**: Handles database-specific errors
-- **Performance Logging**: Tracks query performance
+### 3. Component Architecture
 
-### Authentication Flow
+UI components are structured with clear responsibilities:
 
-1. Users sign in with Google, Facebook, or email/password
-2. New users are directed to the registration page to select their role (student or parent)
-3. Parents can add students and other parent partners to their family
-4. Authentication state is managed with NextAuth.js and JWT tokens
+- `ChatContainer`: Layout container
+- `ChatHeader`: Title and controls
+- `ChatMessageList`: Displays messages and streaming content
+- `ChatInput`: User input interface
 
-## Chat System
+## Key Components
 
-- Real-time chat with streaming responses using Server-Sent Events (SSE)
-- Visualization of AI thinking steps
-- Modern UI with gradient backgrounds and improved contrast
-- Support for multiple chat sessions per user
-- Persistent storage of chat history in MongoDB
-- Context summarization for improved conversation continuity and reduced token usage
+### ChatContext
 
-### Context Summarization
+The heart of the application, `ChatContext` manages:
 
-The chat system now includes intelligent context summarization capabilities:
+- Chat messages array
+- Loading and thinking states
+- Stream handling via EventSource
+- Backend API communication
+- Session saving and loading
 
-- **Optimized Token Usage**: Generates concise summaries of conversation history to reduce the tokens sent to the AI model
-- **Improved Continuity**: Helps the AI maintain context across longer conversations without requiring the full message history
-- **Smart Summarization Logic**:
-  - For short conversations (≤3 messages): Simple formatting of the complete context
-  - For longer conversations: Sophisticated summarization that extracts key questions and recent exchanges
-- **Database Integration**: Context summaries are stored alongside chat sessions in MongoDB
+```typescript
+interface ChatContextType {
+  messages: ChatMessage[];
+  isLoading: boolean;
+  streamingMessage: string;
+  thinkingSteps: ThinkingStep[];
+  isThinking: boolean;
+  sendMessage: (message: string) => void;
+  startNewChat: () => void;
+  clearChat: () => void;
+  updateTitle: (title: string) => Promise<boolean>;
+  saveChatSession: (title?: string) => Promise<boolean>;
+  conversationId?: string;
+  useWebSearch: boolean;
+  toggleWebSearch: () => void;
+  // ...other properties
+}
+```
 
-### UI Enhancements
+### ChatAdapter
 
-Recent UI improvements include:
+Connects the context to UI components:
 
-- **Modern Aesthetic**: Gradient backgrounds and improved color schemes for better visual appeal
-- **Improved Message Styling**:
-  - User messages: Gradient background with white text for better readability
-  - Assistant messages: Clean white background with dark text
-- **Enhanced Interaction**: Hover effects, copy buttons, and better spacing for improved usability
-- **Responsive Design**: Adaptable layout that works well on mobile and desktop devices
-- **Visual Hierarchy**: Better distinction between user and assistant messages for easier conversation reading
+```typescript
+function ChatAdapter({
+  components,
+  initialConversationId,
+  initialMessages = []
+}: ChatAdapterProps) {
+  return (
+    <ChatProvider>
+      <ChatAdapterInner components={components} />
+    </ChatProvider>
+  );
+}
+```
 
-### Logging and Error Handling
+## Customization Guide
 
-The application implements comprehensive logging and error handling:
+### Creating Custom UI Components
 
-- **Structured Logging**: Consistent format with contextual information
-- **Error Classification**: Categorized errors for better debugging
-- **Request Tracing**: Request IDs for tracking issues across services
-- **Performance Metrics**: Timing information for operations
-- **Client-Side Feedback**: User-friendly error messages
-- **Retry Mechanisms**: Automatic retries for transient failures
+To create a custom UI, implement the interfaces defined in `ui/features/chat/types/chat-ui.types.ts`:
+
+1. `ChatContainerProps`
+2. `ChatHeaderProps`
+3. `ChatMessageListProps`
+4. `ChatInputProps`
+
+For example, to create a custom chat input:
+
+```typescript
+import { ChatInputProps } from '../types/chat-ui.types';
+
+export function CustomChatInput({
+  onSendMessage,
+  isDisabled,
+  placeholder,
+  useWebSearch,
+  onToggleWebSearch
+}: ChatInputProps) {
+  // Your custom implementation
+}
+```
+
+### Using the Adapter
+
+Once you have your custom components, use the adapter to connect them:
+
+```typescript
+import { ChatAdapter } from '@/features/chat/adapters/ChatAdapter';
+import CustomChatContainer from './CustomChatContainer';
+import CustomChatHeader from './CustomChatHeader';
+import CustomChatMessageList from './CustomChatMessageList';
+import CustomChatInput from './CustomChatInput';
+
+export function CustomChat() {
+  return (
+    <ChatAdapter
+      components={{
+        ChatContainer: CustomChatContainer,
+        ChatHeader: CustomChatHeader,
+        ChatMessageList: CustomChatMessageList,
+        ChatInput: CustomChatInput
+      }}
+    />
+  );
+}
+```
+
+### Direct Context Usage
+
+For advanced use cases, you can use the context directly:
+
+```typescript
+import { useChatContext } from '@/features/chat/context/ChatContext';
+
+function MyCustomComponent() {
+  const { messages, sendMessage, isLoading } = useChatContext();
+  // Your custom implementation
+}
+```
+
+## Backend Integration
+
+The UI communicates with the backend through:
+
+1. **REST API Endpoints**:
+   - `/api/chat/query`: Send chat messages
+   - `/api/chat/save`: Save chat sessions
+   - `/api/chat/sessions/`: Manage sessions
+
+2. **Event Streaming**:
+   - Uses EventSource for real-time response streaming
+   - Handles different event types (thinking, chunks, done)
+
+To integrate with a different backend:
+
+1. Update the `BackendApiService` configuration
+2. Ensure the backend supports the expected event format for streaming
+3. Implement the required API endpoints or adapt the UI to your backend's API
+
+## Advanced Features
+
+### Web Search Integration
+
+The chat UI supports toggling web search functionality:
+
+```typescript
+// In ChatInput
+<button onClick={onToggleWebSearch}>
+  {useWebSearch ? 'Disable Web Search' : 'Enable Web Search'}
+</button>
+```
+
+The `useWebSearch` flag is passed to the backend API.
+
+### Chat Session Persistence
+
+Chat sessions are automatically saved:
+- After message exchanges
+- Before starting a new chat
+- When navigating away
+
+The title is derived from the first user message or can be manually set.
+
+## Default Components
+
+Default implementations are provided in `ui/features/chat/components/default/`:
+
+- `DefaultChatContainer.tsx`: Basic layout container
+- `DefaultChatHeader.tsx`: Header with title editing and controls
+- `DefaultChatMessageList.tsx`: Message rendering with Markdown support
+- `DefaultChatInput.tsx`: Input field with web search toggle
+
+These components can be used as-is, extended, or replaced with custom ones.
+
+## Getting Started
+
+1. Import the necessary components
+2. Set up the adapter with your components (or use the defaults)
+3. Render the adapter in your application
+
+```typescript
+import { ChatAdapter } from '@/features/chat/adapters/ChatAdapter';
+import { DefaultChatContainer, DefaultChatHeader, DefaultChatMessageList, DefaultChatInput } 
+  from '@/features/chat/components/default';
+
+export default function ChatPage() {
+  return (
+    <ChatAdapter
+      components={{
+        ChatContainer: DefaultChatContainer,
+        ChatHeader: DefaultChatHeader,
+        ChatMessageList: DefaultChatMessageList,
+        ChatInput: DefaultChatInput
+      }}
+    />
+  );
+}
+```
+
+## Summary
+
+The Kevin Chat UI provides a flexible, component-based architecture that:
+- Separates state management from UI rendering
+- Allows easy customization of UI components
+- Handles complex streaming interactions
+- Provides session persistence
+- Supports advanced features like web search
+
+This design makes it easy to adapt the UI to different requirements while reusing the core business logic.
 
 ## License
 
 [MIT](LICENSE)
+
+# Kevin Chat UI Architecture
+
+This document explains the architecture of the Kevin Chat UI, how the components work together, and how to customize or port the UI to your own application.
+
+## Architecture Overview
+
+The Kevin Chat UI is built with Next.js and follows a modular, component-based architecture with clean separation of concerns:
+
+```
+ui/
+├── app/                    # Next.js app router
+│   └── api/                # API routes
+├── features/
+│   └── chat/               # Chat feature
+│       ├── adapters/       # Adapters connecting context to UI
+│       ├── components/     # UI components
+│       │   └── default/    # Default implementation of UI components
+│       ├── context/        # Context providers
+│       └── types/          # TypeScript types
+├── lib/
+│   ├── services/           # Service layer
+│   │   ├── BackendApiService.ts  # Backend communication
+│   │   └── db/             # Database services
+│   └── types/              # Shared types
+└── models/                 # Data models
+```
+
+### Component Architecture Diagram
+
+```
+┌─────────────────────────┐
+│     Next.js Pages       │
+└──────────┬──────────────┘
+           │ Renders
+           ▼
+┌──────────────────────────────────────────────────┐
+│                 ChatAdapter                       │
+│  ┌───────────────┐      ┌────────────────────┐   │
+│  │ ChatProvider  │──────│ ChatAdapterInner   │   │
+│  └───────────────┘      └────────┬───────────┘   │
+└────────────────────────────────┬─┼───────────────┘
+                                 │ │ Renders Components
+                                 │ │
+          ┌────────────────────┬─┘ └─┬────────────────────┬───────────────────┐
+          │                    │     │                    │                   │
+          ▼                    ▼     ▼                    ▼                   ▼
+┌─────────────────┐   ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│ ChatContainer   │   │ ChatHeader      │    │ChatMessageList  │    │ ChatInput       │
+└─────────────────┘   └─────────────────┘    └─────────────────┘    └─────────────────┘
+          │                    │                    │                        │
+          │                    │                    │                        │
+          └────────────────────┼────────────────────┼────────────────────────┘
+                               │                    │
+                               │                    │
+                               ▼                    ▼
+┌──────────────────────────────────────────────────────────────────────────────────┐
+│                                ChatContext                                        │
+│  ┌─────────────┐  ┌──────────────┐  ┌────────────────┐  ┌─────────────────────┐  │
+│  │ State       │  │ Messages     │  │ API            │  │ Event Streaming     │  │
+│  │ Management  │  │ Handling     │  │ Communication  │  │ & Session Management │  │
+│  └─────────────┘  └──────────────┘  └────────────────┘  └─────────────────────┘  │
+└──────────────────────────────────────────┬───────────────────────────────────────┘
+                                           │ API Calls
+                                           ▼
+┌──────────────────────────────────────────────────────────────────────────────────┐
+│                               Backend Services                                    │
+│     ┌────────────────┐      ┌────────────────┐      ┌────────────────┐           │
+│     │/api/chat/query │      │/api/chat/save  │      │/api/chat/sessions│         │
+│     └────────────────┘      └────────────────┘      └────────────────┘           │
+└──────────────────────────────────────────────────────────────────────────────────┘
+```
+
+## Core Concepts
+
+### 1. Context-Based State Management
+
+The chat state is managed through React Context (`ChatContext`), which provides:
+
+- Messages state and management
+- Loading and thinking states
+- Streaming message handling
+- Chat session operations (save, update, start new)
+- Backend communication via EventSource for streaming responses
+
+### 2. Adapter Pattern
+
+The `ChatAdapter` connects the context to UI components, enabling:
+
+- Loose coupling between business logic and UI
+- Easy swapping of UI components
+- Reuse of business logic across different UIs
+
+### 3. Component Architecture
+
+UI components are structured with clear responsibilities:
+
+- `ChatContainer`: Layout container
+- `ChatHeader`: Title and controls
+- `ChatMessageList`: Displays messages and streaming content
+- `ChatInput`: User input interface
+
+## Key Components
+
+### ChatContext
+
+The heart of the application, `ChatContext` manages:
+
+- Chat messages array
+- Loading and thinking states
+- Stream handling via EventSource
+- Backend API communication
+- Session saving and loading
+
+```typescript
+interface ChatContextType {
+  messages: ChatMessage[];
+  isLoading: boolean;
+  streamingMessage: string;
+  thinkingSteps: ThinkingStep[];
+  isThinking: boolean;
+  sendMessage: (message: string) => void;
+  startNewChat: () => void;
+  clearChat: () => void;
+  updateTitle: (title: string) => Promise<boolean>;
+  saveChatSession: (title?: string) => Promise<boolean>;
+  conversationId?: string;
+  useWebSearch: boolean;
+  toggleWebSearch: () => void;
+  // ...other properties
+}
+```
+
+### ChatAdapter
+
+Connects the context to UI components:
+
+```typescript
+function ChatAdapter({
+  components,
+  initialConversationId,
+  initialMessages = []
+}: ChatAdapterProps) {
+  return (
+    <ChatProvider>
+      <ChatAdapterInner components={components} />
+    </ChatProvider>
+  );
+}
+```
+
+## Customization Guide
+
+### Creating Custom UI Components
+
+To create a custom UI, implement the interfaces defined in `ui/features/chat/types/chat-ui.types.ts`:
+
+1. `ChatContainerProps`
+2. `ChatHeaderProps`
+3. `ChatMessageListProps`
+4. `ChatInputProps`
+
+For example, to create a custom chat input:
+
+```typescript
+import { ChatInputProps } from '../types/chat-ui.types';
+
+export function CustomChatInput({
+  onSendMessage,
+  isDisabled,
+  placeholder,
+  useWebSearch,
+  onToggleWebSearch
+}: ChatInputProps) {
+  // Your custom implementation
+}
+```
+
+### Using the Adapter
+
+Once you have your custom components, use the adapter to connect them:
+
+```typescript
+import { ChatAdapter } from '@/features/chat/adapters/ChatAdapter';
+import CustomChatContainer from './CustomChatContainer';
+import CustomChatHeader from './CustomChatHeader';
+import CustomChatMessageList from './CustomChatMessageList';
+import CustomChatInput from './CustomChatInput';
+
+export function CustomChat() {
+  return (
+    <ChatAdapter
+      components={{
+        ChatContainer: CustomChatContainer,
+        ChatHeader: CustomChatHeader,
+        ChatMessageList: CustomChatMessageList,
+        ChatInput: CustomChatInput
+      }}
+    />
+  );
+}
+```
+
+### Direct Context Usage
+
+For advanced use cases, you can use the context directly:
+
+```typescript
+import { useChatContext } from '@/features/chat/context/ChatContext';
+
+function MyCustomComponent() {
+  const { messages, sendMessage, isLoading } = useChatContext();
+  // Your custom implementation
+}
+```
+
+## Backend Integration
+
+The UI communicates with the backend through:
+
+1. **REST API Endpoints**:
+   - `/api/chat/query`: Send chat messages
+   - `/api/chat/save`: Save chat sessions
+   - `/api/chat/sessions/`: Manage sessions
+
+2. **Event Streaming**:
+   - Uses EventSource for real-time response streaming
+   - Handles different event types (thinking, chunks, done)
+
+To integrate with a different backend:
+
+1. Update the `BackendApiService` configuration
+2. Ensure the backend supports the expected event format for streaming
+3. Implement the required API endpoints or adapt the UI to your backend's API
+
+## Advanced Features
+
+### Web Search Integration
+
+The chat UI supports toggling web search functionality:
+
+```typescript
+// In ChatInput
+<button onClick={onToggleWebSearch}>
+  {useWebSearch ? 'Disable Web Search' : 'Enable Web Search'}
+</button>
+```
+
+The `useWebSearch` flag is passed to the backend API.
+
+### Chat Session Persistence
+
+Chat sessions are automatically saved:
+- After message exchanges
+- Before starting a new chat
+- When navigating away
+
+The title is derived from the first user message or can be manually set.
+
+## Default Components
+
+Default implementations are provided in `ui/features/chat/components/default/`:
+
+- `DefaultChatContainer.tsx`: Basic layout container
+- `DefaultChatHeader.tsx`: Header with title editing and controls
+- `DefaultChatMessageList.tsx`: Message rendering with Markdown support
+- `DefaultChatInput.tsx`: Input field with web search toggle
+
+These components can be used as-is, extended, or replaced with custom ones.
+
+## Getting Started
+
+1. Import the necessary components
+2. Set up the adapter with your components (or use the defaults)
+3. Render the adapter in your application
+
+```typescript
+import { ChatAdapter } from '@/features/chat/adapters/ChatAdapter';
+import { DefaultChatContainer, DefaultChatHeader, DefaultChatMessageList, DefaultChatInput } 
+  from '@/features/chat/components/default';
+
+export default function ChatPage() {
+  return (
+    <ChatAdapter
+      components={{
+        ChatContainer: DefaultChatContainer,
+        ChatHeader: DefaultChatHeader,
+        ChatMessageList: DefaultChatMessageList,
+        ChatInput: DefaultChatInput
+      }}
+    />
+  );
+}
+```
+
+## Summary
+
+The Kevin Chat UI provides a flexible, component-based architecture that:
+- Separates state management from UI rendering
+- Allows easy customization of UI components
+- Handles complex streaming interactions
+- Provides session persistence
+- Supports advanced features like web search
+
+This design makes it easy to adapt the UI to different requirements while reusing the core business logic.
