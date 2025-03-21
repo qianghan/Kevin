@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import ChatInterface from '@/components/chat/ChatInterface';
+import { ChatInterface } from '@/features/chat/ChatInterface';
 import { ObjectId } from 'mongodb';
 import { ChatMessage } from '@/models/ChatSession';
 import { useChat } from '@/hooks/useChat';
@@ -120,8 +120,7 @@ export default function ChatPage() {
       <main className="flex-1 overflow-hidden flex justify-center">
         <div className="max-w-4xl w-full h-full flex flex-col px-4">
           <ChatInterface 
-            sessionId={sessionId}
-            onNewSession={handleNewSession}
+            initialConversationId={sessionId}
             initialMessages={initialMessages}
           />
         </div>
