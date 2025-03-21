@@ -250,6 +250,13 @@ export class ChatService {
         // Create a default title from the first user message if none provided
         const derivedTitle = title || this.deriveTitle(messages);
         
+        console.log('Attempting to save conversation:', {
+          conversationId,
+          title: derivedTitle,
+          messageCount: messages.length,
+          contextSummaryLength: contextSummary?.length || 0
+        });
+        
         const response = await apiClient.post('/api/chat/save', {
           conversation_id: conversationId,
           title: derivedTitle,
@@ -257,16 +264,28 @@ export class ChatService {
           context_summary: contextSummary || ''
         });
         
-        console.log('Conversation saved successfully', {
-          timestamp: new Date().toISOString(),
-          conversationId,
-          messagesCount: messages.length,
+        console.log('Save conversation response:', {
           status: response.status,
+          data: response.data,
+          conversationId,
           title: derivedTitle
         });
         
         return response.status === 200;
       } catch (error: any) {
+        // Log detailed error information
+        console.error('Error saving conversation:', {
+          error: error instanceof Error ? error.message : String(error),
+          status: error.response?.status,
+          data: error.response?.data,
+          conversationId,
+          messageCount: messages.length,
+          requestHeaders: error.config?.headers ? JSON.stringify(error.config.headers).substring(0, 200) : 'No headers',
+          requestUrl: error.config?.url,
+          requestMethod: error.config?.method,
+          stack: error.stack ? error.stack.split('\n').slice(0, 5).join('\n') : 'No stack trace'
+        });
+        
         // Check if the error is a version conflict error
         const errorMsg = error?.message || String(error);
         const isVersionError = 
