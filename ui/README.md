@@ -671,6 +671,77 @@ export default function ChatPage() {
 }
 ```
 
+## Deploying to Vercel
+
+The Kevin Chat UI is optimized for deployment on Vercel. Follow these steps to deploy your application:
+
+### 1. Configure Environment Variables
+
+Set up the following environment variables in your Vercel project:
+
+- `MONGODB_URI`: Connection string for MongoDB (MongoDB Atlas recommended for Vercel)
+- `NEXTAUTH_URL`: The canonical URL of your site (e.g., https://your-app.vercel.app)
+- `NEXTAUTH_SECRET`: Secret for NextAuth.js (generate with `openssl rand -base64 32`)
+- `NEXT_PUBLIC_KEVIN_API_URL`: URL to your backend API (if separate from this UI)
+
+See `.env.example` for a complete list of environment variables.
+
+### 2. Database Configuration
+
+For best performance on Vercel:
+
+- Use MongoDB Atlas for your database
+- Configure proper connection pooling (already set in the code)
+- Ensure your database is in the same region as your Vercel deployment
+
+### 3. Deploy on Vercel
+
+Deploy the application using one of these methods:
+
+**Using Vercel CLI:**
+
+```bash
+# Install Vercel CLI
+npm install -g vercel
+
+# Deploy
+vercel
+```
+
+**Using GitHub Integration:**
+
+1. Push your code to GitHub
+2. Import the repository in the Vercel dashboard
+3. Configure your project settings
+4. Deploy
+
+### 4. Vercel-Specific Optimizations
+
+The codebase includes several optimizations for Vercel:
+
+- `vercel.json`: Configuration for Vercel deployment
+- Database connection pooling suitable for serverless environments
+- Timeout handling for API routes
+- Proper caching headers for better performance
+- Standalone output mode in Next.js config
+
+### 5. Monitoring and Logs
+
+Monitor your application's performance using:
+
+- Vercel Analytics dashboard
+- MongoDB Atlas monitoring tools
+- Custom logs implemented in the application
+
+### 6. Scaling Considerations
+
+For high traffic applications:
+
+- Consider using Vercel Enterprise for dedicated instances
+- Implement a caching layer with Redis (requires additional setup)
+- Use MongoDB Atlas with proper scaling configuration
+- Consider using Edge Functions for low-latency responses
+
 ## Summary
 
 The Kevin Chat UI provides a flexible, component-based architecture that:
