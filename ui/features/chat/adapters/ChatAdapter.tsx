@@ -68,20 +68,20 @@ function ChatAdapterInner({
   console.log('ChatAdapter - conversationId:', conversationId);
   console.log('ChatAdapter - web search:', useWebSearch);
 
-  // Auto-save when messages change
-  useEffect(() => {
-    if (messages.length > 0 && conversationId) {
-      console.log('Auto-saving chat after message change');
-      saveChatSession().then(success => {
-        console.log('Auto-save result:', success);
-      });
-    }
-  }, [messages, conversationId, saveChatSession]);
-
   // Derive a title from the first user message or use "New Chat"
   const title = messages.length > 0 && messages[0].role === 'user'
     ? messages[0].content.substring(0, 30) + (messages[0].content.length > 30 ? '...' : '')
     : 'New Chat';
+
+  // Auto-save when messages change
+  useEffect(() => {
+    if (messages.length > 0 && conversationId) {
+      console.log('Auto-saving chat after message change');
+      saveChatSession(title).then(success => {
+        console.log('Auto-save result:', success);
+      });
+    }
+  }, [messages, conversationId, saveChatSession, title]);
 
   const { ChatContainer, ChatHeader, ChatMessageList, ChatInput } = components;
 
@@ -92,14 +92,14 @@ function ChatAdapterInner({
       return false;
     }
     
-    const success = await saveChatSession();
+    const success = await saveChatSession(title);
     if (success) {
       alert("Chat session saved successfully!");
     } else {
       alert("Failed to save chat session.");
     }
     return success;
-  }, [messages.length, saveChatSession]);
+  }, [messages.length, saveChatSession, title]);
 
   // Render the UI components with appropriate props
   return (

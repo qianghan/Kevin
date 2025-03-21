@@ -14,7 +14,7 @@ interface ChatContextType {
   startNewChat: () => void;
   clearChat: () => void;
   updateTitle: (title: string) => Promise<boolean>;
-  saveChatSession: () => Promise<boolean>;
+  saveChatSession: (title?: string) => Promise<boolean>;
   conversationId?: string;
   getRandomSampleQuestions: () => Array<{
     text: string;
@@ -574,10 +574,11 @@ export function ChatProvider({
   }, [isLoading, getStreamUrl, thinkingSteps, conversationId]);
   
   // Save chat session
-  const saveChatSession = useCallback(async (): Promise<boolean> => {
+  const saveChatSession = useCallback(async (title?: string): Promise<boolean> => {
     console.log('Attempting to save chat session:', { 
       conversationId, 
-      messageCount: messages.length 
+      messageCount: messages.length,
+      title
     });
     
     // Generate a conversation ID if one doesn't exist
@@ -610,15 +611,22 @@ export function ChatProvider({
       }
       
       // Now proceed with saving
+      // Use provided title or calculate a default title if not provided
+      const chatTitle = title || (messages.length > 0 && messages[0].role === 'user' 
+        ? messages[0].content.substring(0, 30) + (messages[0].content.length > 30 ? '...' : '')
+        : 'New Chat');
+        
       const payload = {
         conversation_id: currentConversationId,
         messages,
+        title: chatTitle,
         context_summary: '' // Include this if your API expects it
       };
       
       console.log('Save payload:', {
         conversation_id: currentConversationId,
         messageCount: messages.length,
+        title: chatTitle,
         firstMessageSample: messages.length > 0 ? 
           `${messages[0].role}: ${messages[0].content.substring(0, 30)}...` : 'none'
       });
@@ -645,6 +653,7 @@ export function ChatProvider({
       const result = await response.json();
       console.log('Chat session saved successfully', {
         conversationId: currentConversationId,
+        title: chatTitle,
         status: response.status,
         result
       });
@@ -661,7 +670,12 @@ export function ChatProvider({
     if (messages.length > 0 && conversationId) {
       console.log('Saving current chat before starting new one');
       try {
-        const saved = await saveChatSession();
+        // Calculate a title from the first user message
+        const chatTitle = messages.length > 0 && messages[0].role === 'user'
+          ? messages[0].content.substring(0, 30) + (messages[0].content.length > 30 ? '...' : '')
+          : 'New Chat';
+          
+        const saved = await saveChatSession(chatTitle);
         console.log('Previous chat save result:', saved);
       } catch (error) {
         console.error('Error saving previous chat:', error);
