@@ -97,10 +97,15 @@ update_progress() {
 check_directory() {
     log "INFO" "Checking if script is run from project root..."
     
-    if [ ! -d "ui" ] || [ ! -d "backend" ]; then
+    if [ ! -d "ui" ]; then
         log "ERROR" "This script must be run from the Kevin project root directory!"
-        log "ERROR" "Please make sure both 'ui' and 'backend' directories exist."
+        log "ERROR" "Please make sure the 'ui' directory exists."
         exit 1
+    fi
+    
+    # Backend directory is optional, so only warn if it doesn't exist
+    if [ ! -d "backend" ]; then
+        log "WARNING" "Backend directory not found. Will skip backend setup."
     fi
     
     log "SUCCESS" "Directory structure looks good!"
@@ -113,8 +118,11 @@ command_exists() {
 
 # Check and install system dependencies
 install_system_dependencies() {
-    check_status 1 && return 0
+    check_status 1 && { log "INFO" "System dependencies already installed. Skipping."; return 0; }
+    
     log "INFO" "Checking system dependencies..."
+    
+    check_directory
     
     # Check OS
     if [[ "$OSTYPE" == "darwin"* ]]; then
@@ -134,6 +142,12 @@ install_system_dependencies() {
             open -a Docker
             # Wait for Docker to start
             sleep 10
+            
+            # Check if Docker started correctly
+            if ! docker info > /dev/null 2>&1; then
+                log "ERROR" "Failed to start Docker. Please start it manually and try again."
+                exit 1
+            fi
         fi
         
     elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
@@ -161,15 +175,22 @@ install_system_dependencies() {
             sudo usermod -aG docker $USER
             rm get-docker.sh
             log "WARNING" "You may need to log out and back in for Docker group changes to take effect."
+            log "WARNING" "If the script fails after this point, please log out, log back in, and run the script again."
         fi
         
         # Start Docker if not running
         if ! docker info > /dev/null 2>&1; then
             log "INFO" "Starting Docker..."
             sudo systemctl start docker
+            
+            # Check if Docker started correctly
+            if ! docker info > /dev/null 2>&1; then
+                log "ERROR" "Failed to start Docker. Please check Docker installation and try again."
+                exit 1
+            fi
         fi
     else
-        log "WARNING" "Unsupported OS. You may need to install dependencies manually."
+        log "WARNING" "Unsupported OS: $OSTYPE. You may need to install dependencies manually."
     fi
     
     log "SUCCESS" "System dependencies installed!"
@@ -178,7 +199,8 @@ install_system_dependencies() {
 
 # Setup Python virtual environment
 setup_python_env() {
-    check_status 2 && return 0
+    check_status 2 && { log "INFO" "Python environment already set up. Skipping."; return 0; }
+    
     log "INFO" "Setting up Python virtual environment..."
     
     # Check if pyenv is installed, otherwise use system Python
@@ -203,18 +225,30 @@ setup_python_env() {
                 
                 # Add pyenv to PATH for the current session
                 export PATH="$HOME/.pyenv/bin:$PATH"
-                eval "$(pyenv init --path)"
-                eval "$(pyenv init -)"
+                eval "$(pyenv init --path)" || true
+                eval "$(pyenv init -)" || true
                 
-                # Install required Python version
-                pyenv install $PYTHON_VERSION
-                pyenv local $PYTHON_VERSION
-                PYTHON_CMD="$(pyenv which python)"
+                # Check if pyenv is now available
+                if ! command_exists pyenv; then
+                    log "WARNING" "Failed to initialize pyenv. Will try to use system Python instead."
+                    PYTHON_CMD="python3"
+                else
+                    # Install required Python version
+                    pyenv install $PYTHON_VERSION
+                    pyenv local $PYTHON_VERSION
+                    PYTHON_CMD="$(pyenv which python)"
+                fi
             fi
         else
             log "ERROR" "Python not found. Please install Python $PYTHON_VERSION."
             exit 1
         fi
+    fi
+    
+    # Verify we have a valid Python command
+    if ! command_exists "$PYTHON_CMD"; then
+        log "ERROR" "Failed to find a valid Python command. Please install Python $PYTHON_VERSION."
+        exit 1
     fi
     
     # Create and activate virtual environment
@@ -223,6 +257,12 @@ setup_python_env() {
     
     # Activate the virtual environment
     source $VENV_DIR/bin/activate
+    
+    # Check if virtual environment was activated
+    if [ -z "$VIRTUAL_ENV" ]; then
+        log "ERROR" "Failed to activate virtual environment. Please check Python installation."
+        exit 1
+    fi
     
     # Upgrade pip
     log "INFO" "Upgrading pip..."
@@ -234,23 +274,39 @@ setup_python_env() {
 
 # Install backend dependencies
 install_backend_dependencies() {
-    check_status 3 && return 0
+    check_status 3 && { log "INFO" "Backend dependencies already installed. Skipping."; return 0; }
+    
+    # Skip if no backend directory
+    if [ ! -d "$BACKEND_DIR" ]; then
+        log "INFO" "No backend directory found. Skipping backend dependencies."
+        echo "STEP3" >&3
+        return 0
+    }
+    
     log "INFO" "Installing backend dependencies..."
     
     # Activate virtual environment if not already activated
     if [ -z "$VIRTUAL_ENV" ]; then
         source $VENV_DIR/bin/activate
+        
+        # Check if virtual environment was activated
+        if [ -z "$VIRTUAL_ENV" ]; then
+            log "ERROR" "Failed to activate virtual environment. Please check Python installation."
+            exit 1
+        fi
     fi
     
     # Install backend requirements
     cd $BACKEND_DIR
     if [ -f "requirements.txt" ]; then
+        log "INFO" "Installing dependencies from requirements.txt..."
         pip install -r requirements.txt
     else
         log "WARNING" "No requirements.txt found in the backend directory!"
     fi
     
     # Install additional packages that might be needed
+    log "INFO" "Installing common backend packages (FastAPI, uvicorn)..."
     pip install fastapi uvicorn
 
     cd $KEVIN_DIR
@@ -260,15 +316,27 @@ install_backend_dependencies() {
 
 # Install frontend dependencies
 install_frontend_dependencies() {
-    check_status 4 && return 0
+    check_status 4 && { log "INFO" "Frontend dependencies already installed. Skipping."; return 0; }
+    
     log "INFO" "Installing frontend dependencies..."
     
     # Check Node.js version
     if command_exists node; then
         NODE_V=$(node -v | cut -d'v' -f2)
         log "INFO" "Found Node.js $NODE_V"
+        
+        # Compare versions (simple check)
+        if [[ "${NODE_V%%.*}" -lt "${NODE_VERSION%%.*}" ]]; then
+            log "WARNING" "Node.js version $NODE_V may be too old. Recommended: $NODE_VERSION+"
+        fi
     else
         log "ERROR" "Node.js not found. Please install Node.js $NODE_VERSION or higher."
+        exit 1
+    fi
+    
+    # Check if npm exists
+    if ! command_exists npm; then
+        log "ERROR" "npm not found. Please install npm."
         exit 1
     fi
     
@@ -285,8 +353,15 @@ install_frontend_dependencies() {
 
 # Setup MongoDB with Docker
 setup_mongodb() {
-    check_status 5 && return 0
+    check_status 5 && { log "INFO" "MongoDB already set up. Skipping."; return 0; }
+    
     log "INFO" "Setting up MongoDB with Docker..."
+    
+    # Check if Docker is running
+    if ! docker info > /dev/null 2>&1; then
+        log "ERROR" "Docker is not running. Please start Docker and try again."
+        exit 1
+    fi
     
     # Check if MongoDB container already exists
     if docker ps -a | grep -q kevin-ui-mongodb; then
@@ -295,6 +370,12 @@ setup_mongodb() {
     else
         log "INFO" "Creating MongoDB container..."
         cd $UI_DIR/db
+        
+        # Check if docker-compose.yml exists
+        if [ ! -f "docker-compose.yml" ]; then
+            log "ERROR" "docker-compose.yml not found in $UI_DIR/db directory!"
+            exit 1
+        fi
         
         # Create the data directory if it doesn't exist
         mkdir -p data
@@ -311,8 +392,15 @@ setup_mongodb() {
     sleep 5
     
     # Test MongoDB connection
+    log "INFO" "Testing MongoDB connection..."
     cd $UI_DIR
-    npm run db:test
+    
+    # Check if db:test script exists in package.json
+    if grep -q "\"db:test\"" package.json; then
+        npm run db:test
+    else
+        log "WARNING" "No db:test script found in package.json. Skipping connection test."
+    fi
     
     # Return to project root
     cd $KEVIN_DIR
@@ -322,23 +410,29 @@ setup_mongodb() {
 
 # Create local environment files
 create_env_files() {
-    check_status 6 && return 0
+    check_status 6 && { log "INFO" "Environment files already created. Skipping."; return 0; }
+    
     log "INFO" "Setting up environment files..."
     
     # Create .env.local for UI
     if [ ! -f "$UI_DIR/.env.local" ]; then
         log "INFO" "Creating .env.local for UI..."
+        
+        # Generate a secure random secret for NextAuth
+        NEXTAUTH_SECRET=$(openssl rand -base64 32)
+        
         cat > "$UI_DIR/.env.local" << EOL
 # MongoDB Connection
 MONGODB_URI=mongodb://kevinuser:kevin_password@localhost:27017/kevindb?authSource=admin
 
 # NextAuth Configuration
 NEXTAUTH_URL=http://localhost:3000
-NEXTAUTH_SECRET=supersecretkeyfornextauth
+NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
 
 # Feature Flags
 ENABLE_WEB_SEARCH=true
 EOL
+        log "INFO" "Created .env.local with secure random NEXTAUTH_SECRET"
     else
         log "INFO" ".env.local already exists for UI. Skipping."
     fi
@@ -362,119 +456,199 @@ EOL
 
 # Create the start-kevin.sh script
 create_start_script() {
-    check_status 7 && return 0
+    check_status 7 && { log "INFO" "Start script already created. Skipping."; return 0; }
+    
     log "INFO" "Creating start-kevin.sh script..."
+    
+    # Check if file already exists
+    if [ -f "$KEVIN_DIR/start-kevin.sh" ]; then
+        # Backup the existing file
+        log "INFO" "Backing up existing start-kevin.sh file..."
+        mv "$KEVIN_DIR/start-kevin.sh" "$KEVIN_DIR/start-kevin.sh.bak"
+    fi
     
     cat > "$KEVIN_DIR/start-kevin.sh" << 'EOL'
 #!/bin/bash
 
-# Colors for output
-BLUE='\033[0;34m'
-GREEN='\033[0;32m'
-RED='\033[0;31m'
-NC='\033[0m' # No Color
+# =====================================================================
+# Kevin AI Startup Script with Service Logging
+# =====================================================================
+# Features:
+# - Real-time combined service logs with color coding
+# - Service-specific log prefixes
+# - Log preservation in separate files
+# - Full service visibility
+# =====================================================================
 
-# Log functions
-log_info() {
-    echo -e "${BLUE}[INFO]${NC} $1"
+# Configuration
+LOG_DIR="logs"
+mkdir -p "$LOG_DIR"
+
+# Reset log files
+> "$LOG_DIR/mongodb.log"
+> "$LOG_DIR/frontend.log"
+> "$LOG_DIR/backend.log"
+
+# Color definitions
+COLOR_RESET="\033[0m"
+COLOR_BOLD="\033[1m"
+COLOR_RED="\033[31m"
+COLOR_GREEN="\033[32m"
+COLOR_YELLOW="\033[33m"
+COLOR_BLUE="\033[34m"
+COLOR_PURPLE="\033[35m"
+COLOR_CYAN="\033[36m"
+COLOR_WHITE="\033[37m"
+
+# Print colored message with timestamp
+print_log() {
+    local color=$1
+    local prefix=$2
+    local message=$3
+    local timestamp=$(date +"%Y-%m-%d %H:%M:%S")
+    echo -e "${COLOR_BOLD}${color}[${prefix}] ${timestamp} ${message}${COLOR_RESET}"
 }
 
-log_success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $1"
-}
-
-log_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
-}
-
-# Start MongoDB
+# Service management functions
 start_mongodb() {
-    log_info "Starting MongoDB..."
-    cd ui/db && docker-compose up -d
-    sleep 2
-    cd ../..
-}
-
-# Start frontend (UI)
-start_frontend() {
-    log_info "Starting frontend..."
-    cd ui
-    npm run dev &
-    FRONTEND_PID=$!
-    cd ..
-    log_success "Frontend started with PID: $FRONTEND_PID"
-}
-
-# Start backend if it exists
-start_backend() {
-    if [ -d "backend" ]; then
-        log_info "Starting backend..."
-        cd backend
-        source ../.venv/bin/activate
-        if [ -f "main.py" ]; then
-            uvicorn main:app --host 0.0.0.0 --port 8000 &
-            BACKEND_PID=$!
-            log_success "Backend started with PID: $BACKEND_PID"
-        else
-            # Try to find the right file to start
-            if [ -f "app.py" ]; then
-                uvicorn app:app --host 0.0.0.0 --port 8000 &
-                BACKEND_PID=$!
-                log_success "Backend started with PID: $BACKEND_PID"
-            else
-                log_error "Couldn't find a valid backend entry point (main.py or app.py)"
-            fi
-        fi
-        cd ..
+    if ! docker ps | grep -q kevin-ui-mongodb; then
+        print_log "$COLOR_PURPLE" "MONGODB" "Starting MongoDB..."
+        cd ui/db && docker-compose up -d
+        sleep 5
+        cd ../..
+        print_log "$COLOR_PURPLE" "MONGODB" "MongoDB started"
     else
-        log_info "No backend directory found. Skipping backend startup."
+        print_log "$COLOR_PURPLE" "MONGODB" "MongoDB already running"
     fi
 }
 
-# Function to properly shut down on CTRL+C
+start_frontend() {
+    print_log "$COLOR_CYAN" "FRONTEND" "Starting Frontend..."
+    cd ui
+    npm run dev > "../$LOG_DIR/frontend.log" 2>&1 &
+    FRONTEND_PID=$!
+    cd ..
+    print_log "$COLOR_CYAN" "FRONTEND" "Frontend started with PID: $FRONTEND_PID"
+}
+
+start_backend() {
+    if [ -d "backend" ]; then
+        print_log "$COLOR_YELLOW" "BACKEND" "Starting Backend..."
+        cd backend
+        if [ -d "../.venv" ]; then
+            source ../.venv/bin/activate
+        fi
+        
+        if [ -f "main.py" ]; then
+            uvicorn main:app --host 0.0.0.0 --port 8000 > "../$LOG_DIR/backend.log" 2>&1 &
+            BACKEND_PID=$!
+            print_log "$COLOR_YELLOW" "BACKEND" "Backend started with PID: $BACKEND_PID"
+        elif [ -f "app.py" ]; then
+            uvicorn app:app --host 0.0.0.0 --port 8000 > "../$LOG_DIR/backend.log" 2>&1 &
+            BACKEND_PID=$!
+            print_log "$COLOR_YELLOW" "BACKEND" "Backend started with PID: $BACKEND_PID"
+        else
+            print_log "$COLOR_RED" "BACKEND" "Cannot find main.py or app.py. Backend not started."
+        fi
+        
+        cd ..
+    else
+        print_log "$COLOR_YELLOW" "BACKEND" "Backend directory not found. Skipping."
+    fi
+}
+
+# Follow logs from files
+follow_logs() {
+    print_log "$COLOR_BLUE" "SYSTEM" "Starting log streaming..."
+    
+    # Start tailing logs in background
+    tail -f "$LOG_DIR/frontend.log" | sed "s/^/${COLOR_CYAN}[FRONTEND] /" &
+    FRONTEND_TAIL_PID=$!
+    
+    if [ -d "backend" ]; then
+        tail -f "$LOG_DIR/backend.log" | sed "s/^/${COLOR_YELLOW}[BACKEND] /" &
+        BACKEND_TAIL_PID=$!
+    fi
+    
+    # Add MongoDB logs if needed
+    docker logs -f kevin-ui-mongodb 2>&1 | sed "s/^/${COLOR_PURPLE}[MONGODB] /" &
+    MONGO_TAIL_PID=$!
+}
+
+# Shutdown handler
 graceful_shutdown() {
     echo ""
-    log_info "Shutting down services..."
+    print_log "$COLOR_BLUE" "SYSTEM" "Shutting down services..."
     
+    # Kill log tails
+    kill $FRONTEND_TAIL_PID $BACKEND_TAIL_PID $MONGO_TAIL_PID 2>/dev/null || true
+    
+    # Kill services
     if [ ! -z "$FRONTEND_PID" ]; then
+        print_log "$COLOR_CYAN" "FRONTEND" "Stopping frontend (PID: $FRONTEND_PID)..."
         kill $FRONTEND_PID 2>/dev/null || true
     fi
     
     if [ ! -z "$BACKEND_PID" ]; then
+        print_log "$COLOR_YELLOW" "BACKEND" "Stopping backend (PID: $BACKEND_PID)..."
         kill $BACKEND_PID 2>/dev/null || true
     fi
     
-    log_info "Stopping MongoDB..."
-    cd ui/db && docker-compose down && cd ../..
+    print_log "$COLOR_PURPLE" "MONGODB" "Stopping MongoDB..."
+    cd ui/db && docker-compose down
+    cd ../..
     
-    log_success "All services stopped. Goodbye!"
+    # Find and kill any remaining child processes
+    pkill -P $$ 2>/dev/null || true
+    
+    print_log "$COLOR_GREEN" "SYSTEM" "All services stopped"
     exit 0
 }
 
-# Trap CTRL+C and other signals
+# Set up graceful shutdown
 trap graceful_shutdown INT TERM
 
 # Start all services
+print_log "$COLOR_BLUE" "SYSTEM" "Starting Kevin AI services..."
 start_mongodb
 start_frontend
 start_backend
 
-# Print access URLs
-log_success "Services started successfully!"
-echo ""
-echo -e "${GREEN}Frontend:${NC} http://localhost:3000"
-if [ -d "backend" ]; then
-    echo -e "${GREEN}Backend API:${NC} http://localhost:8000"
-    echo -e "${GREEN}Swagger Docs:${NC} http://localhost:8000/docs"
+# Print service status
+echo -e "\n${COLOR_BOLD}${COLOR_WHITE}Service Status:${COLOR_RESET}"
+
+# Check MongoDB
+if docker ps | grep -q kevin-ui-mongodb; then
+    echo -e "${COLOR_PURPLE}●${COLOR_RESET} ${COLOR_BOLD}MONGODB${COLOR_RESET}: ${COLOR_GREEN}RUNNING${COLOR_RESET}"
+else
+    echo -e "${COLOR_PURPLE}●${COLOR_RESET} ${COLOR_BOLD}MONGODB${COLOR_RESET}: ${COLOR_RED}NOT RUNNING${COLOR_RESET}"
 fi
-echo -e "${GREEN}MongoDB:${NC} mongodb://localhost:27017"
-echo ""
-log_info "Press Ctrl+C to stop all services"
+
+# Check Frontend
+if [ ! -z "$FRONTEND_PID" ] && kill -0 $FRONTEND_PID 2>/dev/null; then
+    echo -e "${COLOR_CYAN}●${COLOR_RESET} ${COLOR_BOLD}FRONTEND${COLOR_RESET}: ${COLOR_GREEN}RUNNING (PID: $FRONTEND_PID)${COLOR_RESET}"
+else
+    echo -e "${COLOR_CYAN}●${COLOR_RESET} ${COLOR_BOLD}FRONTEND${COLOR_RESET}: ${COLOR_RED}NOT RUNNING${COLOR_RESET}"
+fi
+
+# Check Backend
+if [ ! -z "$BACKEND_PID" ] && kill -0 $BACKEND_PID 2>/dev/null; then
+    echo -e "${COLOR_YELLOW}●${COLOR_RESET} ${COLOR_BOLD}BACKEND${COLOR_RESET}: ${COLOR_GREEN}RUNNING (PID: $BACKEND_PID)${COLOR_RESET}"
+elif [ -d "backend" ]; then
+    echo -e "${COLOR_YELLOW}●${COLOR_RESET} ${COLOR_BOLD}BACKEND${COLOR_RESET}: ${COLOR_RED}NOT RUNNING${COLOR_RESET}"
+fi
+
+echo -e "\n${COLOR_BOLD}${COLOR_WHITE}Access URLs:${COLOR_RESET}"
+echo -e "Frontend:  ${COLOR_CYAN}http://localhost:3000${COLOR_RESET}"
+[ -d "backend" ] && echo -e "Backend:   ${COLOR_YELLOW}http://localhost:8000${COLOR_RESET}"
+echo -e "MongoDB:   ${COLOR_PURPLE}mongodb://localhost:27017${COLOR_RESET}"
+echo -e "\n${COLOR_BOLD}${COLOR_WHITE}Press Ctrl+C to stop all services${COLOR_RESET}"
+
+# Start following logs
+follow_logs
 
 # Keep script running
-while true; do
-    sleep 1
-done
+wait
 EOL
 
     # Make script executable
@@ -484,20 +658,143 @@ EOL
     echo "STEP7" >&3
 }
 
-# Main execution with error handling
-trap 'handle_error $? "$BASH_COMMAND"' ERR
-trap cleanup EXIT
+# Final configuration
+final_config() {
+    check_status 8 && { log "INFO" "Final configuration already completed. Skipping."; return 0; }
+    
+    log "INFO" "Performing final configuration checks..."
+    
+    # Check if MongoDB is running
+    if ! docker ps | grep -q kevin-ui-mongodb; then
+        log "WARNING" "MongoDB is not running. Starting it..."
+        cd $UI_DIR/db && docker-compose up -d
+        cd $KEVIN_DIR
+        sleep 3
+    fi
+    
+    # Create README if it doesn't exist
+    if [ ! -f "$KEVIN_DIR/README_INSTALLATION.md" ]; then
+        log "INFO" "Creating installation README..."
+        cat > "$KEVIN_DIR/README_INSTALLATION.md" << EOL
+# Kevin AI Installation Guide
 
-(
-    update_progress 1 && install_system_dependencies
-    update_progress 2 && setup_python_env
-    update_progress 3 && install_backend_dependencies
-    update_progress 4 && install_frontend_dependencies
-    update_progress 5 && setup_mongodb
-    update_progress 6 && create_env_files
-    update_progress 7 && create_start_script
-    update_progress 8 && final_config
-) 2>&1 | tee $ERROR_LOG
+This document provides information about the Kevin AI installation process and troubleshooting steps.
 
-echo -e "${GREEN}${BOLD}Installation completed successfully!${NC}"
-rm -f $STATUS_FILE 
+## System Requirements
+
+- **Operating System**: macOS or Linux
+- **Docker**: Required for MongoDB
+- **Node.js**: v${NODE_VERSION} or higher
+- **Python**: v${PYTHON_VERSION} or higher
+
+## Installation
+
+The installation process has been automated with the \`install-kevin.sh\` script. It performs the following steps:
+
+1. System dependency checks and installation
+2. Python virtual environment setup
+3. Backend dependencies installation
+4. Frontend dependencies installation
+5. MongoDB setup with Docker
+6. Environment file creation
+7. Start script generation
+
+## Usage
+
+After installation, you can start all services using:
+
+\`\`\`bash
+./start-kevin.sh
+\`\`\`
+
+This will start:
+- MongoDB database
+- Next.js frontend
+- FastAPI backend (if available)
+
+## Troubleshooting
+
+### Docker Issues
+
+If MongoDB fails to start:
+- Ensure Docker is running
+- Check logs: \`docker logs kevin-ui-mongodb\`
+- Verify Docker permissions (on Linux, you may need to add your user to the docker group)
+
+### Python Issues
+
+If backend fails to start:
+- Check virtual environment: \`source .venv/bin/activate\`
+- Verify Python version: \`python --version\`
+- Check backend dependencies: \`pip list\`
+
+### Node.js Issues
+
+If frontend fails to start:
+- Verify Node.js version: \`node --version\`
+- Check npm: \`npm --version\`
+- Reinstall dependencies: \`cd ui && npm install\`
+
+## Additional Information
+
+The installation script creates a resumable installation process. If installation fails at any point, 
+you can simply run the script again and it will continue from where it left off.
+
+For more information about the Kevin AI architecture, refer to the main README.md file.
+EOL
+        log "SUCCESS" "Installation README created!"
+    fi
+    
+    log "SUCCESS" "Final configuration completed!"
+    echo "STEP8" >&3
+}
+
+# Pre-execution checks
+check_bash_version() {
+    # Check if bash version is at least 4.0 (for associative arrays)
+    if [[ ${BASH_VERSINFO[0]} -lt 4 ]]; then
+        echo -e "${RED}${BOLD}Error: This script requires Bash version 4.0 or higher.${NC}"
+        echo -e "${RED}${BOLD}Your current Bash version is ${BASH_VERSION}.${NC}"
+        echo -e "${YELLOW}Please upgrade bash or run this script with a newer bash binary.${NC}"
+        exit 1
+    fi
+}
+
+# Main execution
+main() {
+    echo -e "\n${BLUE}${BOLD}======== Kevin AI Installation ========${NC}\n"
+    
+    # Check bash version
+    check_bash_version
+    
+    # Set up error handling
+    trap 'handle_error $? "$BASH_COMMAND"' ERR
+    trap cleanup EXIT
+    
+    # Run installation steps
+    (
+        update_progress 1 && install_system_dependencies
+        update_progress 2 && setup_python_env
+        update_progress 3 && install_backend_dependencies
+        update_progress 4 && install_frontend_dependencies
+        update_progress 5 && setup_mongodb
+        update_progress 6 && create_env_files
+        update_progress 7 && create_start_script
+        update_progress 8 && final_config
+    ) 2>&1 | tee $ERROR_LOG
+    
+    # Check if all steps completed successfully
+    if grep -q "STEP8" $STATUS_FILE; then
+        echo -e "\n${GREEN}${BOLD}✅ Installation completed successfully!${NC}"
+        echo -e "\n${BLUE}${BOLD}To start Kevin AI, run:${NC}"
+        echo -e "    ${GREEN}./start-kevin.sh${NC}\n"
+        # Clean up status file on successful installation
+        rm -f $STATUS_FILE
+    else
+        echo -e "\n${YELLOW}${BOLD}⚠️ Installation incomplete.${NC}"
+        echo -e "Run the script again to continue installation.\n"
+    fi
+}
+
+# Run the main function
+main 
