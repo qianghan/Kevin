@@ -33,9 +33,11 @@ const nextConfig = {
     ];
   },
   
-  // Increase the serverless function payload size limit
+  // External packages for server components
+  serverExternalPackages: ['mongoose'],
+  
+  // Experimental features
   experimental: {
-    serverComponentsExternalPackages: ['mongoose'],
     largePageDataBytes: 512 * 1000, // 512KB
   },
 };

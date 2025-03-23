@@ -1,379 +1,438 @@
 #!/bin/bash
 
-# =====================================================================
-# Kevin AI Startup Script with Enhanced Visual Logging
-# =====================================================================
-# Features:
-# - Real-time combined service logs with distinctive color coding
-# - Service-specific log prefixes with background colors
-# - Visual separators between different services
-# - Emoji indicators for different log types
-# - Log preservation in separate files
-# - Keyboard shortcuts for operations (q = quit)
-# =====================================================================
+# Define color codes for prettier output
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+RED='\033[0;31m'
+CYAN='\033[0;36m'
+NC='\033[0m' # No Color
 
-# Configuration
-LOG_DIR="logs"
+# Default options
+ACTION="start"
+SERVICE="all"
+LOG_DIR="./logs"
+DEBUG=false
+
+# Create logs directory if it doesn't exist
 mkdir -p "$LOG_DIR"
 
-# Reset log files
-> "$LOG_DIR/mongodb.log"
-> "$LOG_DIR/frontend.log"
-> "$LOG_DIR/backend.log"
-
-# Color definitions - text colors
-COLOR_RESET="\033[0m"
-COLOR_BOLD="\033[1m"
-COLOR_RED="\033[31m"
-COLOR_GREEN="\033[32m"
-COLOR_YELLOW="\033[33m"
-COLOR_BLUE="\033[34m"
-COLOR_PURPLE="\033[35m"
-COLOR_CYAN="\033[36m"
-COLOR_WHITE="\033[37m"
-
-# Background colors for services
-BG_MONGODB="\033[45m"    # Purple background
-BG_FRONTEND="\033[46m"   # Cyan background
-BG_BACKEND="\033[43m"    # Yellow background
-BG_SYSTEM="\033[44m"     # Blue background
-BG_ERROR="\033[41m"      # Red background
-
-# Log indicators (emojis)
-EMOJI_INFO="ℹ️ "
-EMOJI_SUCCESS="✅ "
-EMOJI_WARNING="⚠️ "
-EMOJI_ERROR="❌ "
-EMOJI_MONGODB="🍃 "
-EMOJI_FRONTEND="🖥️ "
-EMOJI_BACKEND="⚙️ "
-EMOJI_SYSTEM="🔄 "
-
-# Print colored message with timestamp and service-specific styling
-print_log() {
-    local bg_color=$1
-    local fg_color=$2
-    local emoji=$3
-    local prefix=$4
-    local message=$5
-    local timestamp=$(date +"%Y-%m-%d %H:%M:%S")
-    echo -e "${bg_color}${COLOR_BOLD}${fg_color} ${emoji}[${prefix}] ${timestamp} ${message}${COLOR_RESET}"
+# Usage information
+show_help() {
+    echo -e "${CYAN}Kevin Application Management Script${NC}"
+    echo ""
+    echo -e "Usage: $0 [options]"
+    echo ""
+    echo -e "Options:"
+    echo -e "  -h, --help                 Show this help message"
+    echo -e "  -a, --action ACTION        Action to perform: ${GREEN}start${NC}, ${RED}stop${NC}, ${YELLOW}restart${NC}, ${RED}stopall${NC} (default: start)"
+    echo -e "  -s, --service SERVICE      Service to manage: ${BLUE}ui${NC}, ${BLUE}api${NC}, ${BLUE}db${NC}, ${BLUE}all${NC} (default: all)"
+    echo -e "  -l, --logs                 Show logs for running services"
+    echo -e "  -d, --debug                Enable debug output"
+    echo ""
+    echo -e "Examples:"
+    echo -e "  $0                         Start all services"
+    echo -e "  $0 -a stop -s db           Stop the MongoDB database"
+    echo -e "  $0 -a restart -s api       Restart the FastAPI backend"
+    echo -e "  $0 -a start -s ui          Start only the Next.js UI"
+    echo -e "  $0 -a stopall              Stop all services"
+    echo -e "  $0 -l                      Show logs for running services"
+    echo ""
 }
 
-# Print a separator line
-print_separator() {
-    local color=$1
-    local title=$2
-    echo -e "\n${color}${COLOR_BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${COLOR_RESET}"
-    if [ ! -z "$title" ]; then
-        echo -e "${color}${COLOR_BOLD}  ${title}  ${COLOR_RESET}"
-        echo -e "${color}${COLOR_BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${COLOR_RESET}"
-    fi
-}
+# Parse command-line options
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -h|--help)
+            show_help
+            exit 0
+            ;;
+        -a|--action)
+            ACTION="$2"
+            shift 2
+            ;;
+        -s|--service)
+            SERVICE="$2"
+            shift 2
+            ;;
+        -l|--logs)
+            ACTION="logs"
+            shift
+            ;;
+        -d|--debug)
+            DEBUG=true
+            shift
+            ;;
+        *)
+            echo -e "${RED}Unknown option: $1${NC}"
+            show_help
+            exit 1
+            ;;
+    esac
+done
 
-# Service management functions
-start_mongodb() {
-    if ! docker ps | grep -q kevin-ui-mongodb; then
-        print_log "$BG_MONGODB" "$COLOR_WHITE" "$EMOJI_MONGODB" "MONGODB" "Starting MongoDB..."
-        cd ui/db && docker-compose up -d
-        sleep 5
-        cd ../..
-        print_log "$BG_MONGODB" "$COLOR_WHITE" "$EMOJI_SUCCESS" "MONGODB" "MongoDB started successfully"
+# Validate action
+if [[ ! "$ACTION" =~ ^(start|stop|restart|logs|stopall)$ ]]; then
+    echo -e "${RED}Invalid action: $ACTION${NC}"
+    show_help
+    exit 1
+fi
+
+# Validate service
+if [[ ! "$SERVICE" =~ ^(ui|api|db|all)$ ]]; then
+    echo -e "${RED}Invalid service: $SERVICE${NC}"
+    show_help
+    exit 1
+fi
+
+# Debug information
+if [ "$DEBUG" = true ]; then
+    echo -e "${YELLOW}Debug mode enabled${NC}"
+    echo -e "Action: $ACTION"
+    echo -e "Service: $SERVICE"
+    echo -e "Log directory: $LOG_DIR"
+fi
+
+# Function to start MongoDB
+start_db() {
+    echo -e "${YELLOW}Starting MongoDB container...${NC}"
+    cd ui/db
+    docker-compose up -d
+    cd ../..
+
+    # Check if MongoDB is running
+    if docker ps | grep -q "kevin-ui-mongodb"; then
+        echo -e "${GREEN}✓ MongoDB container is running${NC}"
     else
-        print_log "$BG_MONGODB" "$COLOR_WHITE" "$EMOJI_MONGODB" "MONGODB" "MongoDB already running"
-    fi
-}
-
-start_frontend() {
-    print_log "$BG_FRONTEND" "$COLOR_WHITE" "$EMOJI_FRONTEND" "FRONTEND" "Starting Next.js frontend..."
-    cd ui
-    npm run dev > "../$LOG_DIR/frontend.log" 2>&1 &
-    FRONTEND_PID=$!
-    cd ..
-    print_log "$BG_FRONTEND" "$COLOR_WHITE" "$EMOJI_SUCCESS" "FRONTEND" "Frontend started with PID: $FRONTEND_PID"
-}
-
-start_backend() {
-    if [ -d "backend" ]; then
-        print_log "$BG_BACKEND" "$COLOR_WHITE" "$EMOJI_BACKEND" "BACKEND" "Starting FastAPI backend..."
-        cd backend
-        if [ -d "../.venv" ]; then
-            source ../.venv/bin/activate
-        fi
-        
-        if [ -f "main.py" ]; then
-            uvicorn main:app --host 0.0.0.0 --port 8000 > "../$LOG_DIR/backend.log" 2>&1 &
-            BACKEND_PID=$!
-            print_log "$BG_BACKEND" "$COLOR_WHITE" "$EMOJI_SUCCESS" "BACKEND" "Backend started with PID: $BACKEND_PID"
-        elif [ -f "app.py" ]; then
-            uvicorn app:app --host 0.0.0.0 --port 8000 > "../$LOG_DIR/backend.log" 2>&1 &
-            BACKEND_PID=$!
-            print_log "$BG_BACKEND" "$COLOR_WHITE" "$EMOJI_SUCCESS" "BACKEND" "Backend started with PID: $BACKEND_PID"
-        else
-            print_log "$BG_ERROR" "$COLOR_WHITE" "$EMOJI_ERROR" "BACKEND" "Cannot find main.py or app.py. Backend not started."
-        fi
-        
-        cd ..
-    else
-        print_log "$BG_SYSTEM" "$COLOR_WHITE" "$EMOJI_INFO" "SYSTEM" "Backend directory not found. Skipping backend startup."
-    fi
-}
-
-# Follow logs from files with enhanced visual formatting
-follow_logs() {
-    print_log "$BG_SYSTEM" "$COLOR_WHITE" "$EMOJI_SYSTEM" "SYSTEM" "Starting log streaming..."
-    
-    # Create a named pipe for combining logs
-    PIPE_DIR="/tmp/kevin-logs"
-    mkdir -p $PIPE_DIR
-    COMBINED_PIPE="$PIPE_DIR/combined_logs"
-    [ -p "$COMBINED_PIPE" ] || mkfifo "$COMBINED_PIPE"
-    
-    # Background process to format and output combined logs
-    cat "$COMBINED_PIPE" &
-    LOG_CAT_PID=$!
-    
-    # Start tailing logs with distinct formatting for each service
-    # MongoDB logs - Purple background
-    docker logs -f kevin-ui-mongodb 2>&1 | while read line; do
-        echo -e "${BG_MONGODB}${COLOR_BOLD}${COLOR_WHITE} ${EMOJI_MONGODB}[MONGODB] $(date +"%Y-%m-%d %H:%M:%S") ${line}${COLOR_RESET}" >> "$COMBINED_PIPE"
-    done &
-    MONGO_TAIL_PID=$!
-    
-    # Frontend logs - Cyan background
-    tail -f "$LOG_DIR/frontend.log" | while read line; do
-        echo -e "${BG_FRONTEND}${COLOR_BOLD}${COLOR_WHITE} ${EMOJI_FRONTEND}[FRONTEND] $(date +"%Y-%m-%d %H:%M:%S") ${line}${COLOR_RESET}" >> "$COMBINED_PIPE"
-    done &
-    FRONTEND_TAIL_PID=$!
-    
-    # Backend logs - Yellow background
-    if [ -d "backend" ]; then
-        tail -f "$LOG_DIR/backend.log" | while read line; do
-            echo -e "${BG_BACKEND}${COLOR_BOLD}${COLOR_WHITE} ${EMOJI_BACKEND}[BACKEND] $(date +"%Y-%m-%d %H:%M:%S") ${line}${COLOR_RESET}" >> "$COMBINED_PIPE"
-        done &
-        BACKEND_TAIL_PID=$!
-    fi
-    
-    # Store PIDs for cleanup
-    LOG_PIDS=($LOG_CAT_PID $MONGO_TAIL_PID $FRONTEND_TAIL_PID $BACKEND_TAIL_PID)
-}
-
-# Function to verify port is released
-check_port_released() {
-    local port=$1
-    local service=$2
-    local max_attempts=5
-    local attempt=0
-    
-    print_log "$BG_SYSTEM" "$COLOR_WHITE" "$EMOJI_INFO" "SYSTEM" "Verifying port $port is released..."
-    
-    while [ $attempt -lt $max_attempts ]; do
-        if lsof -i :$port > /dev/null 2>&1; then
-            # Port still in use, wait a bit
-            print_log "$BG_SYSTEM" "$COLOR_WHITE" "$EMOJI_WARNING" "SYSTEM" "Port $port still in use, waiting..."
-            sleep 1
-            ((attempt++))
-        else
-            print_log "$BG_SYSTEM" "$COLOR_WHITE" "$EMOJI_SUCCESS" "SYSTEM" "Port $port successfully released"
-            return 0
-        fi
-    done
-    
-    print_log "$BG_ERROR" "$COLOR_WHITE" "$EMOJI_ERROR" "SYSTEM" "Failed to release port $port for $service"
-    
-    # Force kill any process using the port
-    print_log "$BG_SYSTEM" "$COLOR_WHITE" "$EMOJI_WARNING" "SYSTEM" "Force killing processes on port $port..."
-    local pid=$(lsof -t -i :$port 2>/dev/null)
-    if [ ! -z "$pid" ]; then
-        kill -9 $pid
-        print_log "$BG_SYSTEM" "$COLOR_WHITE" "$EMOJI_SUCCESS" "SYSTEM" "Forcefully terminated process $pid on port $port"
-    fi
-    
-    return 1
-}
-
-# Function to verify process is terminated
-verify_process_terminated() {
-    local pid=$1
-    local service=$2
-    local max_attempts=5
-    local attempt=0
-    
-    if [ -z "$pid" ]; then
-        return 0
-    fi
-    
-    print_log "$BG_SYSTEM" "$COLOR_WHITE" "$EMOJI_INFO" "SYSTEM" "Verifying $service process (PID: $pid) is terminated..."
-    
-    while [ $attempt -lt $max_attempts ]; do
-        if kill -0 $pid 2>/dev/null; then
-            # Process still running
-            print_log "$BG_SYSTEM" "$COLOR_WHITE" "$EMOJI_WARNING" "SYSTEM" "$service process (PID: $pid) still running, waiting..."
-            sleep 1
-            ((attempt++))
-        else
-            print_log "$BG_SYSTEM" "$COLOR_WHITE" "$EMOJI_SUCCESS" "SYSTEM" "$service process (PID: $pid) successfully terminated"
-            return 0
-        fi
-    done
-    
-    print_log "$BG_ERROR" "$COLOR_WHITE" "$EMOJI_ERROR" "SYSTEM" "Failed to terminate $service process (PID: $pid)"
-    
-    # Force kill the process
-    print_log "$BG_SYSTEM" "$COLOR_WHITE" "$EMOJI_WARNING" "SYSTEM" "Force killing $service process (PID: $pid)..."
-    kill -9 $pid 2>/dev/null
-    
-    if ! kill -0 $pid 2>/dev/null; then
-        print_log "$BG_SYSTEM" "$COLOR_WHITE" "$EMOJI_SUCCESS" "SYSTEM" "Forcefully terminated $service process (PID: $pid)"
-        return 0
-    else
-        print_log "$BG_ERROR" "$COLOR_WHITE" "$EMOJI_ERROR" "SYSTEM" "Failed to forcefully terminate $service process (PID: $pid)"
+        echo -e "${RED}✗ Failed to start MongoDB container${NC}"
         return 1
     fi
+    return 0
 }
 
-# Shutdown handler with visual indicators and thorough cleanup
-graceful_shutdown() {
-    echo ""
-    print_separator "$COLOR_RED" "SHUTTING DOWN SERVICES"
-    print_log "$BG_SYSTEM" "$COLOR_WHITE" "$EMOJI_SYSTEM" "SYSTEM" "Initiating graceful shutdown..."
-    
-    # Kill log tails
-    print_log "$BG_SYSTEM" "$COLOR_WHITE" "$EMOJI_INFO" "SYSTEM" "Stopping log streaming..."
-    for pid in "${LOG_PIDS[@]}"; do
-        if [ ! -z "$pid" ]; then
-            kill $pid 2>/dev/null || true
-        fi
-    done
-    
-    # Clean up named pipe
-    if [ -p "$COMBINED_PIPE" ]; then
-        rm -f "$COMBINED_PIPE"
-    fi
-    
-    # Kill frontend service
-    if [ ! -z "$FRONTEND_PID" ]; then
-        print_log "$BG_FRONTEND" "$COLOR_WHITE" "$EMOJI_FRONTEND" "FRONTEND" "Stopping frontend (PID: $FRONTEND_PID)..."
-        kill $FRONTEND_PID 2>/dev/null || true
-        verify_process_terminated "$FRONTEND_PID" "Frontend"
-        check_port_released 3000 "Frontend"
-    fi
-    
-    # Kill backend service
-    if [ ! -z "$BACKEND_PID" ]; then
-        print_log "$BG_BACKEND" "$COLOR_WHITE" "$EMOJI_BACKEND" "BACKEND" "Stopping backend (PID: $BACKEND_PID)..."
-        kill $BACKEND_PID 2>/dev/null || true
-        verify_process_terminated "$BACKEND_PID" "Backend"
-        check_port_released 8000 "Backend"
-    fi
-    
-    # Stop MongoDB
-    print_log "$BG_MONGODB" "$COLOR_WHITE" "$EMOJI_MONGODB" "MONGODB" "Stopping MongoDB..."
-    cd ui/db && docker-compose down
+# Function to stop MongoDB
+stop_db() {
+    echo -e "${YELLOW}Stopping MongoDB container...${NC}"
+    cd ui/db
+    docker-compose down
     cd ../..
+
+    # Check if MongoDB is stopped
+    if docker ps | grep -q "kevin-ui-mongodb"; then
+        echo -e "${RED}✗ Failed to stop MongoDB container${NC}"
+        return 1
+    else
+        echo -e "${GREEN}✓ MongoDB container is stopped${NC}"
+    fi
+    return 0
+}
+
+# Function to restart MongoDB
+restart_db() {
+    stop_db
+    start_db
+}
+
+# Function to show MongoDB logs
+logs_db() {
+    echo -e "${YELLOW}Showing MongoDB logs:${NC}"
+    docker logs --tail=50 -f kevin-ui-mongodb
+}
+
+# Function to start FastAPI backend
+start_api() {
+    echo -e "${YELLOW}Starting FastAPI backend...${NC}"
+    
+    # Process ID file for the API
+    local API_PID_FILE="$LOG_DIR/api.pid"
+    local API_LOG_FILE="$LOG_DIR/api.log"
+    
+    # Check if API is already running
+    if [ -f "$API_PID_FILE" ] && ps -p $(cat "$API_PID_FILE") > /dev/null; then
+        echo -e "${YELLOW}API is already running with PID $(cat "$API_PID_FILE")${NC}"
+        return 0
+    fi
+    
+    # Start FastAPI in the background with output to log file
+    echo -e "${BLUE}API logs will be available at: $API_LOG_FILE${NC}"
+    
+    # Activate the virtual environment and start the backend in the background
+    (source kevin_venv/bin/activate 2>/dev/null || source venv/bin/activate 2>/dev/null; \
+     echo "Starting FastAPI backend at $(date)" >> "$API_LOG_FILE"; \
+     PYTHONPATH=$(pwd) python -m src.api.main >> "$API_LOG_FILE" 2>&1) &
+    
+    # Store the process ID
+    echo $! > "$API_PID_FILE"
+    echo -e "${GREEN}✓ FastAPI backend started with PID $(cat "$API_PID_FILE")${NC}"
+    
+    return 0
+}
+
+# Function to stop FastAPI backend
+stop_api() {
+    echo -e "${YELLOW}Stopping FastAPI backend...${NC}"
+    
+    # Process ID file for the API
+    local API_PID_FILE="$LOG_DIR/api.pid"
+    
+    # Check if API is running
+    if [ ! -f "$API_PID_FILE" ]; then
+        echo -e "${YELLOW}API is not running (PID file not found)${NC}"
+        return 0
+    fi
+    
+    local PID=$(cat "$API_PID_FILE")
+    if ! ps -p $PID > /dev/null; then
+        echo -e "${YELLOW}API is not running (process not found)${NC}"
+        rm -f "$API_PID_FILE"
+        return 0
+    fi
+    
+    # Kill the process
+    kill $PID
     sleep 2
     
-    # Check MongoDB port is released
-    check_port_released 27017 "MongoDB"
-    
-    # Check for any remaining MongoDB container
-    if docker ps | grep -q kevin-ui-mongodb; then
-        print_log "$BG_MONGODB" "$COLOR_WHITE" "$EMOJI_WARNING" "MONGODB" "MongoDB container still running, force stopping..."
-        docker stop kevin-ui-mongodb
+    # Check if it's still running
+    if ps -p $PID > /dev/null; then
+        echo -e "${RED}Failed to gracefully stop API, forcing termination...${NC}"
+        kill -9 $PID 2>/dev/null
+        sleep 1
     fi
     
-    # Find and kill any remaining child processes
-    print_log "$BG_SYSTEM" "$COLOR_WHITE" "$EMOJI_INFO" "SYSTEM" "Cleaning up any remaining processes..."
-    pkill -P $$ 2>/dev/null || true
+    # Clean up PID file
+    rm -f "$API_PID_FILE"
+    echo -e "${GREEN}✓ FastAPI backend stopped${NC}"
     
-    # Check for any processes on our ports
-    for port in 3000 8000 27017; do
-        if lsof -i :$port > /dev/null 2>&1; then
-            print_log "$BG_SYSTEM" "$COLOR_WHITE" "$EMOJI_WARNING" "SYSTEM" "Detected process still using port $port, force killing..."
-            kill -9 $(lsof -t -i :$port) 2>/dev/null || true
-        fi
-    done
-    
-    print_separator "$COLOR_GREEN" "SHUTDOWN COMPLETE"
-    print_log "$BG_SYSTEM" "$COLOR_WHITE" "$EMOJI_SUCCESS" "SYSTEM" "All services stopped and ports released successfully"
-    exit 0
+    return 0
 }
 
-# Key press monitor function for shortcut keys
-monitor_keypress() {
-    print_log "$BG_SYSTEM" "$COLOR_WHITE" "$EMOJI_INFO" "SYSTEM" "Keyboard shortcuts enabled: Press 'q' to quit"
+# Function to restart FastAPI backend
+restart_api() {
+    stop_api
+    start_api
+}
+
+# Function to show FastAPI logs
+logs_api() {
+    echo -e "${YELLOW}Showing FastAPI logs:${NC}"
+    local API_LOG_FILE="$LOG_DIR/api.log"
     
-    # Set up non-blocking input
-    stty -echo
+    if [ ! -f "$API_LOG_FILE" ]; then
+        echo -e "${RED}No API log file found at $API_LOG_FILE${NC}"
+        return 1
+    fi
     
-    # Monitor for key presses
-    while :; do
-        # Check for a key press with a short timeout
-        read -t 1 -n 1 key
+    tail -f "$API_LOG_FILE"
+}
+
+# Function to start Next.js UI
+start_ui() {
+    echo -e "${YELLOW}Starting Next.js UI...${NC}"
+    
+    # Process ID file for the UI
+    local UI_PID_FILE="$LOG_DIR/ui.pid"
+    local UI_LOG_FILE="$LOG_DIR/ui.log"
+    
+    # Check if UI is already running
+    if [ -f "$UI_PID_FILE" ] && ps -p $(cat "$UI_PID_FILE") > /dev/null; then
+        echo -e "${YELLOW}UI is already running with PID $(cat "$UI_PID_FILE")${NC}"
+        return 0
+    fi
+    
+    # Start Next.js in the background with output to log file
+    echo -e "${BLUE}UI logs will be available at: $UI_LOG_FILE${NC}"
+    
+    (cd ui && \
+     echo "Starting Next.js UI at $(date)" >> "../$UI_LOG_FILE"; \
+     npm run dev >> "../$UI_LOG_FILE" 2>&1) &
+    
+    # Store the process ID
+    echo $! > "$UI_PID_FILE"
+    echo -e "${GREEN}✓ Next.js UI started with PID $(cat "$UI_PID_FILE")${NC}"
+    echo -e "${CYAN}Next.js UI is available at: http://localhost:3000${NC}"
+    
+    return 0
+}
+
+# Function to stop Next.js UI
+stop_ui() {
+    echo -e "${YELLOW}Stopping Next.js UI...${NC}"
+    
+    # Process ID file for the UI
+    local UI_PID_FILE="$LOG_DIR/ui.pid"
+    
+    # Check if UI is running
+    if [ ! -f "$UI_PID_FILE" ]; then
+        echo -e "${YELLOW}UI is not running (PID file not found)${NC}"
+        return 0
+    fi
+    
+    local PID=$(cat "$UI_PID_FILE")
+    if ! ps -p $PID > /dev/null; then
+        echo -e "${YELLOW}UI is not running (process not found)${NC}"
+        rm -f "$UI_PID_FILE"
+        return 0
+    fi
+    
+    # Kill the process (and child processes)
+    pkill -P $PID
+    kill $PID
+    sleep 2
+    
+    # Check if it's still running
+    if ps -p $PID > /dev/null; then
+        echo -e "${RED}Failed to gracefully stop UI, forcing termination...${NC}"
+        pkill -9 -P $PID 2>/dev/null
+        kill -9 $PID 2>/dev/null
+        sleep 1
+    fi
+    
+    # Clean up PID file
+    rm -f "$UI_PID_FILE"
+    echo -e "${GREEN}✓ Next.js UI stopped${NC}"
+    
+    return 0
+}
+
+# Function to restart Next.js UI
+restart_ui() {
+    stop_ui
+    start_ui
+}
+
+# Function to show Next.js UI logs
+logs_ui() {
+    echo -e "${YELLOW}Showing Next.js UI logs:${NC}"
+    local UI_LOG_FILE="$LOG_DIR/ui.log"
+    
+    if [ ! -f "$UI_LOG_FILE" ]; then
+        echo -e "${RED}No UI log file found at $UI_LOG_FILE${NC}"
+        return 1
+    fi
+    
+    tail -f "$UI_LOG_FILE"
+}
+
+# Function to stop all services
+stop_all_services() {
+    echo -e "${RED}Stopping all Kevin Application services...${NC}"
+    
+    # Stop in reverse order of dependencies
+    stop_ui
+    stop_api
+    stop_db
+    
+    echo -e "${GREEN}✅ All services stopped${NC}"
+}
+
+# Main logic based on action and service
+case "$ACTION" in
+    start)
+        echo -e "${GREEN}Starting Kevin Application...${NC}"
         
-        if [ "$key" = "q" ]; then
-            # Restore terminal settings
-            stty echo
-            print_log "$BG_SYSTEM" "$COLOR_WHITE" "$EMOJI_INFO" "SYSTEM" "Quit shortcut key pressed (q)"
-            graceful_shutdown
+        if [[ "$SERVICE" == "all" || "$SERVICE" == "db" ]]; then
+            start_db
         fi
-    done
-}
+        
+        if [[ "$SERVICE" == "all" || "$SERVICE" == "api" ]]; then
+            start_api
+        fi
+        
+        if [[ "$SERVICE" == "all" || "$SERVICE" == "ui" ]]; then
+            start_ui
+        fi
+        
+        if [[ "$SERVICE" == "all" ]]; then
+            echo -e "${GREEN}✅ All services started${NC}"
+            echo -e "${CYAN}FastAPI backend is available at: http://localhost:8000${NC}"
+            echo -e "${CYAN}Next.js UI is available at: http://localhost:3000${NC}"
+            echo -e "${BLUE}Logs are available in: $LOG_DIR${NC}"
+            echo -e "${YELLOW}Use '$0 -l' to view logs${NC}"
+        fi
+        ;;
+        
+    stop)
+        echo -e "${RED}Stopping Kevin Application...${NC}"
+        
+        if [[ "$SERVICE" == "all" || "$SERVICE" == "ui" ]]; then
+            stop_ui
+        fi
+        
+        if [[ "$SERVICE" == "all" || "$SERVICE" == "api" ]]; then
+            stop_api
+        fi
+        
+        if [[ "$SERVICE" == "all" || "$SERVICE" == "db" ]]; then
+            stop_db
+        fi
+        
+        if [[ "$SERVICE" == "all" ]]; then
+            echo -e "${GREEN}✅ All services stopped${NC}"
+        fi
+        ;;
+    
+    stopall)
+        # New dedicated action to stop all services
+        stop_all_services
+        ;;
+        
+    restart)
+        echo -e "${YELLOW}Restarting Kevin Application...${NC}"
+        
+        if [[ "$SERVICE" == "all" || "$SERVICE" == "ui" ]]; then
+            restart_ui
+        fi
+        
+        if [[ "$SERVICE" == "all" || "$SERVICE" == "api" ]]; then
+            restart_api
+        fi
+        
+        if [[ "$SERVICE" == "all" || "$SERVICE" == "db" ]]; then
+            restart_db
+        fi
+        
+        if [[ "$SERVICE" == "all" ]]; then
+            echo -e "${GREEN}✅ All services restarted${NC}"
+            echo -e "${CYAN}FastAPI backend is available at: http://localhost:8000${NC}"
+            echo -e "${CYAN}Next.js UI is available at: http://localhost:3000${NC}"
+        fi
+        ;;
+        
+    logs)
+        echo -e "${BLUE}Showing logs for Kevin Application...${NC}"
+        
+        # Check which services are running and show their logs
+        if [[ "$SERVICE" == "db" ]]; then
+            logs_db
+        elif [[ "$SERVICE" == "api" ]]; then
+            logs_api
+        elif [[ "$SERVICE" == "ui" ]]; then
+            logs_ui
+        elif [[ "$SERVICE" == "all" ]]; then
+            # Show a menu to select which logs to view
+            echo -e "Select which logs to view:"
+            echo -e "1) MongoDB logs"
+            echo -e "2) FastAPI backend logs"
+            echo -e "3) Next.js UI logs"
+            echo -e "q) Quit"
+            
+            read -p "Enter your choice: " LOG_CHOICE
+            
+            case "$LOG_CHOICE" in
+                1) logs_db ;;
+                2) logs_api ;;
+                3) logs_ui ;;
+                q|Q) exit 0 ;;
+                *) echo -e "${RED}Invalid choice${NC}" ;;
+            esac
+        fi
+        ;;
+        
+    *)
+        echo -e "${RED}Error: Invalid action '$ACTION'${NC}" >&2
+        show_help
+        exit 1
+        ;;
+esac
 
-# Set up graceful shutdown
-trap graceful_shutdown INT TERM
-
-# Main execution
-print_separator "$COLOR_BLUE" "STARTING KEVIN AI SERVICES"
-
-# Start all services
-print_log "$BG_SYSTEM" "$COLOR_WHITE" "$EMOJI_SYSTEM" "SYSTEM" "Initializing services..."
-start_mongodb
-start_frontend
-start_backend
-
-# Print service status with visual indicators
-print_separator "$COLOR_BLUE" "SERVICE STATUS"
-
-# Check MongoDB
-if docker ps | grep -q kevin-ui-mongodb; then
-    echo -e "${BG_MONGODB}${COLOR_WHITE}${COLOR_BOLD} ${EMOJI_SUCCESS} MONGODB:${COLOR_RESET} ${COLOR_GREEN}RUNNING${COLOR_RESET}"
-else
-    echo -e "${BG_MONGODB}${COLOR_WHITE}${COLOR_BOLD} ${EMOJI_ERROR} MONGODB:${COLOR_RESET} ${COLOR_RED}NOT RUNNING${COLOR_RESET}"
-fi
-
-# Check Frontend
-if [ ! -z "$FRONTEND_PID" ] && kill -0 $FRONTEND_PID 2>/dev/null; then
-    echo -e "${BG_FRONTEND}${COLOR_WHITE}${COLOR_BOLD} ${EMOJI_SUCCESS} FRONTEND:${COLOR_RESET} ${COLOR_GREEN}RUNNING (PID: $FRONTEND_PID)${COLOR_RESET}"
-else
-    echo -e "${BG_FRONTEND}${COLOR_WHITE}${COLOR_BOLD} ${EMOJI_ERROR} FRONTEND:${COLOR_RESET} ${COLOR_RED}NOT RUNNING${COLOR_RESET}"
-fi
-
-# Check Backend
-if [ ! -z "$BACKEND_PID" ] && kill -0 $BACKEND_PID 2>/dev/null; then
-    echo -e "${BG_BACKEND}${COLOR_WHITE}${COLOR_BOLD} ${EMOJI_SUCCESS} BACKEND:${COLOR_RESET} ${COLOR_GREEN}RUNNING (PID: $BACKEND_PID)${COLOR_RESET}"
-elif [ -d "backend" ]; then
-    echo -e "${BG_BACKEND}${COLOR_WHITE}${COLOR_BOLD} ${EMOJI_ERROR} BACKEND:${COLOR_RESET} ${COLOR_RED}NOT RUNNING${COLOR_RESET}"
-fi
-
-# Print access URLs with better formatting
-print_separator "$COLOR_BLUE" "ACCESS INFORMATION"
-echo -e "${COLOR_BOLD}Frontend:${COLOR_RESET}  ${COLOR_CYAN}${COLOR_BOLD}http://localhost:3000${COLOR_RESET}"
-[ -d "backend" ] && echo -e "${COLOR_BOLD}Backend:${COLOR_RESET}   ${COLOR_YELLOW}${COLOR_BOLD}http://localhost:8000${COLOR_RESET}"
-echo -e "${COLOR_BOLD}MongoDB:${COLOR_RESET}   ${COLOR_PURPLE}${COLOR_BOLD}mongodb://localhost:27017${COLOR_RESET}"
-
-print_separator "$COLOR_BLUE" "KEYBOARD SHORTCUTS"
-echo -e "${COLOR_BOLD}Press 'q' to quit all services${COLOR_RESET}"
-echo -e "${COLOR_BOLD}Press Ctrl+C to quit all services${COLOR_RESET}"
-
-print_separator "$COLOR_BLUE" "LOG OUTPUT"
-
-# Start key press monitor in the background
-monitor_keypress &
-KEYPRESS_MONITOR_PID=$!
-
-# Start following logs
-follow_logs
-
-# Keep script running
-wait 
+echo -e "${GREEN}Done!${NC}" 
