@@ -116,6 +116,30 @@ command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
+# Check and create directory structure
+create_project_structure() {
+    log "INFO" "Ensuring project directory structure exists..."
+    
+    # Create UI directory if it doesn't exist
+    if [ ! -d "$UI_DIR" ]; then
+        log "INFO" "Creating UI directory structure..."
+        mkdir -p "$UI_DIR"
+        mkdir -p "$UI_DIR/db"
+        mkdir -p "$UI_DIR/db/data"
+    fi
+    
+    # Create backend directory if it doesn't exist (optional)
+    if [ ! -d "$BACKEND_DIR" ]; then
+        log "INFO" "Creating backend directory structure..."
+        mkdir -p "$BACKEND_DIR"
+    fi
+    
+    # Create logs directory for log files
+    mkdir -p "$KEVIN_DIR/logs"
+    
+    log "SUCCESS" "Directory structure verified!"
+}
+
 # Check and install system dependencies
 install_system_dependencies() {
     check_status 1 && { log "INFO" "System dependencies already installed. Skipping."; return 0; }
@@ -281,7 +305,7 @@ install_backend_dependencies() {
         log "INFO" "No backend directory found. Skipping backend dependencies."
         echo "STEP3" >&3
         return 0
-    }
+    fi
     
     log "INFO" "Installing backend dependencies..."
     
@@ -303,6 +327,18 @@ install_backend_dependencies() {
         pip install -r requirements.txt
     else
         log "WARNING" "No requirements.txt found in the backend directory!"
+        
+        # Create a basic requirements.txt if not present
+        log "INFO" "Creating basic requirements.txt..."
+        cat > "requirements.txt" << EOL
+fastapi==0.95.0
+uvicorn==0.21.1
+pymongo==4.3.3
+motor==3.1.2
+python-dotenv==1.0.0
+EOL
+        log "INFO" "Installing dependencies from generated requirements.txt..."
+        pip install -r requirements.txt
     fi
     
     # Install additional packages that might be needed
@@ -373,8 +409,24 @@ setup_mongodb() {
         
         # Check if docker-compose.yml exists
         if [ ! -f "docker-compose.yml" ]; then
-            log "ERROR" "docker-compose.yml not found in $UI_DIR/db directory!"
-            exit 1
+            log "INFO" "docker-compose.yml not found, creating it..."
+            cat > "docker-compose.yml" << EOL
+version: '3.1'
+services:
+  mongodb:
+    image: mongo:6
+    container_name: kevin-ui-mongodb
+    restart: always
+    ports:
+      - 27017:27017
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: kevinuser
+      MONGO_INITDB_ROOT_PASSWORD: kevin_password
+      MONGO_INITDB_DATABASE: kevindb
+    volumes:
+      - ./data:/data/db
+EOL
+            log "SUCCESS" "Created docker-compose.yml for MongoDB"
         fi
         
         # Create the data directory if it doesn't exist
@@ -396,10 +448,60 @@ setup_mongodb() {
     cd $UI_DIR
     
     # Check if db:test script exists in package.json
-    if grep -q "\"db:test\"" package.json; then
+    if [ -f "package.json" ] && grep -q "\"db:test\"" package.json; then
         npm run db:test
     else
-        log "WARNING" "No db:test script found in package.json. Skipping connection test."
+        log "INFO" "No db:test script found. Creating a simple test script..."
+        
+        # Create a simple Node.js script to test MongoDB connection
+        mkdir -p "$UI_DIR/scripts"
+        cat > "$UI_DIR/scripts/test-db.js" << EOL
+const { MongoClient } = require('mongodb');
+
+async function testConnection() {
+  const uri = "mongodb://kevinuser:kevin_password@localhost:27017/kevindb?authSource=admin";
+  const client = new MongoClient(uri);
+  
+  try {
+    console.log('Connecting to MongoDB...');
+    await client.connect();
+    console.log('Successfully connected to MongoDB!');
+    
+    const db = client.db("kevindb");
+    const collections = await db.listCollections().toArray();
+    console.log('Available collections:', collections.map(c => c.name));
+    
+    // Create a test collection if none exist
+    if (collections.length === 0) {
+      console.log('Creating a test collection...');
+      await db.createCollection('test');
+      console.log('Test collection created successfully!');
+    }
+    
+  } catch (e) {
+    console.error('MongoDB connection error:', e);
+    process.exit(1);
+  } finally {
+    await client.close();
+  }
+}
+
+testConnection();
+EOL
+        
+        # Run the test script if Node.js is available
+        if command_exists node; then
+            # Check if mongodb package is installed
+            if ! npm list mongodb > /dev/null 2>&1; then
+                log "INFO" "Installing MongoDB Node.js driver..."
+                npm install --no-save mongodb
+            fi
+            
+            log "INFO" "Running MongoDB connection test..."
+            node "$UI_DIR/scripts/test-db.js"
+        else
+            log "WARNING" "Node.js not available. Skipping MongoDB connection test."
+        fi
     fi
     
     # Return to project root
@@ -471,13 +573,15 @@ create_start_script() {
 #!/bin/bash
 
 # =====================================================================
-# Kevin AI Startup Script with Service Logging
+# Kevin AI Startup Script with Enhanced Visual Logging
 # =====================================================================
 # Features:
-# - Real-time combined service logs with color coding
-# - Service-specific log prefixes
+# - Real-time combined service logs with distinctive color coding
+# - Service-specific log prefixes with background colors
+# - Visual separators between different services
+# - Emoji indicators for different log types
 # - Log preservation in separate files
-# - Full service visibility
+# - Keyboard shortcuts for operations (q = quit)
 # =====================================================================
 
 # Configuration
@@ -489,7 +593,7 @@ mkdir -p "$LOG_DIR"
 > "$LOG_DIR/frontend.log"
 > "$LOG_DIR/backend.log"
 
-# Color definitions
+# Color definitions - text colors
 COLOR_RESET="\033[0m"
 COLOR_BOLD="\033[1m"
 COLOR_RED="\033[31m"
@@ -500,40 +604,70 @@ COLOR_PURPLE="\033[35m"
 COLOR_CYAN="\033[36m"
 COLOR_WHITE="\033[37m"
 
-# Print colored message with timestamp
+# Background colors for services
+BG_MONGODB="\033[45m"    # Purple background
+BG_FRONTEND="\033[46m"   # Cyan background
+BG_BACKEND="\033[43m"    # Yellow background
+BG_SYSTEM="\033[44m"     # Blue background
+BG_ERROR="\033[41m"      # Red background
+
+# Log indicators (emojis)
+EMOJI_INFO="ℹ️ "
+EMOJI_SUCCESS="✅ "
+EMOJI_WARNING="⚠️ "
+EMOJI_ERROR="❌ "
+EMOJI_MONGODB="🍃 "
+EMOJI_FRONTEND="🖥️ "
+EMOJI_BACKEND="⚙️ "
+EMOJI_SYSTEM="🔄 "
+
+# Print colored message with timestamp and service-specific styling
 print_log() {
-    local color=$1
-    local prefix=$2
-    local message=$3
+    local bg_color=$1
+    local fg_color=$2
+    local emoji=$3
+    local prefix=$4
+    local message=$5
     local timestamp=$(date +"%Y-%m-%d %H:%M:%S")
-    echo -e "${COLOR_BOLD}${color}[${prefix}] ${timestamp} ${message}${COLOR_RESET}"
+    echo -e "${bg_color}${COLOR_BOLD}${fg_color} ${emoji}[${prefix}] ${timestamp} ${message}${COLOR_RESET}"
+}
+
+# Print a separator line
+print_separator() {
+    local color=$1
+    local title=$2
+    echo -e "\n${color}${COLOR_BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${COLOR_RESET}"
+    if [ ! -z "$title" ]; then
+        echo -e "${color}${COLOR_BOLD}  ${title}  ${COLOR_RESET}"
+        echo -e "${color}${COLOR_BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${COLOR_RESET}"
+    fi
 }
 
 # Service management functions
 start_mongodb() {
     if ! docker ps | grep -q kevin-ui-mongodb; then
-        print_log "$COLOR_PURPLE" "MONGODB" "Starting MongoDB..."
+        print_log "$BG_MONGODB" "$COLOR_WHITE" "$EMOJI_MONGODB" "MONGODB" "Starting MongoDB..."
         cd ui/db && docker-compose up -d
         sleep 5
         cd ../..
-        print_log "$COLOR_PURPLE" "MONGODB" "MongoDB started"
+        print_log "$BG_MONGODB" "$COLOR_WHITE" "$EMOJI_SUCCESS" "MONGODB" "MongoDB started successfully"
     else
-        print_log "$COLOR_PURPLE" "MONGODB" "MongoDB already running"
+        print_log "$BG_MONGODB" "$COLOR_WHITE" "$EMOJI_MONGODB" "MONGODB" "MongoDB already running"
     fi
 }
 
 start_frontend() {
-    print_log "$COLOR_CYAN" "FRONTEND" "Starting Frontend..."
+    print_log "$BG_FRONTEND" "$COLOR_WHITE" "$EMOJI_FRONTEND" "FRONTEND" "Starting Next.js frontend..."
     cd ui
     npm run dev > "../$LOG_DIR/frontend.log" 2>&1 &
     FRONTEND_PID=$!
     cd ..
-    print_log "$COLOR_CYAN" "FRONTEND" "Frontend started with PID: $FRONTEND_PID"
+    print_log "$BG_FRONTEND" "$COLOR_WHITE" "$EMOJI_SUCCESS" "FRONTEND" "Frontend started with PID: $FRONTEND_PID"
 }
 
 start_backend() {
     if [ -d "backend" ]; then
-        print_log "$COLOR_YELLOW" "BACKEND" "Starting Backend..."
+        print_log "$BG_BACKEND" "$COLOR_WHITE" "$EMOJI_BACKEND" "BACKEND" "Starting FastAPI backend..."
         cd backend
         if [ -d "../.venv" ]; then
             source ../.venv/bin/activate
@@ -542,107 +676,273 @@ start_backend() {
         if [ -f "main.py" ]; then
             uvicorn main:app --host 0.0.0.0 --port 8000 > "../$LOG_DIR/backend.log" 2>&1 &
             BACKEND_PID=$!
-            print_log "$COLOR_YELLOW" "BACKEND" "Backend started with PID: $BACKEND_PID"
+            print_log "$BG_BACKEND" "$COLOR_WHITE" "$EMOJI_SUCCESS" "BACKEND" "Backend started with PID: $BACKEND_PID"
         elif [ -f "app.py" ]; then
             uvicorn app:app --host 0.0.0.0 --port 8000 > "../$LOG_DIR/backend.log" 2>&1 &
             BACKEND_PID=$!
-            print_log "$COLOR_YELLOW" "BACKEND" "Backend started with PID: $BACKEND_PID"
+            print_log "$BG_BACKEND" "$COLOR_WHITE" "$EMOJI_SUCCESS" "BACKEND" "Backend started with PID: $BACKEND_PID"
         else
-            print_log "$COLOR_RED" "BACKEND" "Cannot find main.py or app.py. Backend not started."
+            print_log "$BG_ERROR" "$COLOR_WHITE" "$EMOJI_ERROR" "BACKEND" "Cannot find main.py or app.py. Backend not started."
         fi
         
         cd ..
     else
-        print_log "$COLOR_YELLOW" "BACKEND" "Backend directory not found. Skipping."
+        print_log "$BG_SYSTEM" "$COLOR_WHITE" "$EMOJI_INFO" "SYSTEM" "Backend directory not found. Skipping backend startup."
     fi
 }
 
-# Follow logs from files
-follow_logs() {
-    print_log "$COLOR_BLUE" "SYSTEM" "Starting log streaming..."
+# Function to verify port is released
+check_port_released() {
+    local port=$1
+    local service=$2
+    local max_attempts=5
+    local attempt=0
     
-    # Start tailing logs in background
-    tail -f "$LOG_DIR/frontend.log" | sed "s/^/${COLOR_CYAN}[FRONTEND] /" &
+    print_log "$BG_SYSTEM" "$COLOR_WHITE" "$EMOJI_INFO" "SYSTEM" "Verifying port $port is released..."
+    
+    while [ $attempt -lt $max_attempts ]; do
+        if lsof -i :$port > /dev/null 2>&1; then
+            # Port still in use, wait a bit
+            print_log "$BG_SYSTEM" "$COLOR_WHITE" "$EMOJI_WARNING" "SYSTEM" "Port $port still in use, waiting..."
+            sleep 1
+            ((attempt++))
+        else
+            print_log "$BG_SYSTEM" "$COLOR_WHITE" "$EMOJI_SUCCESS" "SYSTEM" "Port $port successfully released"
+            return 0
+        fi
+    done
+    
+    print_log "$BG_ERROR" "$COLOR_WHITE" "$EMOJI_ERROR" "SYSTEM" "Failed to release port $port for $service"
+    
+    # Force kill any process using the port
+    print_log "$BG_SYSTEM" "$COLOR_WHITE" "$EMOJI_WARNING" "SYSTEM" "Force killing processes on port $port..."
+    local pid=$(lsof -t -i :$port 2>/dev/null)
+    if [ ! -z "$pid" ]; then
+        kill -9 $pid
+        print_log "$BG_SYSTEM" "$COLOR_WHITE" "$EMOJI_SUCCESS" "SYSTEM" "Forcefully terminated process $pid on port $port"
+    fi
+    
+    return 1
+}
+
+# Function to verify process is terminated
+verify_process_terminated() {
+    local pid=$1
+    local service=$2
+    local max_attempts=5
+    local attempt=0
+    
+    if [ -z "$pid" ]; then
+        return 0
+    fi
+    
+    print_log "$BG_SYSTEM" "$COLOR_WHITE" "$EMOJI_INFO" "SYSTEM" "Verifying $service process (PID: $pid) is terminated..."
+    
+    while [ $attempt -lt $max_attempts ]; do
+        if kill -0 $pid 2>/dev/null; then
+            # Process still running
+            print_log "$BG_SYSTEM" "$COLOR_WHITE" "$EMOJI_WARNING" "SYSTEM" "$service process (PID: $pid) still running, waiting..."
+            sleep 1
+            ((attempt++))
+        else
+            print_log "$BG_SYSTEM" "$COLOR_WHITE" "$EMOJI_SUCCESS" "SYSTEM" "$service process (PID: $pid) successfully terminated"
+            return 0
+        fi
+    done
+    
+    print_log "$BG_ERROR" "$COLOR_WHITE" "$EMOJI_ERROR" "SYSTEM" "Failed to terminate $service process (PID: $pid)"
+    
+    # Force kill the process
+    print_log "$BG_SYSTEM" "$COLOR_WHITE" "$EMOJI_WARNING" "SYSTEM" "Force killing $service process (PID: $pid)..."
+    kill -9 $pid 2>/dev/null
+    
+    if ! kill -0 $pid 2>/dev/null; then
+        print_log "$BG_SYSTEM" "$COLOR_WHITE" "$EMOJI_SUCCESS" "SYSTEM" "Forcefully terminated $service process (PID: $pid)"
+        return 0
+    else
+        print_log "$BG_ERROR" "$COLOR_WHITE" "$EMOJI_ERROR" "SYSTEM" "Failed to forcefully terminate $service process (PID: $pid)"
+        return 1
+    fi
+}
+
+# Follow logs from files with enhanced visual formatting
+follow_logs() {
+    print_log "$BG_SYSTEM" "$COLOR_WHITE" "$EMOJI_SYSTEM" "SYSTEM" "Starting log streaming..."
+    
+    # Create a named pipe for combining logs
+    PIPE_DIR="/tmp/kevin-logs"
+    mkdir -p $PIPE_DIR
+    COMBINED_PIPE="$PIPE_DIR/combined_logs"
+    [ -p "$COMBINED_PIPE" ] || mkfifo "$COMBINED_PIPE"
+    
+    # Background process to format and output combined logs
+    cat "$COMBINED_PIPE" &
+    LOG_CAT_PID=$!
+    
+    # Start tailing logs with distinct formatting for each service
+    # MongoDB logs - Purple background
+    docker logs -f kevin-ui-mongodb 2>&1 | while read line; do
+        echo -e "${BG_MONGODB}${COLOR_BOLD}${COLOR_WHITE} ${EMOJI_MONGODB}[MONGODB] $(date +"%Y-%m-%d %H:%M:%S") ${line}${COLOR_RESET}" >> "$COMBINED_PIPE"
+    done &
+    MONGO_TAIL_PID=$!
+    
+    # Frontend logs - Cyan background
+    tail -f "$LOG_DIR/frontend.log" | while read line; do
+        echo -e "${BG_FRONTEND}${COLOR_BOLD}${COLOR_WHITE} ${EMOJI_FRONTEND}[FRONTEND] $(date +"%Y-%m-%d %H:%M:%S") ${line}${COLOR_RESET}" >> "$COMBINED_PIPE"
+    done &
     FRONTEND_TAIL_PID=$!
     
+    # Backend logs - Yellow background
     if [ -d "backend" ]; then
-        tail -f "$LOG_DIR/backend.log" | sed "s/^/${COLOR_YELLOW}[BACKEND] /" &
+        tail -f "$LOG_DIR/backend.log" | while read line; do
+            echo -e "${BG_BACKEND}${COLOR_BOLD}${COLOR_WHITE} ${EMOJI_BACKEND}[BACKEND] $(date +"%Y-%m-%d %H:%M:%S") ${line}${COLOR_RESET}" >> "$COMBINED_PIPE"
+        done &
         BACKEND_TAIL_PID=$!
     fi
     
-    # Add MongoDB logs if needed
-    docker logs -f kevin-ui-mongodb 2>&1 | sed "s/^/${COLOR_PURPLE}[MONGODB] /" &
-    MONGO_TAIL_PID=$!
+    # Store PIDs for cleanup
+    LOG_PIDS=($LOG_CAT_PID $MONGO_TAIL_PID $FRONTEND_TAIL_PID $BACKEND_TAIL_PID)
 }
 
-# Shutdown handler
+# Shutdown handler with visual indicators and thorough cleanup
 graceful_shutdown() {
     echo ""
-    print_log "$COLOR_BLUE" "SYSTEM" "Shutting down services..."
+    print_separator "$COLOR_RED" "SHUTTING DOWN SERVICES"
+    print_log "$BG_SYSTEM" "$COLOR_WHITE" "$EMOJI_SYSTEM" "SYSTEM" "Initiating graceful shutdown..."
     
     # Kill log tails
-    kill $FRONTEND_TAIL_PID $BACKEND_TAIL_PID $MONGO_TAIL_PID 2>/dev/null || true
+    print_log "$BG_SYSTEM" "$COLOR_WHITE" "$EMOJI_INFO" "SYSTEM" "Stopping log streaming..."
+    for pid in "${LOG_PIDS[@]}"; do
+        if [ ! -z "$pid" ]; then
+            kill $pid 2>/dev/null || true
+        fi
+    done
     
-    # Kill services
+    # Clean up named pipe
+    if [ -p "$COMBINED_PIPE" ]; then
+        rm -f "$COMBINED_PIPE"
+    fi
+    
+    # Kill frontend service
     if [ ! -z "$FRONTEND_PID" ]; then
-        print_log "$COLOR_CYAN" "FRONTEND" "Stopping frontend (PID: $FRONTEND_PID)..."
+        print_log "$BG_FRONTEND" "$COLOR_WHITE" "$EMOJI_FRONTEND" "FRONTEND" "Stopping frontend (PID: $FRONTEND_PID)..."
         kill $FRONTEND_PID 2>/dev/null || true
+        verify_process_terminated "$FRONTEND_PID" "Frontend"
+        check_port_released 3000 "Frontend"
     fi
     
+    # Kill backend service
     if [ ! -z "$BACKEND_PID" ]; then
-        print_log "$COLOR_YELLOW" "BACKEND" "Stopping backend (PID: $BACKEND_PID)..."
+        print_log "$BG_BACKEND" "$COLOR_WHITE" "$EMOJI_BACKEND" "BACKEND" "Stopping backend (PID: $BACKEND_PID)..."
         kill $BACKEND_PID 2>/dev/null || true
+        verify_process_terminated "$BACKEND_PID" "Backend"
+        check_port_released 8000 "Backend"
     fi
     
-    print_log "$COLOR_PURPLE" "MONGODB" "Stopping MongoDB..."
+    # Stop MongoDB
+    print_log "$BG_MONGODB" "$COLOR_WHITE" "$EMOJI_MONGODB" "MONGODB" "Stopping MongoDB..."
     cd ui/db && docker-compose down
     cd ../..
+    sleep 2
+    
+    # Check MongoDB port is released
+    check_port_released 27017 "MongoDB"
+    
+    # Check for any remaining MongoDB container
+    if docker ps | grep -q kevin-ui-mongodb; then
+        print_log "$BG_MONGODB" "$COLOR_WHITE" "$EMOJI_WARNING" "MONGODB" "MongoDB container still running, force stopping..."
+        docker stop kevin-ui-mongodb
+    fi
     
     # Find and kill any remaining child processes
+    print_log "$BG_SYSTEM" "$COLOR_WHITE" "$EMOJI_INFO" "SYSTEM" "Cleaning up any remaining processes..."
     pkill -P $$ 2>/dev/null || true
     
-    print_log "$COLOR_GREEN" "SYSTEM" "All services stopped"
+    # Check for any processes on our ports
+    for port in 3000 8000 27017; do
+        if lsof -i :$port > /dev/null 2>&1; then
+            print_log "$BG_SYSTEM" "$COLOR_WHITE" "$EMOJI_WARNING" "SYSTEM" "Detected process still using port $port, force killing..."
+            kill -9 $(lsof -t -i :$port) 2>/dev/null || true
+        fi
+    done
+    
+    print_separator "$COLOR_GREEN" "SHUTDOWN COMPLETE"
+    print_log "$BG_SYSTEM" "$COLOR_WHITE" "$EMOJI_SUCCESS" "SYSTEM" "All services stopped and ports released successfully"
     exit 0
+}
+
+# Key press monitor function for shortcut keys
+monitor_keypress() {
+    print_log "$BG_SYSTEM" "$COLOR_WHITE" "$EMOJI_INFO" "SYSTEM" "Keyboard shortcuts enabled: Press 'q' to quit"
+    
+    # Set up non-blocking input
+    stty -echo
+    
+    # Monitor for key presses
+    while :; do
+        # Check for a key press with a short timeout
+        read -t 1 -n 1 key
+        
+        if [ "$key" = "q" ]; then
+            # Restore terminal settings
+            stty echo
+            print_log "$BG_SYSTEM" "$COLOR_WHITE" "$EMOJI_INFO" "SYSTEM" "Quit shortcut key pressed (q)"
+            graceful_shutdown
+        fi
+    done
 }
 
 # Set up graceful shutdown
 trap graceful_shutdown INT TERM
 
+# Main execution
+print_separator "$COLOR_BLUE" "STARTING KEVIN AI SERVICES"
+
 # Start all services
-print_log "$COLOR_BLUE" "SYSTEM" "Starting Kevin AI services..."
+print_log "$BG_SYSTEM" "$COLOR_WHITE" "$EMOJI_SYSTEM" "SYSTEM" "Initializing services..."
 start_mongodb
 start_frontend
 start_backend
 
-# Print service status
-echo -e "\n${COLOR_BOLD}${COLOR_WHITE}Service Status:${COLOR_RESET}"
+# Print service status with visual indicators
+print_separator "$COLOR_BLUE" "SERVICE STATUS"
 
 # Check MongoDB
 if docker ps | grep -q kevin-ui-mongodb; then
-    echo -e "${COLOR_PURPLE}●${COLOR_RESET} ${COLOR_BOLD}MONGODB${COLOR_RESET}: ${COLOR_GREEN}RUNNING${COLOR_RESET}"
+    echo -e "${BG_MONGODB}${COLOR_WHITE}${COLOR_BOLD} ${EMOJI_SUCCESS} MONGODB:${COLOR_RESET} ${COLOR_GREEN}RUNNING${COLOR_RESET}"
 else
-    echo -e "${COLOR_PURPLE}●${COLOR_RESET} ${COLOR_BOLD}MONGODB${COLOR_RESET}: ${COLOR_RED}NOT RUNNING${COLOR_RESET}"
+    echo -e "${BG_MONGODB}${COLOR_WHITE}${COLOR_BOLD} ${EMOJI_ERROR} MONGODB:${COLOR_RESET} ${COLOR_RED}NOT RUNNING${COLOR_RESET}"
 fi
 
 # Check Frontend
 if [ ! -z "$FRONTEND_PID" ] && kill -0 $FRONTEND_PID 2>/dev/null; then
-    echo -e "${COLOR_CYAN}●${COLOR_RESET} ${COLOR_BOLD}FRONTEND${COLOR_RESET}: ${COLOR_GREEN}RUNNING (PID: $FRONTEND_PID)${COLOR_RESET}"
+    echo -e "${BG_FRONTEND}${COLOR_WHITE}${COLOR_BOLD} ${EMOJI_SUCCESS} FRONTEND:${COLOR_RESET} ${COLOR_GREEN}RUNNING (PID: $FRONTEND_PID)${COLOR_RESET}"
 else
-    echo -e "${COLOR_CYAN}●${COLOR_RESET} ${COLOR_BOLD}FRONTEND${COLOR_RESET}: ${COLOR_RED}NOT RUNNING${COLOR_RESET}"
+    echo -e "${BG_FRONTEND}${COLOR_WHITE}${COLOR_BOLD} ${EMOJI_ERROR} FRONTEND:${COLOR_RESET} ${COLOR_RED}NOT RUNNING${COLOR_RESET}"
 fi
 
 # Check Backend
 if [ ! -z "$BACKEND_PID" ] && kill -0 $BACKEND_PID 2>/dev/null; then
-    echo -e "${COLOR_YELLOW}●${COLOR_RESET} ${COLOR_BOLD}BACKEND${COLOR_RESET}: ${COLOR_GREEN}RUNNING (PID: $BACKEND_PID)${COLOR_RESET}"
+    echo -e "${BG_BACKEND}${COLOR_WHITE}${COLOR_BOLD} ${EMOJI_SUCCESS} BACKEND:${COLOR_RESET} ${COLOR_GREEN}RUNNING (PID: $BACKEND_PID)${COLOR_RESET}"
 elif [ -d "backend" ]; then
-    echo -e "${COLOR_YELLOW}●${COLOR_RESET} ${COLOR_BOLD}BACKEND${COLOR_RESET}: ${COLOR_RED}NOT RUNNING${COLOR_RESET}"
+    echo -e "${BG_BACKEND}${COLOR_WHITE}${COLOR_BOLD} ${EMOJI_ERROR} BACKEND:${COLOR_RESET} ${COLOR_RED}NOT RUNNING${COLOR_RESET}"
 fi
 
-echo -e "\n${COLOR_BOLD}${COLOR_WHITE}Access URLs:${COLOR_RESET}"
-echo -e "Frontend:  ${COLOR_CYAN}http://localhost:3000${COLOR_RESET}"
-[ -d "backend" ] && echo -e "Backend:   ${COLOR_YELLOW}http://localhost:8000${COLOR_RESET}"
-echo -e "MongoDB:   ${COLOR_PURPLE}mongodb://localhost:27017${COLOR_RESET}"
-echo -e "\n${COLOR_BOLD}${COLOR_WHITE}Press Ctrl+C to stop all services${COLOR_RESET}"
+# Print access URLs with better formatting
+print_separator "$COLOR_BLUE" "ACCESS INFORMATION"
+echo -e "${COLOR_BOLD}Frontend:${COLOR_RESET}  ${COLOR_CYAN}${COLOR_BOLD}http://localhost:3000${COLOR_RESET}"
+[ -d "backend" ] && echo -e "${COLOR_BOLD}Backend:${COLOR_RESET}   ${COLOR_YELLOW}${COLOR_BOLD}http://localhost:8000${COLOR_RESET}"
+echo -e "${COLOR_BOLD}MongoDB:${COLOR_RESET}   ${COLOR_PURPLE}${COLOR_BOLD}mongodb://localhost:27017${COLOR_RESET}"
+
+print_separator "$COLOR_BLUE" "KEYBOARD SHORTCUTS"
+echo -e "${COLOR_BOLD}Press 'q' to quit all services${COLOR_RESET}"
+echo -e "${COLOR_BOLD}Press Ctrl+C to quit all services${COLOR_RESET}"
+
+print_separator "$COLOR_BLUE" "LOG OUTPUT"
+
+# Start key press monitor in the background
+monitor_keypress &
+KEYPRESS_MONITOR_PID=$!
 
 # Start following logs
 follow_logs
@@ -771,6 +1071,16 @@ main() {
     trap 'handle_error $? "$BASH_COMMAND"' ERR
     trap cleanup EXIT
     
+    # Create baseline directory structure first, before any other steps
+    create_project_structure
+    
+    # Create basic components to ensure minimal functionality
+    create_basic_ui_components
+    create_basic_backend_components
+    
+    # Make this script executable (in case it was just cloned)
+    chmod +x "$0"
+    
     # Run installation steps
     (
         update_progress 1 && install_system_dependencies
@@ -798,3 +1108,139 @@ main() {
 
 # Run the main function
 main 
+
+# Create basic UI components if they don't exist
+create_basic_ui_components() {
+    log "INFO" "Checking for basic UI components..."
+    
+    # Create package.json if it doesn't exist
+    if [ ! -f "$UI_DIR/package.json" ]; then
+        log "INFO" "Creating basic package.json for UI..."
+        cat > "$UI_DIR/package.json" << EOL
+{
+  "name": "kevin-ai-ui",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "echo 'UI not fully implemented yet. This is a placeholder.' && sleep infinity",
+    "build": "echo 'Build command not implemented yet'",
+    "start": "echo 'Start command not implemented yet'",
+    "lint": "echo 'Lint command not implemented yet'",
+    "db:test": "node ./scripts/test-db.js"
+  },
+  "dependencies": {
+    "mongodb": "^4.13.0"
+  }
+}
+EOL
+    fi
+    
+    # Create a basic README if it doesn't exist
+    if [ ! -f "$UI_DIR/README.md" ]; then
+        log "INFO" "Creating basic README.md for UI..."
+        cat > "$UI_DIR/README.md" << EOL
+# Kevin AI UI
+
+This is the UI component of Kevin AI. The full implementation is still in progress.
+EOL
+    fi
+    
+    # Ensure scripts directory exists
+    mkdir -p "$UI_DIR/scripts"
+    
+    # Create MongoDB test script if it doesn't exist
+    if [ ! -f "$UI_DIR/scripts/test-db.js" ]; then
+        log "INFO" "Creating MongoDB test script..."
+        cat > "$UI_DIR/scripts/test-db.js" << EOL
+const { MongoClient } = require('mongodb');
+
+async function testConnection() {
+  const uri = "mongodb://kevinuser:kevin_password@localhost:27017/kevindb?authSource=admin";
+  const client = new MongoClient(uri);
+  
+  try {
+    console.log('Connecting to MongoDB...');
+    await client.connect();
+    console.log('Successfully connected to MongoDB!');
+    
+    const db = client.db("kevindb");
+    const collections = await db.listCollections().toArray();
+    console.log('Available collections:', collections.map(c => c.name));
+    
+    // Create a test collection if none exist
+    if (collections.length === 0) {
+      console.log('Creating a test collection...');
+      await db.createCollection('test');
+      console.log('Test collection created successfully!');
+    }
+    
+  } catch (e) {
+    console.error('MongoDB connection error:', e);
+    process.exit(1);
+  } finally {
+    await client.close();
+  }
+}
+
+testConnection();
+EOL
+    fi
+    
+    log "SUCCESS" "Basic UI components verified!"
+}
+
+# Create basic backend components if the directory exists
+create_basic_backend_components() {
+    if [ ! -d "$BACKEND_DIR" ]; then
+        return 0
+    fi
+    
+    log "INFO" "Checking for basic backend components..."
+    
+    # Create basic app.py if neither app.py nor main.py exists
+    if [ ! -f "$BACKEND_DIR/app.py" ] && [ ! -f "$BACKEND_DIR/main.py" ]; then
+        log "INFO" "Creating basic app.py for backend..."
+        cat > "$BACKEND_DIR/app.py" << EOL
+from fastapi import FastAPI
+import uvicorn
+import os
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
+# Create FastAPI app
+app = FastAPI(
+    title="Kevin AI Backend",
+    description="Backend API for Kevin AI",
+    version="0.1.0"
+)
+
+@app.get("/")
+async def root():
+    return {"message": "Kevin AI Backend is running!", "status": "ok"}
+
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy"}
+
+if __name__ == "__main__":
+    host = os.getenv("API_HOST", "0.0.0.0")
+    port = int(os.getenv("API_PORT", 8000))
+    uvicorn.run("app:app", host=host, port=port, reload=True)
+EOL
+        log "SUCCESS" "Created basic app.py for backend!"
+    fi
+    
+    # Create a basic README if it doesn't exist
+    if [ ! -f "$BACKEND_DIR/README.md" ]; then
+        log "INFO" "Creating basic README.md for backend..."
+        cat > "$BACKEND_DIR/README.md" << EOL
+# Kevin AI Backend
+
+This is the backend component of Kevin AI. It provides API services for the UI.
+EOL
+    fi
+    
+    log "SUCCESS" "Basic backend components verified!"
+} 
