@@ -58,7 +58,6 @@ We provide an automated installation script that handles all setup steps for you
 
 2. Run the installation script:
 ```bash
-   chmod +x install-kevin.sh
    ./install-kevin.sh
    ```
 
@@ -70,6 +69,9 @@ The script will:
 - Set up MongoDB with Docker
 - Create necessary environment files
 - Create a convenient startup script
+- Initialize basic project structure if needed
+
+The installation script is designed to work immediately after cloning the repository without requiring any additional setup steps.
 
 ### Manual Installation
 
@@ -151,14 +153,16 @@ This script handles the complete installation process:
 ```
 
 Key functions:
+- **Enhanced project initialization**: Creates required directory structure and basic components
 - **System dependency detection**: Identifies and installs required system packages
 - **Python environment setup**: Creates a virtual environment with the correct Python version
-- **Database setup**: Configures MongoDB with Docker
-- **Frontend setup**: Installs all Node.js dependencies
-- **Backend setup**: Installs Python dependencies
+- **Database setup**: Configures MongoDB with Docker, including automatic creation of Docker configuration
+- **Frontend setup**: Installs all Node.js dependencies and creates placeholder components if needed
+- **Backend setup**: Installs Python dependencies and creates starter files if needed
 - **Environment configuration**: Creates default `.env` files
+- **Resumable installation**: Can be restarted if interrupted and will continue from the last completed step
 
-The script is designed to work on both macOS and Linux environments, with detailed logging to help troubleshoot any issues during installation.
+The script is designed to work on both macOS and Linux environments, with detailed logging and visual progress indicators to help troubleshoot any issues during installation.
 
 #### 2. `start-kevin.sh`
 
@@ -170,11 +174,15 @@ This script manages the startup and shutdown of all Kevin services:
 
 Key functions:
 - **Service orchestration**: Starts MongoDB, frontend, and backend in the correct order
-- **Health monitoring**: Verifies all services are running correctly
-- **Graceful shutdown**: Properly terminates all services on exit (Ctrl+C)
-- **Status reporting**: Displays the current state of all services
+- **Enhanced visual interface**: Includes color-coded service status indicators and clear separation between services
+- **Keyboard shortcuts**: Press 'q' to gracefully stop all services
+- **Health monitoring**: Verifies all services are running correctly with real-time status updates
+- **Thorough cleanup**: Ensures all processes are terminated and ports are released during shutdown
+- **Process verification**: Checks for port conflicts and orphaned processes
+- **Status reporting**: Displays the current state of all services with visual indicators
+- **Unified logging**: Combines logs from all services with distinctive formatting
 
-Both scripts include extensive error handling and detailed logging to ensure a smooth installation and startup experience.
+Both scripts include extensive error handling and detailed logging with visual indicators to ensure a smooth installation and startup experience.
 
 ## Usage
 
@@ -199,7 +207,12 @@ The services will be available at:
 
 ### Stopping Kevin
 
-To stop all services, simply press `Ctrl+C` in the terminal where `start-kevin.sh` is running. The script will gracefully shut down all services.
+To stop all services, you have two options:
+
+1. Press the `q` key in the terminal where `start-kevin.sh` is running
+2. Press `Ctrl+C` in the terminal where `start-kevin.sh` is running
+
+The script will perform a graceful shutdown of all services, with thorough process termination checks and port release verification to ensure complete cleanup.
 
 ## Architecture
 
