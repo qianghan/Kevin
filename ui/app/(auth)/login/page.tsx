@@ -1,10 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { signIn } from 'next-auth/react';
-import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { useUserContext } from '@/features/user/context/UserContext';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -13,9 +13,17 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { isAuthenticated } = useUserContext();
   
   // Get return URL from query parameters
   const callbackUrl = searchParams.get('callbackUrl') || '/chat';
+  
+  // Redirect if already authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      router.push(callbackUrl);
+    }
+  }, [isAuthenticated, router, callbackUrl]);
   
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
