@@ -1,107 +1,118 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth/next';
+import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth/auth-options';
+import { 
+  createProtectedHandler, 
+  createSuccessResponse, 
+  createErrorResponse 
+} from '@/lib/api/middleware';
 import { UserProfile } from '@/services/UserService';
 import connectToDatabase from '@/lib/db/connection';
 import User, { UserDocument } from '@/lib/models/User';
 import mongoose from 'mongoose';
 
-// GET /api/user/profile - Get current user profile
-export async function GET(req: NextRequest) {
-  try {
-    const session = await getServerSession(authOptions);
-    
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-    
-    // Get user data directly from database instead of using userService
-    // to avoid circular dependency
-    await connectToDatabase();
-    const user = await User.findById(session.user.id);
-    
-    if (!user) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
-    }
-    
-    // Format user data as UserProfile by treating document as any
-    const userDoc = user as any;
-    const userProfile: UserProfile = {
-      id: userDoc._id.toString(),
-      name: userDoc.name,
-      email: userDoc.email,
-      image: userDoc.image,
-      role: userDoc.role,
-      createdAt: userDoc.createdAt,
-      updatedAt: userDoc.updatedAt
-    };
-    
-    return NextResponse.json(userProfile);
-  } catch (error) {
-    console.error('Error fetching user profile:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch user profile' },
-      { status: 500 }
-    );
+/**
+ * Handle GET request to retrieve current user profile
+ */
+async function handleGetProfile(req: NextRequest, params: Record<string, any>) {
+  // User is already authenticated via middleware
+  const user = params.user;
+  
+  if (!user || !user.id) {
+    console.error('User profile requested but no user in session');
+    return createErrorResponse('Authentication required', 401);
   }
+  
+  console.log('Returning profile for user:', user.id);
+  
+  // Get user data directly from database instead of using userService
+  // to avoid circular dependency
+  await connectToDatabase();
+  const userDoc = await User.findById(user.id);
+  
+  if (!userDoc) {
+    return createErrorResponse('User not found', 404);
+  }
+  
+  // Format user data as UserProfile by treating document as any
+  const userDocAny = userDoc as any;
+  const userProfile: UserProfile = {
+    id: userDocAny._id.toString(),
+    name: userDocAny.name,
+    email: userDocAny.email,
+    image: userDocAny.image,
+    role: userDocAny.role,
+    createdAt: userDocAny.createdAt,
+    updatedAt: userDocAny.updatedAt
+  };
+  
+  return createSuccessResponse(userProfile);
 }
 
-// PUT /api/user/profile - Update user profile
-export async function PUT(req: NextRequest) {
-  try {
-    const session = await getServerSession(authOptions);
-    
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-    
-    // Get request body
-    const data = await req.json();
-    const { name, image } = data;
-    
-    // Update user data directly in the database
-    const updateData: Partial<UserDocument> = {};
-    if (name !== undefined) updateData.name = name;
-    if (image !== undefined) updateData.image = image;
-    
-    // Only update if there are fields to update
-    if (Object.keys(updateData).length > 0) {
-      await connectToDatabase();
-      
-      const updatedUser = await User.findByIdAndUpdate(
-        session.user.id,
-        { $set: updateData },
-        { new: true }
-      );
-      
-      if (!updatedUser) {
-        return NextResponse.json({ error: 'Failed to update user' }, { status: 500 });
-      }
-      
-      // Format updated user data as UserProfile
-      const updatedDoc = updatedUser as any;
-      const updatedProfile: UserProfile = {
-        id: updatedDoc._id.toString(),
-        name: updatedDoc.name,
-        email: updatedDoc.email,
-        image: updatedDoc.image,
-        role: updatedDoc.role,
-        createdAt: updatedDoc.createdAt,
-        updatedAt: updatedDoc.updatedAt
-      };
-      
-      return NextResponse.json(updatedProfile);
-    }
-    
-    return NextResponse.json(
-      { error: 'No fields to update' },
-      { status: 400 }
-    );
-  } catch (error) {
-    console.error('Error updating user profile:', error);
-    return NextResponse.json(
-      { error: 'Failed to update user profile' },
-      { status: 500 }
-    );
+/**
+ * Handle PUT request to update user profile
+ */
+async function handleUpdateProfile(req: NextRequest, params: Record<string, any>) {
+  // User is already authenticated via middleware
+  const user = params.user;
+  
+  if (!user || !user.id) {
+    console.error('Profile update requested but no user in session');
+    return createErrorResponse('Authentication required', 401);
   }
-} 
+  
+  // Parse the request body
+  let profileData;
+  try {
+    profileData = await req.json();
+  } catch (error) {
+    return createErrorResponse('Invalid JSON data', 400);
+  }
+  
+  // Basic validation
+  if (!profileData) {
+    return createErrorResponse('Profile data is required', 400);
+  }
+  
+  console.log('Updating profile for user:', user.id);
+  
+  // Update user data directly in the database
+  const updateData: Partial<UserDocument> = {};
+  if (profileData.name !== undefined) updateData.name = profileData.name;
+  if (profileData.image !== undefined) updateData.image = profileData.image;
+  
+  // Only update if there are fields to update
+  if (Object.keys(updateData).length > 0) {
+    await connectToDatabase();
+    
+    const updatedUser = await User.findByIdAndUpdate(
+      user.id,
+      { $set: updateData },
+      { new: true }
+    );
+    
+    if (!updatedUser) {
+      return createErrorResponse('Failed to update user', 500);
+    }
+    
+    // Format updated user data as UserProfile
+    const updatedDoc = updatedUser as any;
+    const updatedProfile: UserProfile = {
+      id: updatedDoc._id.toString(),
+      name: updatedDoc.name,
+      email: updatedDoc.email,
+      image: updatedDoc.image,
+      role: updatedDoc.role,
+      createdAt: updatedDoc.createdAt,
+      updatedAt: updatedDoc.updatedAt
+    };
+    
+    return createSuccessResponse(updatedProfile);
+  }
+  
+  return createErrorResponse('No fields to update', 400);
+}
+
+// Export the handlers with middleware protection
+export const GET = createProtectedHandler(handleGetProfile);
+export const PUT = createProtectedHandler(handleUpdateProfile); 

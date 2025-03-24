@@ -1,5 +1,6 @@
-import axios, { AxiosError, AxiosResponse } from 'axios';
+import { AxiosError, AxiosResponse } from 'axios';
 import { UserPreferences as ModelUserPreferences } from '@/lib/models/User';
+import axios, { API_CONFIG, extractResponseData, ApiResponse } from '@/lib/api/client';
 
 // Define types for user requests and responses
 export interface UserProfile {
@@ -138,16 +139,21 @@ export class UserService {
     
     try {
       const operation = async () => {
-        const response = await axios.get('/api/user/profile');
-        return response.data;
+        const response = await axios.get<ApiResponse<UserProfile>>('/api/user/profile', API_CONFIG);
+        return extractResponseData<UserProfile>(response.data);
       };
       
       return await retry(operation, methodName);
     } catch (error) {
-      if ((error as ServiceError).name === 'AuthError') {
+      console.error(`[UserService:${methodName}] Error details:`, error);
+      
+      if ((error as ServiceError).name === 'AuthError' || 
+          ((error as ApiRequestError).status === 401)) {
         // Not authenticated is a valid state, return null
+        console.log(`[UserService:${methodName}] Authentication error, returning null`);
         return null;
       }
+      
       return handleError(error, methodName);
     }
   }
@@ -161,8 +167,8 @@ export class UserService {
     
     try {
       const operation = async () => {
-        const response = await axios.put('/api/user/profile', profile);
-        return response.data;
+        const response = await axios.put<ApiResponse<UserProfile>>('/api/user/profile', profile, API_CONFIG);
+        return extractResponseData<UserProfile>(response.data);
       };
       
       return await retry(operation, methodName);
@@ -180,8 +186,8 @@ export class UserService {
     
     try {
       const operation = async () => {
-        const response = await axios.put('/api/user/preferences', preferences);
-        return response.data;
+        const response = await axios.put<ApiResponse<UserPreferences>>('/api/user/preferences', preferences, API_CONFIG);
+        return extractResponseData<UserPreferences>(response.data);
       };
       
       return await retry(operation, methodName);
@@ -199,8 +205,8 @@ export class UserService {
     
     try {
       const operation = async () => {
-        const response = await axios.get('/api/user/preferences');
-        return response.data;
+        const response = await axios.get<ApiResponse<UserPreferences>>('/api/user/preferences', API_CONFIG);
+        return extractResponseData<UserPreferences>(response.data);
       };
       
       return await retry(operation, methodName);
@@ -218,11 +224,11 @@ export class UserService {
     
     try {
       const operation = async () => {
-        const response = await axios.post('/api/user/link', { 
+        const response = await axios.post<ApiResponse<boolean>>('/api/user/link', { 
           targetUserId, 
           relationship 
-        });
-        return response.data.success;
+        }, API_CONFIG);
+        return extractResponseData<boolean>(response.data);
       };
       
       return await retry(operation, methodName);
@@ -240,8 +246,8 @@ export class UserService {
     
     try {
       const operation = async () => {
-        const response = await axios.get(`/api/user/search?q=${encodeURIComponent(query)}`);
-        return response.data;
+        const response = await axios.get<ApiResponse<UserProfile[]>>(`/api/user/search?q=${encodeURIComponent(query)}`, API_CONFIG);
+        return extractResponseData<UserProfile[]>(response.data);
       };
       
       return await retry(operation, methodName);
@@ -259,8 +265,8 @@ export class UserService {
     
     try {
       const operation = async () => {
-        const response = await axios.get(`/api/user/linked/${relationship}`);
-        return response.data;
+        const response = await axios.get<ApiResponse<UserProfile[]>>(`/api/user/linked/${relationship}`, API_CONFIG);
+        return extractResponseData<UserProfile[]>(response.data);
       };
       
       return await retry(operation, methodName);
@@ -278,10 +284,11 @@ export class UserService {
     
     try {
       const operation = async () => {
-        const response = await axios.delete(`/api/user/link`, { 
-          data: { targetUserId, relationship } 
+        const response = await axios.delete<ApiResponse<boolean>>(`/api/user/link`, { 
+          data: { targetUserId, relationship },
+          ...API_CONFIG
         });
-        return response.data.success;
+        return extractResponseData<boolean>(response.data);
       };
       
       return await retry(operation, methodName);
@@ -299,11 +306,11 @@ export class UserService {
     
     try {
       const operation = async () => {
-        const response = await axios.put('/api/user/email', { 
+        const response = await axios.put<ApiResponse<boolean>>('/api/user/email', { 
           newEmail, 
           password 
-        });
-        return response.data.success;
+        }, API_CONFIG);
+        return extractResponseData<boolean>(response.data);
       };
       
       return await retry(operation, methodName);
@@ -321,11 +328,11 @@ export class UserService {
     
     try {
       const operation = async () => {
-        const response = await axios.put('/api/user/password', {
+        const response = await axios.put<ApiResponse<boolean>>('/api/user/password', {
           currentPassword,
           newPassword
-        });
-        return response.data.success;
+        }, API_CONFIG);
+        return extractResponseData<boolean>(response.data);
       };
       
       return await retry(operation, methodName);

@@ -2,8 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { useSession } from 'next-auth/react';
-import { userService } from '@/services/UserService';
-import type { UserProfile, UserPreferences } from '@/services/UserService';
+import { userService, UserProfile, UserPreferences } from '@/services';
 
 interface UserContextType {
   profile: UserProfile | null;
@@ -63,8 +62,9 @@ export function UserProvider({ children }: UserProviderProps) {
       refreshProfile();
     } else if (status === 'unauthenticated') {
       setProfile(null);
+      setPreferences({});
     }
-  }, [isAuthenticated, session]);
+  }, [isAuthenticated, session, status]);
   
   // Refresh user profile data
   const refreshProfile = useCallback(async () => {
@@ -74,13 +74,21 @@ export function UserProvider({ children }: UserProviderProps) {
     setError(null);
     
     try {
+      // Try to get the current user profile
       const userProfile = await userService.getCurrentUser();
+      console.log("UserContext: User profile fetched:", userProfile ? 'Success' : 'Not found');
       setProfile(userProfile);
       
       // Also get preferences if profile exists
       if (userProfile) {
-        const userPrefs = await userService.getPreferences();
-        setPreferences(userPrefs);
+        try {
+          const userPrefs = await userService.getPreferences();
+          console.log("UserContext: User preferences fetched");
+          setPreferences(userPrefs);
+        } catch (prefsError) {
+          console.error('Error fetching user preferences:', prefsError);
+          // Don't set an error - preferences are less critical than the profile
+        }
       }
     } catch (err) {
       console.error('Error fetching user profile:', err);

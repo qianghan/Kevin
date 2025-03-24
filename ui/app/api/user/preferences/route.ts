@@ -1,54 +1,63 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth/next';
+import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth/auth-options';
 import connectToDatabase from '@/lib/db/connection';
 import User, { UserPreferences } from '@/lib/models/User';
+import { 
+  createProtectedHandler, 
+  createSuccessResponse, 
+  createErrorResponse 
+} from '@/lib/api/middleware';
 
-// GET /api/user/preferences - Get user preferences
-export async function GET(req: NextRequest) {
+/**
+ * Handle GET request to retrieve user preferences
+ */
+async function handleGetPreferences(req: NextRequest, params: Record<string, any>) {
+  // User is already authenticated via middleware
+  const user = params.user;
+  
+  if (!user || !user.id) {
+    console.error('Preferences requested but no user in session');
+    return createErrorResponse('Authentication required', 401);
+  }
+  
   try {
-    const session = await getServerSession(authOptions);
-    
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-    
     // Get user preferences directly from database
-    // to avoid circular dependency with userService
     await connectToDatabase();
-    const user = await User.findById(session.user.id);
+    const userDoc = await User.findById(user.id);
     
-    if (!user) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    if (!userDoc) {
+      return createErrorResponse('User not found', 404);
     }
     
     // Extract preferences or return defaults
-    const userDoc = user as any;
-    const preferences: UserPreferences = userDoc.preferences || {
+    const userDocAny = userDoc as any;
+    const preferences: UserPreferences = userDocAny.preferences || {
       theme: 'system',
       emailNotifications: true,
       language: 'en'
     };
     
-    return NextResponse.json(preferences);
+    return createSuccessResponse(preferences);
   } catch (error) {
     console.error('Error fetching user preferences:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch user preferences' },
-      { status: 500 }
-    );
+    return createErrorResponse('Failed to fetch user preferences', 500);
   }
 }
 
-// PUT /api/user/preferences - Update user preferences
-export async function PUT(req: NextRequest) {
+/**
+ * Handle PUT request to update user preferences
+ */
+async function handleUpdatePreferences(req: NextRequest, params: Record<string, any>) {
+  // User is already authenticated via middleware
+  const user = params.user;
+  
+  if (!user || !user.id) {
+    console.error('Preferences update requested but no user in session');
+    return createErrorResponse('Authentication required', 401);
+  }
+  
   try {
-    const session = await getServerSession(authOptions);
-    
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-    
     // Get request body
     const preferences: UserPreferences = await req.json();
     
@@ -73,14 +82,14 @@ export async function PUT(req: NextRequest) {
     // Update preferences directly in the database
     await connectToDatabase();
     
-    const user = await User.findById(session.user.id);
-    if (!user) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    const userDoc = await User.findById(user.id);
+    if (!userDoc) {
+      return createErrorResponse('User not found', 404);
     }
     
     // Get current preferences and merge with new ones
-    const userDoc = user as any;
-    const currentPreferences = userDoc.preferences || {};
+    const userDocAny = userDoc as any;
+    const currentPreferences = userDocAny.preferences || {};
     const updatedPreferences = {
       ...currentPreferences,
       ...validatedPreferences
@@ -88,22 +97,23 @@ export async function PUT(req: NextRequest) {
     
     // Update the user document with new preferences
     const updatedUser = await User.findByIdAndUpdate(
-      session.user.id,
+      user.id,
       { $set: { preferences: updatedPreferences } },
       { new: true }
     );
     
     if (!updatedUser) {
-      return NextResponse.json({ error: 'Failed to update preferences' }, { status: 500 });
+      return createErrorResponse('Failed to update preferences', 500);
     }
     
-    const updatedDoc = updatedUser as any;
-    return NextResponse.json(updatedDoc.preferences || {});
+    const updatedDocAny = updatedUser as any;
+    return createSuccessResponse(updatedDocAny.preferences || {});
   } catch (error) {
     console.error('Error updating user preferences:', error);
-    return NextResponse.json(
-      { error: 'Failed to update user preferences' },
-      { status: 500 }
-    );
+    return createErrorResponse('Failed to update user preferences', 500);
   }
-} 
+}
+
+// Export the handlers with middleware protection
+export const GET = createProtectedHandler(handleGetPreferences);
+export const PUT = createProtectedHandler(handleUpdatePreferences); 
