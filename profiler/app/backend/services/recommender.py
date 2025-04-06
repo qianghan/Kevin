@@ -1,3 +1,11 @@
+"""
+Recommendation service for suggesting profile improvements.
+
+This service analyzes profile data and provides actionable
+recommendations to improve the profile quality.
+"""
+
+import os
 from typing import Dict, Any, List, Optional
 from pydantic import BaseModel
 import chromadb
@@ -5,16 +13,16 @@ from datetime import datetime
 import logging
 import json
 
-from ..core.deepseek.r1 import DeepSeekR1
-from ..core.config import settings
-from profiler.app.backend.utils.logging import get_logger, log_function_call
-from profiler.app.backend.utils.errors import ServiceError, ValidationError
-from profiler.app.backend.utils.cache import cache_async
-from profiler.app.backend.core.interfaces import AIClientInterface
-from profiler.app.backend.services.interfaces import RecommendationServiceInterface
-from profiler.app.backend.services.recommendation.models import Recommendation, ProfileSummary
-from profiler.app.backend.services.recommendation.repository import RecommendationRepository
-from profiler.app.backend.services.recommendation.scoring import ProfileScorer
+from app.backend.core.deepseek.r1 import DeepSeekR1
+from app.backend.config import settings
+from app.backend.utils.logging import get_logger, log_function_call
+from app.backend.utils.errors import ServiceError, ValidationError
+from app.backend.utils.cache import cache_async
+from app.backend.core.interfaces import AIClientInterface
+from app.backend.services.interfaces import RecommendationServiceInterface
+from app.backend.services.recommendation.models import Recommendation, ProfileSummary
+from app.backend.services.recommendation.repository import RecommendationRepository
+from app.backend.services.recommendation.scoring import ProfileScorer
 
 logger = get_logger(__name__)
 

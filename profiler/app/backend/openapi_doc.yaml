@@ -1,0 +1,478 @@
+openapi: 3.0.3
+info:
+  title: Student Profiler API
+  description: API for building comprehensive student profiles with AI assistance
+  version: 1.0.0
+  contact:
+    name: Support Team
+    email: support@example.com
+
+servers:
+  - url: /api
+    description: Base API path
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+  
+  schemas:
+    Error:
+      type: object
+      properties:
+        detail:
+          type: string
+          description: Error message
+      required:
+        - detail
+
+    AskRequest:
+      type: object
+      properties:
+        question:
+          type: string
+          description: User's question
+        context:
+          type: object
+          description: Additional context for question answering
+          additionalProperties: true
+      required:
+        - question
+      example:
+        question: What should I emphasize in my personal statement?
+        context:
+          user_id: user123
+          academic_focus: Computer Science
+
+    DocumentRequest:
+      type: object
+      properties:
+        content:
+          type: string
+          description: Document content
+        document_type:
+          type: string
+          description: Type of document (e.g., resume, cover_letter)
+        user_id:
+          type: string
+          description: User ID
+        metadata:
+          type: object
+          description: Document metadata
+          additionalProperties: true
+      required:
+        - content
+        - document_type
+        - user_id
+      example:
+        content: Dear Admissions Committee, I am writing to express my interest...
+        document_type: cover_letter
+        user_id: user123
+        metadata:
+          source: user_upload
+          filename: cover_letter.pdf
+
+    DocumentResponse:
+      type: object
+      properties:
+        content_type:
+          type: string
+          description: Document type
+        extracted_info:
+          type: object
+          description: Extracted information
+          additionalProperties: true
+        insights:
+          type: array
+          description: Analysis insights
+          items:
+            type: object
+            properties:
+              type:
+                type: string
+                description: Insight type
+              content:
+                type: string
+                description: Insight content
+              confidence:
+                type: number
+                description: Confidence score (0-1)
+        confidence:
+          type: number
+          description: Confidence score (0-1)
+        metadata:
+          type: object
+          description: Additional metadata
+          additionalProperties: true
+      required:
+        - content_type
+        - extracted_info
+        - confidence
+
+    ProfileDataRequest:
+      type: object
+      properties:
+        user_id:
+          type: string
+          description: User ID
+        profile_data:
+          type: object
+          description: Profile data
+          additionalProperties: true
+      required:
+        - user_id
+        - profile_data
+      example:
+        user_id: user123
+        profile_data:
+          academic:
+            grades:
+              gpa: 3.8
+              classes: [CS101, MATH202]
+            achievements: [Dean's List, Hackathon Winner]
+          extracurricular:
+            activities: [Chess Club, Volunteer]
+
+    Recommendation:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique identifier
+        category:
+          type: string
+          description: Recommendation category
+        content:
+          type: string
+          description: Recommendation content
+        relevance:
+          type: number
+          description: Relevance score (0-1)
+        metadata:
+          type: object
+          description: Additional metadata
+          additionalProperties: true
+      required:
+        - id
+        - category
+        - content
+
+    ProfileSummary:
+      type: object
+      properties:
+        user_id:
+          type: string
+          description: User ID
+        sections:
+          type: object
+          description: Summary of profile sections
+          additionalProperties: true
+        strengths:
+          type: array
+          items:
+            type: string
+          description: Key strengths identified
+        areas_for_improvement:
+          type: array
+          items:
+            type: string
+          description: Areas for improvement
+        completeness:
+          type: number
+          description: Profile completeness score (0-1)
+      required:
+        - user_id
+        - sections
+        - completeness
+
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          description: Service status
+        version:
+          type: string
+          description: API version
+        timestamp:
+          type: string
+          format: date-time
+          description: Server timestamp
+      required:
+        - status
+        - version
+        - timestamp
+
+paths:
+  /ask:
+    post:
+      summary: Answer questions about the profile process
+      description: Answers questions related to the profile building process using AI
+      operationId: askQuestion
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AskRequest'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  questions:
+                    type: array
+                    items:
+                      type: object
+                    description: Generated questions
+                  timestamp:
+                    type: string
+                    format: date-time
+                    description: Response timestamp
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /documents/analyze:
+    post:
+      summary: Analyze document content
+      description: Analyzes various document types and extracts structured data
+      operationId: analyzeDocument
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DocumentRequest'
+      responses:
+        '200':
+          description: Successful analysis
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentResponse'
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /documents/upload:
+    post:
+      summary: Upload and analyze document
+      description: Upload a document file for analysis
+      operationId: uploadDocument
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Document file to upload
+                document_type:
+                  type: string
+                  description: Optional document type
+                metadata:
+                  type: string
+                  format: json
+                  description: Optional metadata (JSON string)
+              required:
+                - file
+      responses:
+        '200':
+          description: Successful upload and analysis
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /documents/types:
+    get:
+      summary: Get document types
+      description: Get a list of supported document types
+      operationId: getDocumentTypes
+      security:
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: List of document types
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    value:
+                      type: string
+                      description: Document type value
+                    description:
+                      type: string
+                      description: Document type description
+                  required:
+                    - value
+                    - description
+
+  /recommendations:
+    post:
+      summary: Generate profile recommendations
+      description: Generate recommendations based on profile data
+      operationId: generateRecommendations
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: categories
+          in: query
+          description: Optional categories to filter recommendations
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProfileDataRequest'
+      responses:
+        '200':
+          description: List of recommendations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Recommendation'
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /profile-summary:
+    post:
+      summary: Generate profile summary
+      description: Generate a comprehensive summary of the profile
+      operationId: generateProfileSummary
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProfileDataRequest'
+      responses:
+        '200':
+          description: Profile summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileSummary'
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /health:
+    get:
+      summary: Health check endpoint
+      description: Check if the API is operational
+      operationId: healthCheck
+      responses:
+        '200':
+          description: API is operational
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /ws/{user_id}:
+    parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: User ID for WebSocket session
+    get:
+      summary: WebSocket connection
+      description: Establish WebSocket connection for real-time profile building
+      operationId: websocketEndpoint
+      responses:
+        '101':
+          description: WebSocket upgrade successful
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      tags:
+        - WebSocket 

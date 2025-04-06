@@ -9,7 +9,7 @@ import logging
 from typing import Dict, Any, List, Optional
 import re
 
-from ..core.ai_client import AIClientInterface
+from ...core.interfaces import AIClientInterface
 
 from .interfaces import InformationExtractorInterface, PatternMatcherInterface
 from .models import DocumentType

@@ -12,13 +12,13 @@ from pydantic import BaseModel, Field
 
 from ..services.document_service import DocumentService, DocumentType, DocumentAnalysis
 from ..services.document_service.models import AnalysisInsight
-from .dependencies import get_document_service, validate_api_key
+from .dependencies import get_document_service, verify_api_key
 
 # Create router
 router = APIRouter(
     prefix="/documents",
     tags=["documents"],
-    dependencies=[Depends(validate_api_key)]
+    dependencies=[Depends(verify_api_key)]
 )
 
 class DocumentRequest(BaseModel):
@@ -55,10 +55,20 @@ async def analyze_document(
             try:
                 document_type = DocumentType(request.document_type.lower())
             except ValueError:
-                document_type = await document_service.detect_document_type(request.content)
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Invalid document type: {request.document_type}"
+                )
         else:
             document_type = await document_service.detect_document_type(request.content)
         
+        # Validate content is not empty
+        if not request.content:
+            raise HTTPException(
+                status_code=422,
+                detail="Document content cannot be empty"
+            )
+            
         # Analyze document
         result = await document_service.analyze(
             content=request.content,
@@ -68,7 +78,11 @@ async def analyze_document(
         
         return result
         
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:
+        if "Document content cannot be empty" in str(e) or "Invalid document type" in str(e):
+            raise HTTPException(status_code=422, detail=str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/upload", response_model=DocumentResponse)

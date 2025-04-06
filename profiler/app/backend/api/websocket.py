@@ -23,7 +23,7 @@ from ..core.models.state import create_initial_state
 from .dependencies import ServiceFactory
 
 logger = get_logger(__name__)
-config = ConfigManager().get_config()
+config = ConfigManager().get_all()
 
 class ConnectionManager:
     """
@@ -187,8 +187,8 @@ async def handle_websocket(websocket: WebSocket, user_id: str):
             "data": state
         })
         
-        # Get workflow executor
-        workflow_executor = manager.workflow_executors[session_id]
+        # Get workflow executor (now a ToolNode)
+        tool_node = manager.workflow_executors[session_id]
         
         # Process messages in a loop
         while True:
@@ -224,8 +224,20 @@ async def handle_websocket(websocket: WebSocket, user_id: str):
                         "data": {"message": "Processing your answer..."}
                     })
                     
-                    # Execute workflow step
-                    state = await workflow_executor.arun(state)
+                    # Execute the appropriate tool in the tool node
+                    # (Using ainvoke instead of arun for ToolNode)
+                    tool_call = {
+                        "name": "process_profile",  # The name of the tool to call
+                        "arguments": json.dumps(state)  # Convert state to JSON for the tool
+                    }
+                    result = await tool_node.ainvoke(tool_call)
+                    
+                    # Parse the tool result to get the updated state
+                    try:
+                        state = json.loads(result.content)
+                    except (json.JSONDecodeError, AttributeError):
+                        # If result can't be parsed as JSON, use original state
+                        logger.error(f"Failed to parse tool result: {result}")
                     
                     # Send updated state
                     await manager.send_message(session_id, {
@@ -291,7 +303,21 @@ async def handle_websocket(websocket: WebSocket, user_id: str):
                     state["last_updated"] = datetime.now(timezone.utc).isoformat()
                     
                     # Execute workflow step
-                    state = await workflow_executor.arun(state)
+                    state = await tool_node.ainvoke({
+                        "name": "process_document",
+                        "arguments": json.dumps({
+                            "document_content": content,
+                            "document_type": document_type,
+                            "section": section
+                        })
+                    })
+                    
+                    # Parse the tool result to get the updated state
+                    try:
+                        state = json.loads(state.content)
+                    except (json.JSONDecodeError, AttributeError):
+                        # If result can't be parsed as JSON, use original state
+                        logger.error(f"Failed to parse tool result: {state}")
                     
                     # Send updated state
                     await manager.send_message(session_id, {

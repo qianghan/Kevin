@@ -1,19 +1,19 @@
 """
-Tests for the backend services in the Student Profiler.
+Tests for the services layer.
 
 This module tests the core services:
-- QAService
-- DocumentService
-- RecommendationService
+- QA Service
+- Document Service
+- Recommendation Service
 """
 
 import pytest
 import json
 from unittest.mock import patch, AsyncMock, MagicMock
 
-from profiler.app.backend.services.qa_service import QAService
-from profiler.app.backend.services.document_service import DocumentService
-from profiler.app.backend.services.recommender_service import RecommendationService
+from app.backend.services.qa_service import QAService
+from app.backend.services.document_service import DocumentService
+from app.backend.services.recommender_service import RecommendationService
 
 
 # Tests for QAService

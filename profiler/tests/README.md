@@ -1,112 +1,114 @@
-# Student Profiler Test Suite
+# Profiler API Tests
 
-This directory contains comprehensive tests for the Student Profiler application. The test suite covers API endpoints, backend services, WebSocket functionality, configuration management, and the DeepSeek client implementation.
+This directory contains tests for the Profiler API service.
+
+## Test Types
+
+- **Unit Tests**: Individual components in isolation
+  - `test_rate_limiter.py`: Tests for the rate limiting middleware
+  - `test_basic.py`: Basic unittest tests for the API health endpoint
+
+- **API Tests**: Complete API endpoints and flows
+  - `test_api_endpoints.py`: Comprehensive tests for all API endpoints including document analysis, recommendation, and UI flows
+  - `test_auth.py`: Authentication and authorization tests
+  - `test_health.py`: Health endpoint tests
 
 ## Running Tests
 
-### Prerequisites
+### All Tests
 
-- Python 3.8 or higher
-- Profiler virtual environment created and activated
-- Required test dependencies installed
-
-### Commands
-
-Run all tests:
+Use the `run_tests.py` script at the root of the project:
 
 ```bash
-pytest profiler/tests
+# From the profiler directory
+./run_tests.py
 ```
 
-Run tests with coverage report:
+### Specific Tests
+
+You can run individual test files directly:
 
 ```bash
-pytest profiler/tests --cov=profiler/app/backend --cov-report=html
+# Unit tests
+python tests/test_rate_limiter.py
+python tests/test_basic.py
+
+# API tests (requires complete environment setup)
+python -m pytest tests/test_api_endpoints.py -v
+
+# Run specific test cases
+python -m pytest tests/test_api_endpoints.py::test_analyze_document_endpoint -v
+python -m pytest tests/test_api_endpoints.py::test_ui_flow_document_to_recommendations -v
 ```
 
-Run specific test files:
+## Test Structure
+
+- `conftest.py`: Common fixtures and mocks for pytest
+- `test_*.py`: Individual test modules
+- `data/`: Test data files
+
+## Mock Services
+
+The test suite leverages robust mocking for external services to ensure consistent and reliable test execution:
+
+### Document Service Mock
+
+The document service mock (`mock_document_service` in `conftest.py`) provides:
+- Document analysis with realistic validation
+- Document type detection
+- Proper structure for extracted information
+- Validation for empty content and invalid document types
+
+### Recommendation Service Mock
+
+The recommendation service mock (`mock_recommendation_service` in `conftest.py`) provides:
+- Recommendation generation with realistic output structure
+- Profile summary generation
+- Category-based filtering
+
+### QA Service Mock
+
+The QA service mock (`mock_qa_service` in `conftest.py`) provides:
+- Question generation
+- Answer evaluation
+- Context handling for conversation flow
+
+## Key Test Cases
+
+### Document Analysis Tests
+
+- `test_analyze_document_endpoint`: Tests document analysis with various content types
+- `test_analyze_document_with_metadata`: Tests document analysis with additional metadata
+- Validation tests for empty content and invalid document types
+
+### Recommendation Tests
+
+- `test_recommendations_endpoint`: Tests recommendation generation 
+- `test_recommendations_with_categories`: Tests recommendation filtering by categories
+- Validation tests for request structure
+
+### UI Flow Tests
+
+- `test_ui_flow_document_to_recommendations`: Tests complete flow from document upload to recommendations
+- `test_ui_flow_qa_interaction`: Tests question and answer interaction flow
+- `test_ui_flow_profile_summary`: Tests profile summary generation
+
+## Writing New Tests
+
+When adding new functionality to the API, consider:
+
+1. **Unit Tests**: Test individual components thoroughly
+2. **Integration Tests**: Verify that components work together
+3. **API Tests**: Test the public API endpoints
+4. **Edge Cases**: Include tests for error conditions and edge cases
+5. **Mock Updates**: Update mock services if new service behaviors are needed
+
+## Coverage Reporting
+
+To generate a coverage report:
 
 ```bash
-# Test API endpoints
-pytest profiler/tests/test_api_endpoints.py
-
-# Test WebSocket functionality
-pytest profiler/tests/test_websocket.py
-
-# Test services
-pytest profiler/tests/test_services.py
-
-# Test configuration system
-pytest profiler/tests/test_config.py
-
-# Test DeepSeek client
-pytest profiler/tests/test_deepseek_client.py
+./run_tests.py --coverage
 ```
 
-Run specific test function:
-
-```bash
-pytest profiler/tests/test_api_endpoints.py::test_health_endpoint
-```
-
-## Test Coverage
-
-The test suite covers:
-
-### API Endpoints (`test_api_endpoints.py`)
-- Q&A endpoint (`/ask`)
-- Document analysis endpoint (`/analyze-document`)
-- Recommendations endpoint (`/recommendations`)
-- Profile summary endpoint (`/profile-summary`)
-- Health check endpoint (`/health`)
-- API key authentication
-
-### WebSocket Functionality (`test_websocket.py`)
-- Connection establishment
-- Authentication
-- Message processing
-- State management
-- Error handling
-- Multiple concurrent connections
-
-### Backend Services (`test_services.py`)
-- `QAService`: Processing user input, extracting information, generating follow-up questions
-- `DocumentService`: Document analysis, information extraction
-- `RecommendationService`: Profile recommendations, section-specific recommendations, profile summaries
-
-### Configuration System (`test_config.py`)
-- Loading configuration from files
-- Environment variable overrides
-- Configuration validation
-- Helper functions for accessing configuration values
-
-### DeepSeek Client (`test_deepseek_client.py`)
-- Client initialization
-- Content generation
-- Batch processing
-- Error handling
-- Response structure
-
-## Mocking
-
-The tests use mocks to isolate components and avoid external API calls:
-
-- `mock_qa_service`: Mock QA service with predefined responses
-- `mock_document_service`: Mock document service with predefined analysis results
-- `mock_recommendation_service`: Mock recommendation service with predefined recommendations
-- `mock_deepseek_client`: Mock DeepSeek R1 client that doesn't make actual API calls
-
-## Adding New Tests
-
-When adding new functionality to the application:
-
-1. Create appropriate test cases that validate the new functionality
-2. Ensure tests are isolated using mocks where appropriate
-3. Make sure tests cover both success and error cases
-4. Maintain test coverage for all API endpoints and core services
-
-For further details on pytest, see the [pytest documentation](https://docs.pytest.org/).
-
-## CI/CD Integration
-
-The test suite is designed to be integrated with CI/CD pipelines, with each test module functioning independently to allow for parallel test execution. 
+Coverage results will be available in the `htmlcov/` directory. 

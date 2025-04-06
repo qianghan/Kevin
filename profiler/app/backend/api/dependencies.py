@@ -6,7 +6,7 @@ including service factories and security mechanisms.
 """
 
 from typing import Dict, Optional, Callable, Any
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Depends, Header, HTTPException, status, Request
 from functools import lru_cache
 
 from ..utils.config_manager import ConfigManager
@@ -37,25 +37,33 @@ def get_security_config():
     """
     return get_config_manager().get_security_config()
 
-async def verify_api_key(x_api_key: str = Header(None)):
+async def verify_api_key(request: Request, x_api_key: str = Header(None)):
     """
     Verify that the API key is valid.
     
     Args:
+        request: The FastAPI request
         x_api_key: API key from the request header
         
     Raises:
         HTTPException: If the API key is invalid
     """
-    security_config = get_security_config()
-    valid_keys = security_config.get("api_keys", [])
-    
+    # Check if API key is provided
     if not x_api_key:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="API key is missing"
         )
     
+    # Get valid keys from configuration
+    security_config = get_security_config()
+    valid_keys = security_config.get("api_keys", [])
+    
+    # Get API keys from app state
+    app_state_keys = getattr(request.app.state, "api_keys", [])
+    valid_keys.extend(app_state_keys)
+    
+    # Check if the provided key is valid
     if x_api_key not in valid_keys:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

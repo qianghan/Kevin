@@ -18,7 +18,7 @@ from ..interfaces import AIClientInterface
 from .client import DeepSeekClient
 
 logger = get_logger(__name__)
-config = ConfigManager().get_config().get("ai_clients", {}).get("deepseek", {})
+config = ConfigManager().get_all().get("ai_clients", {}).get("deepseek", {})
 
 class R1Response(BaseModel):
     """Model representing a response from the DeepSeek R1 API."""

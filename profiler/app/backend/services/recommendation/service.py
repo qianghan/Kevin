@@ -38,7 +38,7 @@ class RecommendationService(IRecommendationService):
         """
         self._client = ai_client
         self._repository = repository or RecommendationRepository()
-        self._config = ConfigManager().get_config().get("recommendation_service", {})
+        self._config = ConfigManager().get_all().get("recommendation_service", {})
         
         # Define recommendation categories with weights and subcategories
         self.categories = self._config.get("categories", {

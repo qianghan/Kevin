@@ -2,7 +2,7 @@
 Conversation memory implementation.
 
 This module implements the IConversationMemory interface to manage
-conversation state and history.
+conversation state and history for the QA service.
 """
 
 from typing import Dict, List, Any, Optional
@@ -14,7 +14,7 @@ import asyncio
 from ...utils.logging import get_logger, log_execution_time
 from ...utils.errors import ValidationError, ResourceNotFoundError, ServiceError
 from ...core.interfaces import AIClientInterface
-from ..interfaces import IConversationMemory, IInformationExtractor
+from .interfaces import IConversationMemory, IInformationExtractor
 from .models import Conversation, ConversationMessage, ConversationSummary, QuestionCategory
 from .templates import CONVERSATION_SUMMARY_PROMPT
 

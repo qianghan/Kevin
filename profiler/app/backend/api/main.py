@@ -14,6 +14,9 @@ from typing import Dict, Any, List, Optional
 import time
 from datetime import datetime, timezone
 import asyncio
+import os
+import logging
+import traceback
 
 from ..utils.config_manager import ConfigManager
 from ..utils.logging import get_logger
@@ -24,10 +27,11 @@ from .dependencies import get_document_service, get_recommendation_service, get_
 from .dependencies import verify_api_key, ServiceFactory
 from .middleware import RequestLoggingMiddleware, ErrorLoggingMiddleware
 from .websocket import handle_websocket
+from .document_routes import router as document_router
 
 # Configure logging
 logger = get_logger(__name__)
-config = ConfigManager().get_config()
+config = ConfigManager().get_all()
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -37,6 +41,11 @@ app = FastAPI(
     docs_url="/api/docs" if config.get("environment") != "production" else None,
     redoc_url="/api/redoc" if config.get("environment") != "production" else None
 )
+
+# Set app state
+app.state.version = "1.0.0"
+app.state.environment = os.getenv("ENVIRONMENT", "development")
+app.state.api_keys = os.getenv("API_KEYS", "test_api_key").split(",")
 
 # Add CORS middleware
 app.add_middleware(
@@ -50,6 +59,9 @@ app.add_middleware(
 # Add custom middleware
 app.add_middleware(RequestLoggingMiddleware)
 app.add_middleware(ErrorLoggingMiddleware)
+
+# Include document routes
+app.include_router(document_router, prefix="/api")
 
 # Rate limiting
 class RateLimiter:
@@ -184,7 +196,7 @@ async def websocket_endpoint(
 @app.post(
     "/api/ask", 
     response_model=Dict[str, Any],
-    summary="Answer questions about the profile process"
+    summary="Ask a question"
 )
 async def ask_question(
     request: AskRequest,
@@ -199,16 +211,26 @@ async def ask_question(
     """
     try:
         # Apply rate limiting
-        client_ip = request.context.get("client_ip", "unknown")
+        # Safely get client_ip - fall back to unknown if context doesn't exist
+        client_ip = "unknown"
+        if hasattr(request, 'context') and request.context is not None:
+            client_ip = request.context.get("client_ip", "unknown")
+            
         if not rate_limiter.is_allowed(client_ip):
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                 detail="Rate limit exceeded. Please try again later."
             )
         
+        # Safely get context
+        context = {}
+        if request.context:
+            context = request.context
+            
         response = await qa_service.generate_questions(
-            {"question": request.question, **(request.context or {})},
-            ["academic", "personal"]
+            question=request.question,
+            categories=["academic", "personal"],
+            context=context
         )
         
         return {
@@ -217,7 +239,10 @@ async def ask_question(
         }
         
     except ValidationError as e:
-        raise e.to_http_exception()
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Validation error: {str(e)}"
+        )
     except Exception as e:
         logger.exception(f"Error processing question: {str(e)}")
         raise HTTPException(
@@ -241,36 +266,15 @@ async def analyze_document(
     This endpoint analyzes various document types (resumes, cover letters, etc.)
     and extracts structured data for use in the profile.
     """
-    try:
-        # Validate document type
-        valid = await document_service.validate_document_type(request.document_type)
-        if not valid:
-            raise ValidationError(f"Invalid document type: {request.document_type}")
-        
-        # Analyze document
-        result = await document_service.analyze_document(
-            document_content=request.content,
-            document_type=request.document_type,
-            user_id=request.user_id,
-            metadata=request.metadata
-        )
-        
-        return {
-            "document_id": result.document_id,
-            "analysis": result.analysis,
-            "extracted_data": result.extracted_data,
-            "sections": result.sections,
-            "timestamp": datetime.now(timezone.utc).isoformat()
-        }
-        
-    except ValidationError as e:
-        raise e.to_http_exception()
-    except Exception as e:
-        logger.exception(f"Error analyzing document: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error analyzing document: {str(e)}"
-        )
+    # This function is commented out because it duplicates functionality provided
+    # by the document_routes router, which is now included in the app.
+    # Using the router version instead.
+    return await document_service.analyze_document(
+        document_content=request.content,
+        document_type=request.document_type,
+        user_id=request.user_id,
+        metadata=request.metadata
+    )
 
 @app.post(
     "/api/recommendations", 
@@ -291,17 +295,28 @@ async def generate_recommendations(
     """
     try:
         recommendations = await recommendation_service.generate_recommendations(
-            profile_data={
-                "user_id": request.user_id,
-                **request.profile_data
-            },
+            user_id=request.user_id,
+            profile_data=request.profile_data,
             categories=categories
         )
         
-        return [rec.dict() for rec in recommendations]
+        # Handle both Pydantic models and dictionaries
+        result = []
+        for rec in recommendations:
+            if hasattr(rec, 'dict'):
+                # If it's a Pydantic model with dict() method
+                result.append(rec.dict())
+            else:
+                # If it's already a dictionary
+                result.append(rec)
+                
+        return result
         
     except ValidationError as e:
-        raise e.to_http_exception()
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Validation error: {str(e)}"
+        )
     except Exception as e:
         logger.exception(f"Error generating recommendations: {str(e)}")
         raise HTTPException(
@@ -327,16 +342,17 @@ async def generate_profile_summary(
     """
     try:
         summary = await recommendation_service.get_profile_summary(
-            profile_data={
-                "user_id": request.user_id,
-                **request.profile_data
-            }
+            user_id=request.user_id,
+            profile_data=request.profile_data
         )
         
         return summary.dict()
         
     except ValidationError as e:
-        raise e.to_http_exception()
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Validation error: {str(e)}"
+        )
     except Exception as e:
         logger.exception(f"Error generating profile summary: {str(e)}")
         raise HTTPException(
@@ -349,7 +365,7 @@ async def generate_profile_summary(
     response_model=Dict[str, Any],
     summary="Health check endpoint"
 )
-async def health_check() -> Dict[str, Any]:
+async def health_check(api_key: str = Depends(verify_api_key)) -> Dict[str, Any]:
     """
     Health check endpoint.
     
@@ -364,7 +380,7 @@ async def health_check() -> Dict[str, Any]:
         }
         
         return {
-            "status": "healthy",
+            "status": "ok",
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "version": app.version,
             "services": services_status

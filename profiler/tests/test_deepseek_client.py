@@ -1,26 +1,24 @@
 """
-Tests for the DeepSeek R1 API client.
+Tests for the DeepSeek client.
 
-This module tests:
-- Client initialization
-- Content generation
-- Batch processing
-- Document analysis
-- Error handling
+This module contains tests for the DeepSeek AI client,
+which is used for interacting with DeepSeek's API.
 """
 
 import pytest
 import json
+import aiohttp
+import asyncio
 from unittest.mock import patch, AsyncMock, MagicMock
 
-from profiler.app.backend.core.deepseek.r1 import DeepSeekR1, R1Request, R1Response
+from app.backend.core.deepseek.r1 import DeepSeekR1, R1Request, R1Response
 
 
 class TestDeepSeekR1:
     @pytest.mark.asyncio
     async def test_initialization(self):
         """Test client initialization with config values."""
-        with patch('profiler.app.backend.core.deepseek.r1.get_deepseek_config') as mock_config:
+        with patch('app.backend.core.deepseek.r1.get_deepseek_config') as mock_config:
             # Setup mock config values
             mock_config.side_effect = lambda key, default=None: {
                 "api_key": "test_api_key",
@@ -310,4 +308,24 @@ def test_r1_response_model():
         batch_size=2
     )
     assert response2.outputs[0]["key1"] == "value1"
-    assert response2.outputs[1]["key2"] == "value2" 
+    assert response2.outputs[1]["key2"] == "value2"
+
+
+# Test basic client functionality
+def test_deepseek_client_initialization():
+    """Test that the DeepSeek client initializes with correct config."""
+    # Mock the config
+    with patch('app.backend.core.deepseek.r1.get_deepseek_config') as mock_config:
+        mock_config.return_value = {
+            "api_key": "test_key",
+            "base_url": "https://test-api.example.com",
+            "model": "test-model"
+        }
+        
+        # Initialize client
+        client = DeepSeekR1()
+        
+        # Check attributes
+        assert client.api_key == "test_key"
+        assert client.base_url == "https://test-api.example.com"
+        assert client.model == "test-model" 

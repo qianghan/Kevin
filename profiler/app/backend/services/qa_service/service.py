@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from ...utils.logging import get_logger, log_execution_time
 from ...utils.errors import ValidationError, ResourceNotFoundError, ServiceError
 from ...core.interfaces import AIClientInterface
-from ..interfaces import IQAService
+from .interfaces import IQAService
 from .models import Question, Answer, Conversation, ConversationSummary
 from .question_generator import IQuestionGenerator
 from .answer_evaluator import IAnswerEvaluator

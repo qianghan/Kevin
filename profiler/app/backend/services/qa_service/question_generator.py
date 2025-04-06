@@ -12,7 +12,7 @@ import json
 from ...utils.logging import get_logger, log_execution_time
 from ...utils.errors import ValidationError, ServiceError
 from ...core.interfaces import AIClientInterface
-from ..interfaces import IQuestionGenerator 
+from .interfaces import IQuestionGenerator 
 from .models import Question, Answer, QuestionCategory
 from .templates import QUESTION_GENERATION_PROMPT, FOLLOW_UP_PROMPT
 

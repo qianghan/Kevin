@@ -183,6 +183,35 @@ class ConfigManager:
             
         return self._config
     
+    def get_security_config(self) -> Dict[str, Any]:
+        """
+        Get security configuration.
+        
+        Returns:
+            Dict containing security configuration values.
+        """
+        if not self._config:
+            self.load_config()
+            
+        # Get security config from file
+        security_config = self.get_value(["security"], {})
+        
+        # Try to get API keys from app state if available
+        try:
+            from fastapi import FastAPI
+            from fastapi.applications import get_app
+            app = get_app()
+            if hasattr(app.state, "api_keys"):
+                # Add API keys from app state to security config
+                api_keys = security_config.get("api_keys", [])
+                api_keys.extend(getattr(app.state, "api_keys", []))
+                security_config["api_keys"] = list(set(api_keys))  # Remove duplicates
+        except:
+            # If app state is not available, just use config file values
+            pass
+            
+        return security_config
+    
     def set_value(self, key_path: list, value: Any) -> None:
         """
         Set configuration value by key path.

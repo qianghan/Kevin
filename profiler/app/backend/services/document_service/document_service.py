@@ -9,9 +9,9 @@ import logging
 from typing import Dict, Any, List, Optional, Type
 from datetime import datetime
 
-from ..core.ai_client import AIClientInterface
-from ..utils.logging import get_logger
-from ..utils.errors import ServiceError
+from ...core.interfaces import AIClientInterface
+from ...utils.logging import get_logger
+from ...utils.errors import ServiceError
 
 from .interfaces import (
     DocumentServiceInterface, 

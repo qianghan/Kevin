@@ -7,8 +7,8 @@ to handle cross-cutting concerns like logging and error handling.
 
 import time
 import uuid
-from typing import Callable
-from fastapi import Request, Response
+from typing import Callable, Dict, Tuple, List, Optional
+from fastapi import Request, Response, HTTPException, status
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp, Receive, Scope, Send
 
@@ -151,3 +151,137 @@ class ErrorLoggingMiddleware(BaseHTTPMiddleware):
             )
             # Re-raise for FastAPI's exception handlers
             raise 
+
+class RateLimiter:
+    """
+    Rate limiter middleware for the API.
+    
+    This class implements a simple token bucket algorithm for rate limiting.
+    It limits the number of requests that can be made by a client within
+    a specific time window.
+    """
+    
+    def __init__(
+        self,
+        rate: int = 10,
+        per: int = 60,
+        burst: int = 15,
+        trusted_ips: Optional[List[str]] = None
+    ):
+        """
+        Initialize the rate limiter.
+        
+        Args:
+            rate: The number of requests allowed per time window
+            per: The time window in seconds
+            burst: The maximum burst size (tokens that can be accumulated)
+            trusted_ips: List of IP addresses that bypass rate limiting
+        """
+        self.rate = rate  # requests per window
+        self.per = per  # window size in seconds
+        self.burst = burst  # max token bucket size
+        self.buckets: Dict[str, Tuple[float, float]] = {}  # client_id -> (tokens, last_refill)
+        self.trusted_ips = trusted_ips or []
+    
+    def get_client_id(self, request: Request) -> str:
+        """
+        Get a unique identifier for the client making the request.
+        
+        Args:
+            request: The incoming request
+            
+        Returns:
+            A unique identifier for the client (e.g., IP address or API key)
+        """
+        # Try to get API key from header first
+        api_key = request.headers.get("X-API-Key")
+        if api_key:
+            return f"key:{api_key}"
+        
+        # Fall back to client IP
+        client_ip = request.client.host if request.client else "unknown"
+        return f"ip:{client_ip}"
+    
+    def refill_tokens(self, client_id: str) -> Tuple[float, float]:
+        """
+        Refill the token bucket for a client based on elapsed time.
+        
+        Args:
+            client_id: The unique identifier for the client
+            
+        Returns:
+            A tuple of (tokens, last_refill)
+        """
+        now = time.time()
+        
+        # Get current bucket or create a new one
+        if client_id in self.buckets:
+            tokens, last_refill = self.buckets[client_id]
+        else:
+            # New client starts with a full bucket
+            return (float(self.burst), now)
+        
+        # Calculate token refill based on time elapsed
+        elapsed = now - last_refill
+        refill = elapsed * (self.rate / self.per)
+        tokens = min(float(self.burst), tokens + refill)
+        
+        return (tokens, now)
+    
+    def is_allowed(self, request: Request) -> bool:
+        """
+        Check if a request is allowed based on rate limits.
+        
+        Args:
+            request: The incoming request
+            
+        Returns:
+            True if the request is allowed, False otherwise
+        """
+        # Check if client is in trusted IPs
+        client_ip = request.client.host if request.client else "unknown"
+        if client_ip in self.trusted_ips:
+            return True
+        
+        # Get client identifier
+        client_id = self.get_client_id(request)
+        
+        # Refill tokens based on time elapsed
+        tokens, last_refill = self.refill_tokens(client_id)
+        
+        # Check if request can be allowed
+        if tokens >= 1.0:
+            # Consume a token
+            tokens -= 1.0
+            self.buckets[client_id] = (tokens, last_refill)
+            return True
+        else:
+            # No tokens available
+            return False
+    
+    async def process_request(self, request: Request) -> None:
+        """
+        Process an incoming request and apply rate limiting.
+        
+        Args:
+            request: The incoming request
+            
+        Raises:
+            HTTPException: If the request exceeds the rate limit
+        """
+        if not self.is_allowed(request):
+            retry_after = int(self.per / self.rate)
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=f"Rate limit exceeded. Please try again in {retry_after} seconds.",
+                headers={"Retry-After": str(retry_after)}
+            )
+
+
+# Global rate limiter instance
+rate_limiter = RateLimiter(
+    rate=30,       # 30 requests
+    per=60,        # per minute
+    burst=50,      # burst up to 50
+    trusted_ips=["127.0.0.1", "::1"]  # localhost IPs bypass rate limiting
+) 

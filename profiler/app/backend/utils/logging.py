@@ -7,11 +7,14 @@ This module provides logging utilities and configuration.
 import logging
 import sys
 import os
-from typing import Optional, Dict, Any
+import time
+import functools
+from typing import Optional, Dict, Any, Callable
 import traceback
 import json
 from datetime import datetime
 import uuid
+import asyncio
 
 # Configure root logger
 logging.basicConfig(
@@ -36,6 +39,78 @@ def get_logger(name: str) -> logging.Logger:
     """
     logger = logging.getLogger(name)
     return logger
+
+
+def log_execution_time(logger: logging.Logger):
+    """
+    Decorator to log function execution time.
+    
+    Args:
+        logger: Logger to use for logging execution time
+        
+    Returns:
+        Decorator function
+    """
+    def decorator(func: Callable):
+        @functools.wraps(func)
+        async def async_wrapper(*args, **kwargs):
+            start_time = time.time()
+            try:
+                return await func(*args, **kwargs)
+            finally:
+                end_time = time.time()
+                execution_time = end_time - start_time
+                logger.info(f"{func.__name__} executed in {execution_time:.2f} seconds")
+        
+        @functools.wraps(func)
+        def sync_wrapper(*args, **kwargs):
+            start_time = time.time()
+            try:
+                return func(*args, **kwargs)
+            finally:
+                end_time = time.time()
+                execution_time = end_time - start_time
+                logger.info(f"{func.__name__} executed in {execution_time:.2f} seconds")
+        
+        if asyncio.iscoroutinefunction(func):
+            return async_wrapper
+        return sync_wrapper
+    
+    return decorator
+
+
+def log_function_call(logger: logging.Logger):
+    """
+    Decorator to log function calls with arguments.
+    
+    Args:
+        logger: Logger to use for logging
+        
+    Returns:
+        Decorator function
+    """
+    def decorator(func: Callable):
+        @functools.wraps(func)
+        async def async_wrapper(*args, **kwargs):
+            arg_str = ", ".join([str(a) for a in args[1:]])  # Skip self
+            kwarg_str = ", ".join([f"{k}={v}" for k, v in kwargs.items()])
+            all_args = ", ".join(filter(None, [arg_str, kwarg_str]))
+            logger.debug(f"Calling {func.__name__}({all_args})")
+            return await func(*args, **kwargs)
+        
+        @functools.wraps(func)
+        def sync_wrapper(*args, **kwargs):
+            arg_str = ", ".join([str(a) for a in args[1:]])  # Skip self
+            kwarg_str = ", ".join([f"{k}={v}" for k, v in kwargs.items()])
+            all_args = ", ".join(filter(None, [arg_str, kwarg_str]))
+            logger.debug(f"Calling {func.__name__}({all_args})")
+            return func(*args, **kwargs)
+        
+        if asyncio.iscoroutinefunction(func):
+            return async_wrapper
+        return sync_wrapper
+    
+    return decorator
 
 
 def configure_logging(log_level: str = "INFO", log_to_file: bool = False, log_file: str = None) -> None:

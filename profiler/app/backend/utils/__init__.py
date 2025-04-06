@@ -1,6 +1,6 @@
 """Utility modules for Student Profiler Backend."""
 
-from profiler.app.backend.utils.config_manager import (
+from app.backend.utils.config_manager import (
     ConfigManager,
     ConfigurationError,
     get_config,

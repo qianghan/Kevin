@@ -12,7 +12,7 @@ import statistics
 from ...utils.logging import get_logger, log_execution_time
 from ...utils.errors import ValidationError, ServiceError
 from ...core.interfaces import AIClientInterface
-from ..interfaces import IAnswerEvaluator
+from .interfaces import IAnswerEvaluator
 from .models import Question, Answer
 from .templates import ANSWER_EVALUATION_PROMPT
 

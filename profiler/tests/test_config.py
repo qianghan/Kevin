@@ -1,11 +1,8 @@
 """
-Tests for the configuration management system.
+Tests for the configuration manager.
 
-This module tests:
-- Config loading from files
-- Environment variable overrides
-- Config validation
-- Helper functions for accessing config values
+This module tests the ConfigManager and related utilities for
+loading and accessing configuration values.
 """
 
 import os
@@ -13,8 +10,9 @@ import tempfile
 import pytest
 import yaml
 from pathlib import Path
+from unittest.mock import patch, mock_open
 
-from profiler.app.backend.utils.config_manager import (
+from app.backend.utils.config_manager import (
     ConfigManager,
     ConfigurationError,
     get_config,
@@ -25,7 +23,9 @@ from profiler.app.backend.utils.config_manager import (
     get_workflow_config,
     get_logging_config,
     get_security_config,
-    get_websocket_config
+    get_websocket_config,
+    _get_env_var,
+    _get_yaml_config
 )
 
 

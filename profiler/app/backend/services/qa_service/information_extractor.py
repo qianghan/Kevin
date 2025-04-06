@@ -2,20 +2,37 @@
 Information extractor implementation.
 
 This module implements the IInformationExtractor interface to extract
-structured information from answers and conversations.
+structured information from answers.
 """
 
-from typing import Dict, List, Any, Optional
 import json
+from typing import Dict, List, Any, Optional
 import re
 
 from ...utils.logging import get_logger, log_execution_time
 from ...utils.errors import ValidationError, ServiceError
 from ...utils.cache import cache_async
 from ...core.interfaces import AIClientInterface
-from ..interfaces import IInformationExtractor
+from .interfaces import IInformationExtractor
 from .models import Question, Answer, Conversation, QuestionCategory
 from .templates import INFORMATION_EXTRACTION_PROMPT
+
+# Define conversation extraction prompt
+CONVERSATION_EXTRACTION_PROMPT = """
+Extract structured information from the following conversation:
+
+{conversation}
+
+Please extract key information relevant for a student profile.
+Focus on concrete facts, achievements, experiences, skills, and interests
+that were discussed across all categories.
+
+Return the extracted information organized by categories:
+{category_format}
+
+Extract only information that is explicitly stated or strongly implied in the conversation.
+Do not invent or assume information not present in the text.
+"""
 
 logger = get_logger(__name__)
 

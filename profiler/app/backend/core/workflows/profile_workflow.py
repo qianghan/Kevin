@@ -1,6 +1,6 @@
 from typing import Dict, Any, List, Optional, TypedDict, Annotated
 from langgraph.graph import StateGraph, END
-from langgraph.prebuilt import ToolExecutor
+from langgraph.prebuilt.tool_node import ToolNode
 from pydantic import BaseModel, Field
 from datetime import datetime
 
@@ -10,10 +10,16 @@ from ..models.state import (
     ProfileStatus,
     create_initial_state
 )
-from ..services.qa_service import QAService
-from ..services.document_service import DocumentService
-from ..services.recommender import RecommenderService
-from ..core.config import settings
+from ...services.qa_service import QAService
+from ...services.document_service import DocumentService
+from ...services.recommendation.service import RecommendationService
+from ...utils.config_manager import ConfigManager
+
+from langchain_core.tools import tool
+import json
+
+# Get config instance
+config = ConfigManager().get_all()
 
 class WorkflowConfig(TypedDict):
     """Configuration for the profile building workflow"""
@@ -26,7 +32,7 @@ def create_profile_workflow(
     config: WorkflowConfig,
     qa_service: QAService,
     document_service: DocumentService,
-    recommender_service: RecommenderService
+    recommender_service: RecommendationService
 ) -> StateGraph:
     """Create the profile building workflow"""
     
@@ -139,7 +145,7 @@ async def process_answer(
 
 async def validate_section(
     state: ProfileState,
-    recommender_service: RecommenderService
+    recommender_service: RecommendationService
 ) -> ProfileState:
     """Validate current section's completeness and quality"""
     try:
@@ -203,7 +209,7 @@ async def request_human_review(
 
 async def build_profile(
     state: ProfileState,
-    recommender_service: RecommenderService
+    recommender_service: RecommendationService
 ) -> ProfileState:
     """Build final profile with all sections"""
     try:
@@ -288,18 +294,77 @@ def update_session_state(state: ProfileState) -> ProfileState:
         print(f"Error updating session state: {str(e)}")
         return state
 
+@tool("process_profile")
+def create_profile_tool(workflow):
+    """
+    Process a profile state through the workflow.
+    
+    Args:
+        state_json: JSON string containing the profile state
+        
+    Returns:
+        Updated profile state as a JSON string
+    """
+    def _process_profile(state_json: str) -> str:
+        """Inner function to process the profile using the workflow"""
+        # Parse the input state
+        state = json.loads(state_json)
+        
+        # Run the workflow
+        result = workflow.compile().invoke(state)
+        
+        # Return the result as a JSON string
+        return json.dumps(result)
+    
+    return _process_profile
+
+@tool("get_profile_summary")
+def get_profile_summary_tool(workflow):
+    """
+    Get a summary of the current profile.
+    
+    Args:
+        user_id: The ID of the user to get the summary for
+        
+    Returns:
+        Profile summary as a JSON string
+    """
+    def _get_profile_summary(user_id: str) -> str:
+        """Inner function to get the profile summary"""
+        # Create a state just for getting the summary
+        state = create_initial_state(user_id)
+        state["status"] = "completed"
+        
+        # Use the build_profile node to generate the summary
+        from_node = workflow.get_node("build_profile")
+        summary_state = from_node(state)
+        
+        # Return the summary as a JSON string
+        return json.dumps(summary_state.get("summary", {}))
+    
+    return _get_profile_summary
+
 def create_workflow_executor(
     config: WorkflowConfig,
     qa_service: QAService,
     document_service: DocumentService,
-    recommender_service: RecommenderService
-) -> ToolExecutor:
-    """Create an executor for the workflow"""
+    recommender_service: RecommendationService
+) -> ToolNode:
+    """
+    Create a workflow executor for the profile building workflow.
+    
+    This creates a tool node that can execute the workflow as a tool.
+    """
+    # Create the workflow
     workflow = create_profile_workflow(
-        config=config,
-        qa_service=qa_service,
-        document_service=document_service,
-        recommender_service=recommender_service
+        config, qa_service, document_service, recommender_service
     )
     
-    return workflow.compile() 
+    # Create a list of tools for the workflow
+    tools = [
+        create_profile_tool(workflow),
+        get_profile_summary_tool(workflow)
+    ]
+    
+    # Create and return a tool node instead of ToolExecutor
+    return ToolNode(tools=tools, name="profile_workflow") 

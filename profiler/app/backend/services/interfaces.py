@@ -149,6 +149,67 @@ class Answer(BaseModel):
     confidence: float
     quality_score: Optional[float] = None
 
+class IQuestionGenerator(ABC):
+    """Interface for question generation."""
+    
+    @abstractmethod
+    async def initialize(self) -> None:
+        """Initialize the question generator."""
+        pass
+    
+    @abstractmethod
+    async def shutdown(self) -> None:
+        """Shutdown the question generator and release resources."""
+        pass
+    
+    @abstractmethod
+    async def generate_questions(
+        self, 
+        profile_data: Dict[str, Any],
+        categories: Optional[List[str]] = None,
+        count: int = 3
+    ) -> List[Any]:
+        """
+        Generate questions based on profile data.
+        
+        Args:
+            profile_data: The user's profile data
+            categories: Optional list of categories to generate questions for
+            count: Number of questions to generate
+            
+        Returns:
+            List of Question objects
+            
+        Raises:
+            ValidationError: If the profile data is invalid
+            ServiceError: If questions cannot be generated
+        """
+        pass
+    
+    @abstractmethod
+    async def generate_follow_up_questions(
+        self,
+        question: Any,
+        answer: Any,
+        profile_data: Dict[str, Any]
+    ) -> List[Any]:
+        """
+        Generate follow-up questions based on a previous question and answer.
+        
+        Args:
+            question: The original question
+            answer: The answer to the original question
+            profile_data: The user's profile data
+            
+        Returns:
+            List of follow-up Question objects
+            
+        Raises:
+            ValidationError: If the inputs are invalid
+            ServiceError: If follow-up questions cannot be generated
+        """
+        pass
+
 class IQAService(ABC):
     """Interface for QA generation and evaluation services."""
     
