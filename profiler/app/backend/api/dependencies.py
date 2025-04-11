@@ -14,7 +14,7 @@ from ..utils.errors import AuthenticationError
 from ..core.deepseek.r1 import DeepSeekR1
 from ..services.interfaces import IDocumentService, IRecommendationService, IQAService, IProfileService
 from ..services.recommendation import RecommendationService
-from ..services.document_service import DocumentService
+from ..services.document_service.document_service import DocumentService
 from ..services.qa_service import QAServiceFactory
 from ..services.qa_service.service import QAService
 
@@ -95,16 +95,21 @@ class ServiceFactory:
     _instances: Dict[str, Any] = {}
     
     @classmethod
-    def get_document_service(cls) -> IDocumentService:
-        """
-        Get a DocumentService instance.
-        
-        Returns:
-            IDocumentService: The document service
-        """
+    def get_ai_client(cls) -> DeepSeekR1:
+        """Get the AI client instance"""
+        if "ai_client" not in cls._instances:
+            config = ConfigManager()
+            api_key = config.get_value(["ai_clients", "deepseek", "api_key"])
+            base_url = config.get_value(["ai_clients", "deepseek", "url"])
+            cls._instances["ai_client"] = DeepSeekR1(api_key=api_key, base_url=base_url)
+        return cls._instances["ai_client"]
+    
+    @classmethod
+    def get_document_service(cls) -> DocumentService:
+        """Get the document service instance"""
         if "document" not in cls._instances:
-            client = ClientFactory.get_deepseek_client()
-            cls._instances["document"] = DocumentService(client=client)
+            config = ConfigManager().get_all()
+            cls._instances["document"] = DocumentService(config=config)
         return cls._instances["document"]
     
     @classmethod
@@ -116,38 +121,17 @@ class ServiceFactory:
             IRecommendationService: The recommendation service
         """
         if "recommendation" not in cls._instances:
-            client = ClientFactory.get_deepseek_client()
-            cls._instances["recommendation"] = RecommendationService(ai_client=client)
+            config = ConfigManager().get_all()
+            cls._instances["recommendation"] = RecommendationService(config=config)
         return cls._instances["recommendation"]
     
     @classmethod
-    async def get_qa_service(cls) -> IQAService:
-        """
-        Get a QAService instance.
-        
-        Returns:
-            IQAService: The QA service
-        """
+    async def get_qa_service(cls) -> QAService:
+        """Get the QA service instance"""
         if "qa" not in cls._instances:
-            client = ClientFactory.get_deepseek_client()
-            
-            # Get configuration
-            config = get_config_manager().get_config()
-            qa_config = config.get("qa_service", {})
-            
-            # Determine if persistent storage should be used
-            use_persistent_storage = qa_config.get("use_persistent_storage", False)
-            storage_path = qa_config.get("storage_path", "./data/conversations")
-            
-            # Create QA service using factory
-            service = await QAServiceFactory.create_qa_service(
-                ai_client=client,
-                use_persistent_storage=use_persistent_storage,
-                storage_path=storage_path
-            )
-            
-            cls._instances["qa"] = service
-            
+            config = ConfigManager()
+            qa_config = config.get_value(["qa"], {})
+            cls._instances["qa"] = await QAServiceFactory.create_qa_service(qa_config)
         return cls._instances["qa"]
     
     @classmethod

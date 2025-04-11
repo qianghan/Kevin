@@ -1,3 +1,0 @@
-"""
-Profiler app package.
-""" 

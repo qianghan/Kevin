@@ -29,7 +29,7 @@ class RecommendationRepository:
             config: Optional configuration dictionary. If not provided,
                    configuration will be loaded from the config manager.
         """
-        self._config = config or ConfigManager().get_database_config().get("recommendations", {})
+        self._config = config or ConfigManager().get_value(["database", "chromadb", "collections", "recommendations"], {})
         self._client = None
         self._collection = None
         self._initialized = False
@@ -57,11 +57,11 @@ class RecommendationRepository:
             )
             
             # Get or create recommendations collection
-            collection_name = self._config.get("collection", "recommendations")
+            collection_name = self._config.get("name", "recommendations")
             try:
                 self._collection = self._client.get_collection(collection_name)
                 logger.info(f"Using existing collection: {collection_name}")
-            except ValueError:
+            except (ValueError, chromadb.errors.NotFoundError):
                 logger.info(f"Creating new collection: {collection_name}")
                 self._collection = self._client.create_collection(
                     name=collection_name,

@@ -5,7 +5,7 @@ This module defines the FastAPI application, endpoints, and middleware
 for the Student Profiler backend.
 """
 
-from fastapi import FastAPI, HTTPException, Depends, Request, WebSocket, status
+from fastapi import FastAPI, HTTPException, Depends, Request, WebSocket, status, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.openapi.utils import get_openapi
@@ -17,6 +17,7 @@ import asyncio
 import os
 import logging
 import traceback
+import json
 
 from ..utils.config_manager import ConfigManager
 from ..utils.logging import get_logger
@@ -26,7 +27,7 @@ from ..services.interfaces import DocumentAnalysisResult, Recommendation, Profil
 from .dependencies import get_document_service, get_recommendation_service, get_qa_service
 from .dependencies import verify_api_key, ServiceFactory
 from .middleware import RequestLoggingMiddleware, ErrorLoggingMiddleware
-from .websocket import handle_websocket
+from .websocket import ConnectionManager
 from .document_routes import router as document_router
 
 # Configure logging
@@ -38,8 +39,8 @@ app = FastAPI(
     title="Student Profiler API",
     description="API for building comprehensive student profiles with AI assistance",
     version="1.0.0",
-    docs_url="/api/docs" if config.get("environment") != "production" else None,
-    redoc_url="/api/redoc" if config.get("environment") != "production" else None
+    docs_url="/api/profiler/docs" if config.get("environment") != "production" else None,
+    redoc_url="/api/profiler/redoc" if config.get("environment") != "production" else None
 )
 
 # Set app state
@@ -60,8 +61,11 @@ app.add_middleware(
 app.add_middleware(RequestLoggingMiddleware)
 app.add_middleware(ErrorLoggingMiddleware)
 
+# Initialize connection manager
+manager = ConnectionManager()
+
 # Include document routes
-app.include_router(document_router, prefix="/api")
+app.include_router(document_router, prefix="/api/profiler")
 
 # Rate limiting
 class RateLimiter:
@@ -181,20 +185,62 @@ class ProfileDataRequest(BaseModel):
 
 # API endpoints
 @app.websocket("/api/ws/{user_id}")
-async def websocket_endpoint(
-    websocket: WebSocket,
-    user_id: str
-):
+async def websocket_endpoint(websocket: WebSocket, user_id: str):
     """
     WebSocket endpoint for real-time profile building.
     
-    This endpoint establishes a WebSocket connection for real-time
-    interaction during the profile building process.
+    Args:
+        websocket: The WebSocket connection
+        user_id: The user's ID
     """
-    await handle_websocket(websocket, user_id)
+    session_id = None
+    try:
+        logger.info(f"WebSocket connection attempt from user_id={user_id}")
+        
+        # Accept the connection first
+        await websocket.accept()
+        logger.info(f"WebSocket connection accepted for user_id={user_id}")
+        
+        try:
+            # Connect the client to the manager
+            session_id = await manager.connect(websocket, user_id)
+            logger.info(f"WebSocket session established: user_id={user_id}, session_id={session_id}")
+            
+            # Connection manager now sends the initial messages
+            
+            # Handle messages
+            while True:
+                try:
+                    message = await websocket.receive_text()
+                    logger.debug(f"WebSocket message received from session {session_id}: {message[:100]}...")
+                    await manager.receive_message(message, websocket)
+                except WebSocketDisconnect:
+                    logger.info(f"WebSocket disconnected by client: session_id={session_id}")
+                    break
+                except Exception as e:
+                    logger.error(f"WebSocket message handling error: {str(e)}")
+                    await websocket.send_json({
+                        "type": "error",
+                        "error": str(e)
+                    })
+        except Exception as e:
+            logger.error(f"WebSocket session initialization error: {str(e)}")
+            # Send error message with a simple structure that the frontend can handle
+            await websocket.send_json({
+                "error": str(e)
+            })
+            await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
+                
+    except Exception as e:
+        logger.error(f"WebSocket connection error: {str(e)}")
+        # No need to disconnect since connection wasn't established
+    finally:
+        if session_id:
+            logger.info(f"Cleaning up WebSocket session: session_id={session_id}")
+            manager.disconnect(session_id)
 
 @app.post(
-    "/api/ask", 
+    "/api/profiler/ask", 
     response_model=Dict[str, Any],
     summary="Ask a question"
 )
@@ -251,7 +297,7 @@ async def ask_question(
         )
 
 @app.post(
-    "/api/documents/analyze", 
+    "/api/profiler/documents/analyze", 
     response_model=Dict[str, Any],
     summary="Analyze document content"
 )
@@ -277,7 +323,7 @@ async def analyze_document(
     )
 
 @app.post(
-    "/api/recommendations", 
+    "/api/profiler/recommendations", 
     response_model=List[Dict[str, Any]],
     summary="Generate profile recommendations"
 )
@@ -325,7 +371,7 @@ async def generate_recommendations(
         )
 
 @app.post(
-    "/api/profile-summary", 
+    "/api/profiler/profile-summary", 
     response_model=Dict[str, Any],
     summary="Generate profile summary"
 )
@@ -361,7 +407,7 @@ async def generate_profile_summary(
         )
 
 @app.get(
-    "/api/health", 
+    "/api/profiler/health", 
     response_model=Dict[str, Any],
     summary="Health check endpoint"
 )
@@ -393,6 +439,12 @@ async def health_check(api_key: str = Depends(verify_api_key)) -> Dict[str, Any]
             "error": str(e),
             "version": app.version
         }
+
+# Add a debugging endpoint for WebSocket
+@app.get("/api/ws/{user_id}", include_in_schema=False)
+async def websocket_debug(user_id: str):
+    """Debug endpoint for WebSocket"""
+    return {"message": "WebSocket endpoint exists", "user_id": user_id}
 
 # Startup and shutdown events
 @app.on_event("startup")

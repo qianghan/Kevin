@@ -141,8 +141,8 @@ class ConfigManager:
             ["api", "host"],
             ["api", "port"],
             ["api", "api_key"],
-            ["services", "deepseek", "url"],
-            ["services", "deepseek", "api_key"],
+            ["ai_clients", "deepseek", "url"],
+            ["ai_clients", "deepseek", "api_key"],
         ]
         
         for key_path in required_keys:

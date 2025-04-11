@@ -28,17 +28,41 @@ class RecommendationService(IRecommendationService):
     for improving profile quality and effectiveness.
     """
     
-    def __init__(self, ai_client: AIClientInterface, repository: Optional[RecommendationRepository] = None):
+    def __init__(self, config: Optional[Dict[str, Any]] = None, ai_client: Optional[AIClientInterface] = None, repository: Optional[RecommendationRepository] = None):
         """
         Initialize the recommendation service.
         
         Args:
-            ai_client: Client for AI model interactions
+            config: Optional configuration dictionary
+            ai_client: Optional client for AI model interactions
             repository: Optional repository for storing recommendations
         """
-        self._client = ai_client
+        # Load config
+        self._full_config = config or ConfigManager().get_all()
+        self._config = self._full_config.get("recommendation_service", {})
+        
+        # Initialize AI client if not provided
+        if ai_client is None:
+            if "ai_client" in self._full_config:
+                self._client = self._full_config["ai_client"]
+            elif "ai_clients" in self._full_config and "deepseek" in self._full_config["ai_clients"]:
+                from ...core.deepseek.r1 import DeepSeekR1
+                self._client = DeepSeekR1(
+                    api_key=self._full_config["ai_clients"]["deepseek"]["api_key"],
+                    base_url=self._full_config["ai_clients"]["deepseek"]["url"]
+                )
+            else:
+                # Default to a mock client for testing
+                from ...core.interfaces import AIClientInterface
+                class MockClient(AIClientInterface):
+                    async def complete(self, prompt, **kwargs):
+                        return {"text": "This is a mock response"}
+                self._client = MockClient()
+        else:
+            self._client = ai_client
+        
+        # Initialize repository
         self._repository = repository or RecommendationRepository()
-        self._config = ConfigManager().get_all().get("recommendation_service", {})
         
         # Define recommendation categories with weights and subcategories
         self.categories = self._config.get("categories", {

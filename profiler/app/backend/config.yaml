@@ -5,18 +5,18 @@ api:
   host: "0.0.0.0"
   port: 8000
   debug: false
-  api_key: "YOUR_API_KEY"  # Change this in production!
+  api_key: "test_key"  # API key for testing
   timeout: 60  # seconds
   rate_limit:
     window_seconds: 60
     max_requests: 100
     enabled: true
 
-# External Services
-services:
+# AI Clients
+ai_clients:
   deepseek:
     url: "https://api.deepseek.com/v1"
-    api_key: "YOUR_DEEPSEEK_API_KEY"  # Set this via environment variable
+    api_key: "sk-a8c90a7a82884c0e994508e0608728eb"  # Set this via environment variable
     model: "r1-alpha"
     batch_size: 5
     max_tokens: 2000
@@ -31,9 +31,16 @@ database:
   chromadb:
     host: "localhost"
     port: 8001
-    collection: "profiles"
-    embedding_function: "sentence-transformers/all-MiniLM-L6-v2"
-    distance_metric: "cosine"
+    path: "./data/chroma"
+    collections:
+      profiles:
+        name: "profiles"
+        embedding_function: "sentence-transformers/all-MiniLM-L6-v2"
+        distance_metric: "cosine"
+      recommendations:
+        name: "recommendations"
+        embedding_function: "sentence-transformers/all-MiniLM-L6-v2"
+        distance_metric: "cosine"
 
 # Logging Configuration
 logging:
@@ -79,6 +86,8 @@ websocket:
 
 # Security
 security:
+  api_keys:
+    - "test_key"
   cors:
     allowed_origins:
       - "http://localhost:3000"

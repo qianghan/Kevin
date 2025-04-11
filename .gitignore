@@ -281,3 +281,75 @@ celerybeat.pid
 *.crt
 *.key
 
+# Profiler specific entries
+profiler/node_modules/
+profiler/.next/
+profiler/out/
+profiler/build/
+profiler/dist/
+profiler/.cache/
+profiler/app/ui/node_modules/
+profiler/app/ui/.next/
+profiler/app/ui/out/
+profiler/app/ui/build/
+profiler/app/ui/dist/
+profiler/app/ui/.cache/
+profiler/logs/
+profiler/app/backend/logs/
+profiler/app/ui/logs/
+profiler/**/__pycache__/
+profiler/**/*.py[cod]
+profiler/**/*.so
+profiler/**/*.egg
+profiler/**/*.egg-info/
+profiler/.env.local
+profiler/.env.development.local
+profiler/.env.test.local
+profiler/.env.production.local
+profiler/app/ui/.env.local
+profiler/app/ui/.env.development.local
+profiler/app/ui/.env.test.local
+profiler/app/ui/.env.production.local
+profiler/app/ui/package-lock.json
+profiler/app/ui/yarn.lock
+profiler/.pnp.*
+profiler/.yarn/*
+profiler/app/ui/.pnp.*
+profiler/app/ui/.yarn/*
+profiler/**/.pytest_cache/
+profiler/**/.coverage
+profiler/**/htmlcov/
+profiler/**/.mypy_cache/
+
+# Docker files in profiler
+profiler/docker-compose.override.yml
+
+# IDE files in profiler
+profiler/**/.idea/
+profiler/**/.vscode/
+profiler/**/*.swp
+profiler/**/*.swo
+
+# Database and storage files in profiler
+profiler/**/*.db
+profiler/**/*.sqlite
+profiler/**/chroma_db/
+profiler/**/vector_db/
+profiler/**/*.hdf5
+
+# Temp files in profiler
+profiler/**/tmp/
+profiler/**/temp/
+profiler/**/*.tmp
+
+# Local API key files
+profiler/api_keys.json
+profiler/secrets.json
+profiler/config.local.yaml
+profiler/app/backend/config.local.yaml
+
+# DeepSeek API Response Files
+responses/
+response-*.txt
+response-stream-*.txt
+

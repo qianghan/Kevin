@@ -41,19 +41,21 @@ class DeepSeekR1(DeepSeekClient, AIClientInterface):
 
     def __init__(self, api_key: Optional[str] = None, base_url: Optional[str] = None):
         """
-        Initialize the DeepSeek R1 client.
+        Initialize the DeepSeekR1 client.
         
         Args:
-            api_key: API key for authentication. If None, fetched from config.
-            base_url: Base URL for the API. If None, fetched from config.
+            api_key: Optional API key. If not provided, will be fetched from config.
+            base_url: Optional base URL. If not provided, will be fetched from config.
         """
-        # Get values from config if not provided
-        _api_key = api_key or config.get("api_key")
-        _base_url = base_url or config.get("url")
+        self.api_key = api_key or config.get("api_key")
+        self.base_url = base_url or config.get("url")
         
-        if not _api_key or not _base_url:
-            logger.error("Missing API key or base URL for DeepSeek R1 client")
-            raise ValidationError("Missing API key or base URL for DeepSeek R1 client")
+        if not self.api_key:
+            logger.error("DeepSeek API key is required")
+            raise ValidationError("DeepSeek API key is required")
+        if not self.base_url:
+            logger.error("DeepSeek base URL is required")
+            raise ValidationError("DeepSeek base URL is required")
         
         self.model = config.get("model", "r1-alpha")
         self.max_batch_size = config.get("batch_size", 5)
@@ -62,7 +64,7 @@ class DeepSeekR1(DeepSeekClient, AIClientInterface):
         self.timeout = config.get("timeout", 30)
         self._initialized = False
         
-        super().__init__(api_key=_api_key, base_url=_base_url)
+        super().__init__(api_key=self.api_key, base_url=self.base_url)
         logger.info(f"Initialized DeepSeekR1 client with model {self.model}")
     
     async def initialize(self) -> None:
@@ -612,4 +614,80 @@ Provide a comprehensive analysis with all relevant details structured according 
     
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """Async context manager exit."""
-        await self.shutdown() 
+        await self.shutdown()
+
+    async def analyze(self, text: str, task: str, **kwargs: Any) -> Dict[str, Any]:
+        """
+        Analyze text for a specific task.
+        
+        Args:
+            text: The text to analyze
+            task: The type of analysis to perform
+            **kwargs: Additional parameters for the analysis
+            
+        Returns:
+            Analysis results as a dictionary
+            
+        Raises:
+            APIClientError: If the analysis fails
+        """
+        try:
+            if not self._initialized:
+                await self.initialize()
+            
+            # Create a prompt for analysis
+            prompt = f"""
+Analyze the following text for {task}:
+
+Text to analyze:
+```
+{text}
+```
+
+Provide a detailed analysis with all relevant insights.
+"""
+            
+            # Generate response
+            result = await self.generate(prompt, **kwargs)
+            
+            return {
+                "text": text,
+                "task": task,
+                "analysis": result["text"],
+                "confidence": result.get("confidence", 0.0)
+            }
+        except Exception as e:
+            logger.exception(f"Error analyzing text: {str(e)}")
+            raise APIClientError(f"Failed to analyze text: {str(e)}")
+
+    async def generate_batch(self, prompts: List[str], **kwargs: Any) -> List[Dict[str, Any]]:
+        """
+        Generate content from multiple prompts.
+        
+        Args:
+            prompts: List of prompts to generate content from
+            **kwargs: Additional parameters for the generation
+            
+        Returns:
+            List of generation results
+            
+        Raises:
+            APIClientError: If batch generation fails
+        """
+        try:
+            if not self._initialized:
+                await self.initialize()
+            
+            results = []
+            # Process prompts in batches of max_batch_size
+            for i in range(0, len(prompts), self.max_batch_size):
+                batch = prompts[i:i + self.max_batch_size]
+                batch_results = await asyncio.gather(
+                    *[self.generate(prompt, **kwargs) for prompt in batch]
+                )
+                results.extend(batch_results)
+            
+            return results
+        except Exception as e:
+            logger.exception(f"Error in batch generation: {str(e)}")
+            raise APIClientError(f"Failed to generate batch content: {str(e)}") 

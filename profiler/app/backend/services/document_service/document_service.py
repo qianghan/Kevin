@@ -8,10 +8,12 @@ utilizing specialized components for analyzing different types of documents.
 import logging
 from typing import Dict, Any, List, Optional, Type
 from datetime import datetime
+import asyncio
 
 from ...core.interfaces import AIClientInterface
 from ...utils.logging import get_logger
 from ...utils.errors import ServiceError
+from ...utils.config_manager import ConfigManager
 
 from .interfaces import (
     DocumentServiceInterface, 
@@ -116,31 +118,80 @@ class DocumentServiceFactory(DocumentServiceFactoryInterface):
 class DocumentService(DocumentServiceInterface):
     """Service for analyzing documents and extracting information"""
     
-    def __init__(self, ai_client: AIClientInterface):
-        self.factory = DocumentServiceFactory(ai_client)
+    def __init__(self, config: Optional[Dict[str, Any]] = None):
+        """
+        Initialize the document service.
+        
+        Args:
+            config: Optional configuration dictionary
+        """
+        self.config = config or ConfigManager().get_all()
         self._initialized = False
+        self._lock = asyncio.Lock()
+        
+        # Get AI client from config
+        ai_client = None
+        if "ai_client" in self.config:
+            ai_client = self.config["ai_client"]
+        elif "ai_clients" in self.config and "deepseek" in self.config["ai_clients"]:
+            from ...core.deepseek.r1 import DeepSeekR1
+            ai_client = DeepSeekR1(
+                api_key=self.config["ai_clients"]["deepseek"]["api_key"],
+                base_url=self.config["ai_clients"]["deepseek"]["url"]
+            )
+        else:
+            # Default to a mock client for testing
+            from ...core.interfaces import AIClientInterface
+            class MockClient(AIClientInterface):
+                async def complete(self, prompt, **kwargs):
+                    return {"text": "This is a mock response"}
+            ai_client = MockClient()
+        
+        self.factory = DocumentServiceFactory(ai_client)
     
     async def initialize(self) -> None:
-        """Initialize the document service"""
-        try:
-            logger.info("Initializing document service")
-            # Perform any necessary initialization
-            self._initialized = True
-            logger.info("Document service initialized successfully")
-        except Exception as e:
-            logger.error(f"Error initializing document service: {str(e)}")
-            raise ServiceError(f"Failed to initialize document service: {str(e)}")
+        """Initialize the service asynchronously."""
+        if self._initialized:
+            return
+            
+        async with self._lock:
+            if self._initialized:  # Double check to prevent race conditions
+                return
+                
+            try:
+                logger.info("Initializing document service")
+                # Add any async initialization logic here
+                # For example, connecting to databases or external services
+                await asyncio.sleep(0)  # Placeholder for actual initialization
+                self._initialized = True
+                logger.info("Document service initialized successfully")
+                
+            except Exception as e:
+                logger.error(f"Failed to initialize DocumentService: {str(e)}")
+                raise ServiceError(f"DocumentService initialization failed: {str(e)}")
     
     async def shutdown(self) -> None:
-        """Shutdown the document service"""
-        try:
-            logger.info("Shutting down document service")
-            # Perform any necessary cleanup
-            self._initialized = False
-            logger.info("Document service shut down successfully")
-        except Exception as e:
-            logger.error(f"Error shutting down document service: {str(e)}")
-            raise ServiceError(f"Failed to shut down document service: {str(e)}")
+        """Shutdown the document service."""
+        if not self._initialized:
+            return
+            
+        async with self._lock:
+            if not self._initialized:  # Double check to prevent race conditions
+                return
+                
+            try:
+                logger.info("Shutting down document service")
+                # Add cleanup logic here
+                self._initialized = False
+                logger.info("Document service shut down successfully")
+                
+            except Exception as e:
+                logger.error(f"Failed to shut down DocumentService: {str(e)}")
+                raise ServiceError(f"Failed to shut down DocumentService: {str(e)}")
+    
+    async def close(self) -> None:
+        """Alias for shutdown to maintain backward compatibility."""
+        await self.shutdown()
     
     async def analyze(
         self, 

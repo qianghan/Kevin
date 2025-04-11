@@ -2,6 +2,9 @@ import React, { useState } from 'react';
 import { useProfile } from '../lib/contexts/ProfileContext';
 import { ProfileSection } from '../lib/services/types';
 
+// Define valid profile sections
+const PROFILE_SECTIONS: ProfileSection[] = ['academic', 'extracurricular', 'personal', 'essays'];
+
 export function ProfileBuilder() {
   const { state, loading, error, sendAnswer, uploadDocument, submitReview } = useProfile();
   const [currentAnswer, setCurrentAnswer] = useState('');
@@ -138,7 +141,7 @@ export function ProfileBuilder() {
       {/* All Sections */}
       <div className="mb-8">
         <h2 className="text-xl font-semibold mb-4">All Sections</h2>
-        {Object.values(ProfileSection).map(renderSection)}
+        {PROFILE_SECTIONS.map(renderSection)}
       </div>
 
       {/* Summary */}

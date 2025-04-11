@@ -17,7 +17,8 @@ from ..utils.errors import ValidationError, ServiceError
 from ..utils.config_manager import ConfigManager
 from ..core.workflows.profile_workflow import (
     create_workflow_executor,
-    WorkflowConfig
+    WorkflowConfig,
+    create_profile_workflow
 )
 from ..core.models.state import create_initial_state
 from .dependencies import ServiceFactory
@@ -50,8 +51,6 @@ class ConnectionManager:
         Returns:
             Session ID for the connection
         """
-        await websocket.accept()
-        
         # Generate a unique session ID
         session_id = f"{user_id}_{uuid.uuid4().hex[:8]}"
         
@@ -69,28 +68,73 @@ class ConnectionManager:
         
         logger.info(f"WebSocket connected: user_id={user_id}, session_id={session_id}")
         
-        # Initialize workflow executor
-        workflow_config = WorkflowConfig(
-            session_timeout_minutes=config.get("websocket", {}).get("session_timeout_minutes", 30),
-            max_interactions=config.get("websocket", {}).get("max_interactions", 100),
-            confidence_threshold=config.get("websocket", {}).get("confidence_threshold", 0.8),
-            human_review_threshold=config.get("websocket", {}).get("human_review_threshold", 0.7)
-        )
-        
-        # Get service instances
-        document_service = ServiceFactory.get_document_service()
-        recommendation_service = ServiceFactory.get_recommendation_service()
-        qa_service = ServiceFactory.get_qa_service()
-        
-        # Create workflow executor
-        self.workflow_executors[session_id] = create_workflow_executor(
-            config=workflow_config,
-            qa_service=qa_service,
-            document_service=document_service,
-            recommendation_service=recommendation_service
-        )
-        
-        return session_id
+        try:
+            # Initialize workflow executor
+            workflow_config = WorkflowConfig(
+                session_timeout_minutes=config.get("websocket", {}).get("session_timeout_minutes", 30),
+                max_interactions=config.get("websocket", {}).get("max_interactions", 100),
+                confidence_threshold=config.get("websocket", {}).get("confidence_threshold", 0.8),
+                human_review_threshold=config.get("websocket", {}).get("human_review_threshold", 0.7)
+            )
+            
+            # Get service instances and ensure they're initialized
+            qa_service = await ServiceFactory.get_qa_service()
+            
+            document_service = ServiceFactory.get_document_service()
+            await document_service.initialize()
+            
+            recommendation_service = ServiceFactory.get_recommendation_service()
+            await recommendation_service.initialize()
+            
+            # Create workflow executor
+            self.workflow_executors[session_id] = create_profile_workflow(
+                config=workflow_config,
+                qa_service=qa_service,
+                document_service=document_service,
+                recommender_service=recommendation_service
+            )
+            
+            # Send initial messages
+            await self.send_message(session_id, {
+                "type": "connected",
+                "session_id": session_id,
+                "message": "Connected to profile builder"
+            })
+            
+            # Send an initial empty state to the client
+            await self.send_message(session_id, {
+                "type": "state_update",
+                "data": {
+                    "user_id": user_id,
+                    "current_section": "academic",
+                    "current_questions": [
+                        "What courses are you currently taking?",
+                        "What are your strongest academic subjects?",
+                        "Do you have any academic achievements you'd like to highlight?"
+                    ],
+                    "current_answer": None,
+                    "sections": {
+                        "academic": {"status": "not_started", "grades": [], "courses": [], "achievements": []},
+                        "extracurricular": {"status": "not_started", "activities": [], "leadership": [], "service": []},
+                        "personal": {"status": "not_started", "background": {"nationality": "", "languages": [], "interests": []}, "goals": {"short_term": [], "long_term": [], "target_schools": []}, "interests": []},
+                        "essays": {"status": "not_started", "topics": [], "content": {"main_theme": "", "key_points": [], "style": ""}, "style": {"tone": "", "structure": "", "unique_elements": []}}
+                    },
+                    "context": {},
+                    "review_requests": [],
+                    "interaction_count": 0,
+                    "last_updated": datetime.now(timezone.utc).isoformat(),
+                    "status": "in_progress",
+                    "error": None,
+                    "summary": None
+                }
+            })
+            
+            return session_id
+            
+        except Exception as e:
+            logger.error(f"Error initializing workflow executor: {str(e)}")
+            self.disconnect(session_id)  # Clean up the connection we just added
+            raise
     
     def disconnect(self, session_id: str):
         """
@@ -158,251 +202,54 @@ class ConnectionManager:
         
         logger.info(f"Broadcast message sent to {sent_count} clients: {message['type']}")
 
-# Create a singleton instance
-manager = ConnectionManager()
-
-async def handle_websocket(websocket: WebSocket, user_id: str):
-    """
-    Handle WebSocket connection for a profile building session.
-    
-    This function manages the entire lifecycle of a WebSocket connection,
-    including state updates, workflow execution, and error handling.
-    
-    Args:
-        websocket: The WebSocket connection
-        user_id: The user's ID
-    """
-    session_id = None
-    
-    try:
-        # Connect client and get session ID
-        session_id = await manager.connect(websocket, user_id)
-        
-        # Initialize state
-        state = create_initial_state(user_id)
-        
-        # Send initial state
-        await manager.send_message(session_id, {
-            "type": "state_update",
-            "data": state
-        })
-        
-        # Get workflow executor (now a ToolNode)
-        tool_node = manager.workflow_executors[session_id]
-        
-        # Process messages in a loop
-        while True:
-            # Receive message with timeout
-            try:
-                # Set a timeout for receiving messages
-                message = await asyncio.wait_for(
-                    websocket.receive_json(),
-                    timeout=config.get("websocket", {}).get("idle_timeout", 300)  # 5 minutes default
-                )
-            except asyncio.TimeoutError:
-                # Send ping to check if client is still connected
-                await manager.send_message(session_id, {"type": "ping"})
-                continue
+    async def receive_message(self, message: str, websocket: WebSocket) -> None:
+        """Handle incoming WebSocket messages"""
+        try:
+            # Parse message
+            data = json.loads(message)
+            session_id = data.get("session_id")
             
-            # Log received message
-            logger.info(f"Received message from session {session_id}: {message.get('type')}")
-            
-            try:
-                # Process message based on type
-                if message["type"] == "answer":
-                    # Validate message format
-                    if "data" not in message:
-                        raise ValidationError("Missing 'data' field in message")
-                    
-                    # Update state with answer
-                    state["current_answer"] = message["data"]
-                    state["last_updated"] = datetime.now(timezone.utc).isoformat()
-                    
-                    # Send acknowledgment
-                    await manager.send_message(session_id, {
-                        "type": "processing",
-                        "data": {"message": "Processing your answer..."}
-                    })
-                    
-                    # Execute the appropriate tool in the tool node
-                    # (Using ainvoke instead of arun for ToolNode)
-                    tool_call = {
-                        "name": "process_profile",  # The name of the tool to call
-                        "arguments": json.dumps(state)  # Convert state to JSON for the tool
-                    }
-                    result = await tool_node.ainvoke(tool_call)
-                    
-                    # Parse the tool result to get the updated state
-                    try:
-                        state = json.loads(result.content)
-                    except (json.JSONDecodeError, AttributeError):
-                        # If result can't be parsed as JSON, use original state
-                        logger.error(f"Failed to parse tool result: {result}")
-                    
-                    # Send updated state
-                    await manager.send_message(session_id, {
-                        "type": "state_update",
-                        "data": state
-                    })
-                    
-                elif message["type"] == "review_feedback":
-                    # Validate message format
-                    if "data" not in message or "section" not in message["data"] or "feedback" not in message["data"]:
-                        raise ValidationError("Invalid review feedback format")
-                    
-                    section = message["data"]["section"]
-                    feedback = message["data"]["feedback"]
-                    
-                    # Update section based on feedback
-                    if section not in state["sections"]:
-                        raise ValidationError(f"Section '{section}' not found in state")
-                    
-                    state["sections"][section].update(feedback)
-                    state["sections"][section]["status"] = "in_progress"
-                    state["last_updated"] = datetime.now(timezone.utc).isoformat()
-                    
-                    # Remove review request
-                    state["review_requests"] = [
-                        req for req in state["review_requests"]
-                        if req["section"] != section
-                    ]
-                    
-                    # Send updated state
-                    await manager.send_message(session_id, {
-                        "type": "state_update",
-                        "data": state
-                    })
-                    
-                elif message["type"] == "document_upload":
-                    # Validate message format
-                    if "data" not in message or "section" not in message["data"] or "content" not in message["data"]:
-                        raise ValidationError("Invalid document upload format")
-                    
-                    section = message["data"]["section"]
-                    content = message["data"]["content"]
-                    document_type = message["data"].get("document_type", "resume")
-                    
-                    # Validate document type
-                    document_service = ServiceFactory.get_document_service()
-                    valid = await document_service.validate_document_type(document_type)
-                    if not valid:
-                        raise ValidationError(f"Invalid document type: {document_type}")
-                    
-                    # Send acknowledgment
-                    await manager.send_message(session_id, {
-                        "type": "processing",
-                        "data": {"message": "Processing your document..."}
-                    })
-                    
-                    # Update state with document content
-                    state["current_answer"] = {
-                        "document_content": content,
-                        "document_type": document_type,
-                        "section": section
-                    }
-                    state["last_updated"] = datetime.now(timezone.utc).isoformat()
-                    
-                    # Execute workflow step
-                    state = await tool_node.ainvoke({
-                        "name": "process_document",
-                        "arguments": json.dumps({
-                            "document_content": content,
-                            "document_type": document_type,
-                            "section": section
-                        })
-                    })
-                    
-                    # Parse the tool result to get the updated state
-                    try:
-                        state = json.loads(state.content)
-                    except (json.JSONDecodeError, AttributeError):
-                        # If result can't be parsed as JSON, use original state
-                        logger.error(f"Failed to parse tool result: {state}")
-                    
-                    # Send updated state
-                    await manager.send_message(session_id, {
-                        "type": "state_update",
-                        "data": state
-                    })
-                
-                elif message["type"] == "save_state":
-                    # Save the current state
-                    # This could write to a database or storage service
-                    # For now, just acknowledge
-                    
-                    await manager.send_message(session_id, {
-                        "type": "save_complete",
-                        "data": {
-                            "message": "Profile state saved successfully",
-                            "timestamp": datetime.now(timezone.utc).isoformat()
-                        }
-                    })
-                
-                elif message["type"] == "ping":
-                    # Respond to ping with pong
-                    await manager.send_message(session_id, {"type": "pong"})
-                
-                else:
-                    logger.warning(f"Unknown message type received: {message['type']}")
-                    await manager.send_message(session_id, {
-                        "type": "error",
-                        "data": {"message": f"Unknown message type: {message['type']}"}
-                    })
-                
-                # Check if workflow is complete
-                if state["status"] == "completed":
-                    # Send completion message
-                    await manager.send_message(session_id, {
-                        "type": "workflow_complete",
-                        "data": state
-                    })
-                    
-                    # Get recommendations
-                    try:
-                        recommendation_service = ServiceFactory.get_recommendation_service()
-                        recommendations = await recommendation_service.generate_recommendations(
-                            profile_data={"user_id": user_id, **state["profile_data"]}
-                        )
-                        
-                        # Send recommendations
-                        await manager.send_message(session_id, {
-                            "type": "recommendations",
-                            "data": {"recommendations": [rec.dict() for rec in recommendations]}
-                        })
-                    except Exception as e:
-                        logger.error(f"Error generating recommendations: {str(e)}")
-                    
-                    # Break the loop to end the session
-                    break
-            
-            except ValidationError as e:
-                # Send validation error to client
-                await manager.send_message(session_id, {
-                    "type": "error",
-                    "data": {"message": str(e), "code": "validation_error"}
+            if not session_id or session_id not in self.workflow_executors:
+                await websocket.send_json({
+                    "error": "Invalid session ID"
                 })
+                return
             
+            # Get workflow executor
+            executor = self.workflow_executors[session_id]
+            
+            # Convert message to state
+            state = create_initial_state(
+                user_id=data.get("user_id", "default"),
+                current_section=data.get("section", "background"),
+                current_answer=data.get("answer", {}),
+                context=data.get("context", {})
+            )
+            
+            # Process state through workflow
+            try:
+                result = await executor.ainvoke({
+                    "state_dict": state.model_dump()
+                })
+                
+                # Send result back
+                await websocket.send_json(result)
             except Exception as e:
-                # Log error and send generic error to client
-                logger.exception(f"Error processing message: {str(e)}")
-                await manager.send_message(session_id, {
-                    "type": "error",
-                    "data": {"message": "An unexpected error occurred", "code": "server_error"}
+                logger.error(f"Error executing workflow: {str(e)}")
+                await websocket.send_json({
+                    "error": f"Workflow execution failed: {str(e)}"
                 })
-    
-    except WebSocketDisconnect:
-        logger.info(f"WebSocket disconnected: user_id={user_id}, session_id={session_id}")
-        if session_id:
-            manager.disconnect(session_id)
-    except Exception as e:
-        logger.exception(f"WebSocket error: {str(e)}")
-        # Send error message if possible
-        if session_id:
-            try:
-                await manager.send_message(session_id, {
-                    "type": "error",
-                    "data": {"message": "An unexpected error occurred", "code": "server_error"}
-                })
-            except:
-                pass
-            manager.disconnect(session_id) 
+            
+        except json.JSONDecodeError as e:
+            logger.error(f"Invalid JSON message: {str(e)}")
+            await websocket.send_json({
+                "error": "Invalid JSON message"
+            })
+        except Exception as e:
+            logger.error(f"Error processing message: {str(e)}")
+            await websocket.send_json({
+                "error": f"Message processing failed: {str(e)}"
+            })
+
+# Create a global connection manager instance
+manager = ConnectionManager() 
