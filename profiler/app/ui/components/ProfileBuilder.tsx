@@ -1,185 +1,181 @@
 import React, { useState } from 'react';
 import { useProfile } from '../lib/contexts/ProfileContext';
-import { ProfileSection } from '../lib/services/types';
+import { ProfileSection, ProfileState } from '../lib/services/types';
 
 // Define valid profile sections
-const PROFILE_SECTIONS: ProfileSection[] = ['academic', 'extracurricular', 'personal', 'essays'];
+const PROFILE_SECTIONS = ['education', 'skills', 'experience', 'projects'];
 
-export function ProfileBuilder() {
+export default function ProfileBuilder() {
   const { state, loading, error, sendAnswer, uploadDocument, submitReview } = useProfile();
-  const [currentAnswer, setCurrentAnswer] = useState('');
+  const [userAnswer, setUserAnswer] = useState('');
+  const [uploadStatus, setUploadStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle');
+  const [file, setFile] = useState<File | null>(null);
 
   if (loading) {
-    return <div>Loading profile builder...</div>;
+    return (
+      <div className="flex flex-col items-center justify-center p-8">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+        <p className="mt-4">Loading your profile...</p>
+      </div>
+    );
   }
 
   if (error) {
-    return <div>Error: {error.message}</div>;
+    return (
+      <div className="flex flex-col items-center justify-center p-8">
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
+          <strong className="font-bold">Error!</strong>
+          <span className="block sm:inline"> {error.toString()}</span>
+        </div>
+        <button 
+          onClick={() => window.location.reload()} 
+          className="mt-4 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+        >
+          Try Again
+        </button>
+      </div>
+    );
   }
 
   if (!state) {
-    return <div>No profile state available</div>;
+    return (
+      <div className="flex flex-col items-center justify-center p-8">
+        <p>No profile data loaded. Please refresh the page.</p>
+      </div>
+    );
   }
 
   const handleSubmitAnswer = (e: React.FormEvent) => {
     e.preventDefault();
-    if (currentAnswer.trim()) {
-      sendAnswer(currentAnswer);
-      setCurrentAnswer('');
+    if (userAnswer.trim()) {
+      sendAnswer(userAnswer);
+      setUserAnswer('');
     }
   };
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  const handleUploadDocument = () => {
     if (file) {
-      const content = await file.text();
-      await uploadDocument(content, state.current_section);
+      setUploadStatus('uploading');
+      uploadDocument(file)
+        .then(() => setUploadStatus('success'))
+        .catch(() => setUploadStatus('error'))
+        .finally(() => setFile(null));
     }
   };
 
-  const renderSection = (section: ProfileSection) => {
-    const sectionData = state.sections[section];
+  const renderSection = (section: string) => {
+    const isActive = state.current_section === section;
+    const completed = state.sections?.[section as keyof typeof state.sections]?.status === 'completed';
+    
     return (
-      <div key={section} className="mb-8">
-        <h2 className="text-2xl font-bold mb-4">{section}</h2>
-        <div className="bg-gray-50 p-4 rounded">
-          <p>Status: {sectionData.status}</p>
-          {sectionData.recommendations && (
-            <div className="mt-4">
-              <h3 className="font-semibold">Recommendations:</h3>
-              <ul className="list-disc pl-5">
-                {sectionData.recommendations.map((rec, i) => (
-                  <li key={i}>{rec.description}</li>
-                ))}
-              </ul>
-            </div>
+      <div 
+        key={section}
+        className={`p-4 border rounded mb-2 ${isActive ? 'border-blue-500' : completed ? 'border-green-500' : 'border-gray-300'}`}
+      >
+        <div className="flex justify-between items-center">
+          <h3 className="font-medium">
+            {section.charAt(0).toUpperCase() + section.slice(1)}
+          </h3>
+          {completed && (
+            <span className="text-green-500">✓ Completed</span>
           )}
         </div>
       </div>
     );
   };
 
-  return (
-    <div className="max-w-4xl mx-auto p-6">
-      <h1 className="text-3xl font-bold mb-8">Student Profile Builder</h1>
-      
-      {/* Current Section */}
-      <div className="mb-8">
-        <h2 className="text-xl font-semibold mb-4">Current Section: {state.current_section}</h2>
-        
-        {/* Questions */}
-        {state.current_questions.length > 0 && (
-          <div className="mb-4">
-            <h3 className="font-medium mb-2">Current Questions:</h3>
-            <ul className="list-disc pl-5">
-              {state.current_questions.map((q, i) => (
-                <li key={i}>{q}</li>
-              ))}
-            </ul>
-          </div>
-        )}
+  const renderSectionStatus = () => {
+    return (
+      <div className="mb-6">
+        <h3 className="font-semibold mb-2">Section Status</h3>
+        {PROFILE_SECTIONS.map(renderSection)}
+      </div>
+    );
+  };
 
-        {/* Answer Form */}
+  const renderCurrentQuestions = () => {
+    if (!state.current_questions || state.current_questions.length === 0) {
+      return (
+        <div className="p-4 bg-yellow-100 rounded">
+          <p>No questions available at the moment.</p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="bg-white border rounded p-4 mb-4">
+        <h3 className="font-semibold mb-2">Current Questions:</h3>
+        <ul className="list-disc pl-5">
+          {state.current_questions.map((question: any, index: number) => (
+            <li key={index} className="mb-2">{typeof question === 'string' ? question : question.text}</li>
+          ))}
+        </ul>
+      </div>
+    );
+  };
+
+  return (
+    <div className="max-w-4xl mx-auto p-4">
+      <h1 className="text-2xl font-bold mb-4">Profile Builder</h1>
+      
+      {/* Profile Navigation */}
+      <div className="flex mb-4 border-b overflow-x-auto">
+        {PROFILE_SECTIONS.map((section) => (
+          <button
+            key={section}
+            className={`px-4 py-2 ${state.current_section === section ? 'border-b-2 border-blue-500 text-blue-500' : 'text-gray-500'}`}
+            onClick={() => submitReview({ action: 'switch_section', data: { section } })}
+          >
+            {section.charAt(0).toUpperCase() + section.slice(1)}
+          </button>
+        ))}
+      </div>
+
+      {/* Section Status */}
+      {renderSectionStatus()}
+      
+      {/* Current Questions */}
+      {renderCurrentQuestions()}
+      
+      {/* Document Upload */}
+      <div className="mb-6">
+        <h3 className="font-semibold mb-2">Upload Document</h3>
+        <input 
+          type="file" 
+          onChange={(e) => setFile(e.target.files?.[0] || null)} 
+          className="mb-2"
+        />
+        <button
+          onClick={handleUploadDocument}
+          className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-1 px-4 rounded mr-2"
+          disabled={uploadStatus === 'uploading' || !file}
+        >
+          {uploadStatus === 'uploading' ? 'Uploading...' : 'Upload'}
+        </button>
+        {uploadStatus === 'success' && <span className="text-green-500">Upload successful!</span>}
+        {uploadStatus === 'error' && <span className="text-red-500">Upload failed!</span>}
+      </div>
+      
+      {/* Answer Form */}
+      <div className="mb-6">
+        <h3 className="font-semibold mb-2">Your Answer</h3>
         <form onSubmit={handleSubmitAnswer} className="mb-4">
           <textarea
-            value={currentAnswer}
-            onChange={(e) => setCurrentAnswer(e.target.value)}
+            value={userAnswer}
+            onChange={(e) => setUserAnswer(e.target.value)}
             className="w-full p-2 border rounded"
             rows={4}
-            placeholder="Enter your answer..."
-          />
+            placeholder="Type your answer here..."
+          ></textarea>
           <button
             type="submit"
-            className="mt-2 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+            className="mt-2 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+            disabled={!userAnswer.trim()}
           >
             Submit Answer
           </button>
         </form>
-
-        {/* File Upload */}
-        <div className="mb-4">
-          <input
-            type="file"
-            onChange={handleFileUpload}
-            className="block w-full text-sm text-gray-500
-              file:mr-4 file:py-2 file:px-4
-              file:rounded-full file:border-0
-              file:text-sm file:font-semibold
-              file:bg-blue-50 file:text-blue-700
-              hover:file:bg-blue-100"
-          />
-        </div>
       </div>
-
-      {/* Review Requests */}
-      {state.review_requests.length > 0 && (
-        <div className="mb-8">
-          <h2 className="text-xl font-semibold mb-4">Review Requests</h2>
-          {state.review_requests.map((request, i) => (
-            <div key={i} className="bg-yellow-50 p-4 rounded mb-4">
-              <h3 className="font-medium mb-2">Section: {request.section}</h3>
-              <p>Quality Score: {request.quality_score}</p>
-              <div className="mt-4">
-                <button
-                  onClick={() => submitReview(request.section, { approved: true })}
-                  className="mr-2 px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
-                >
-                  Approve
-                </button>
-                <button
-                  onClick={() => submitReview(request.section, { approved: false })}
-                  className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
-                >
-                  Reject
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* All Sections */}
-      <div className="mb-8">
-        <h2 className="text-xl font-semibold mb-4">All Sections</h2>
-        {PROFILE_SECTIONS.map(renderSection)}
-      </div>
-
-      {/* Summary */}
-      {state.summary && (
-        <div className="bg-gray-50 p-6 rounded">
-          <h2 className="text-xl font-semibold mb-4">Profile Summary</h2>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <h3 className="font-medium mb-2">Strengths</h3>
-              <ul className="list-disc pl-5">
-                {state.summary.strengths.map((s, i) => (
-                  <li key={i}>{s}</li>
-                ))}
-              </ul>
-            </div>
-            <div>
-              <h3 className="font-medium mb-2">Areas for Improvement</h3>
-              <ul className="list-disc pl-5">
-                {state.summary.areas_for_improvement.map((a, i) => (
-                  <li key={i}>{a}</li>
-                ))}
-              </ul>
-            </div>
-            <div>
-              <h3 className="font-medium mb-2">Unique Selling Points</h3>
-              <ul className="list-disc pl-5">
-                {state.summary.unique_selling_points.map((p, i) => (
-                  <li key={i}>{p}</li>
-                ))}
-              </ul>
-            </div>
-            <div>
-              <h3 className="font-medium mb-2">Overall Quality</h3>
-              <p>{state.summary.overall_quality.toFixed(2)}</p>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 } 
