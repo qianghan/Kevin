@@ -228,6 +228,56 @@ external_services:
     retry_attempts: 3
 ```
 
+### Error Handling
+
+The Kevin University API integration is designed with robust error handling to ensure the overall recommendation system remains operational even when the external service is unavailable:
+
+1. **API Unavailability Detection**:
+   - Connection timeouts (configurable via `timeout_seconds`)
+   - HTTP error status codes
+   - Malformed response handling
+
+2. **Graceful Degradation**:
+   - When `/api/search/documents` is unavailable, the system falls back to internal recommendations only
+   - The main recommendation workflow continues without disruption
+   - Users receive standard recommendations without knowing the external service failed
+
+3. **Retry Mechanism**:
+   - Configurable retry attempts (`retry_attempts` in config)
+   - Exponential backoff between retries
+   - Circuit breaker pattern to prevent overwhelming the external service
+
+4. **Error Logging and Monitoring**:
+   - Detailed error logs with exception information
+   - Service health metrics tracking
+   - Administrative alerts for persistent failures
+
+5. **Example Error Handling Code**:
+   ```python
+   # In the University Adapter implementation
+   async def get_universities(self, profile_data, limit=5):
+       for attempt in range(self.retry_attempts):
+           try:
+               response = await self.client.post(
+                   f"{self.base_url}/api/search/documents",
+                   json=profile_data,
+                   timeout=self.timeout_seconds
+               )
+               return self.mapper.map_universities(response.json())
+           except (TimeoutError, ConnectionError) as e:
+               self.logger.warning(f"Kevin API connection error (attempt {attempt+1}/{self.retry_attempts}): {e}")
+               if attempt < self.retry_attempts - 1:
+                   await asyncio.sleep(self._calculate_backoff(attempt))
+               else:
+                   self.logger.error(f"Kevin API unavailable after {self.retry_attempts} attempts")
+                   return []
+           except Exception as e:
+               self.logger.error(f"Unexpected error querying Kevin API: {e}")
+               return []
+   ```
+
+This error handling strategy ensures that the Kevin University API integration enhances the recommendation system when available but never compromises the core functionality when unavailable.
+
 ## Getting Started
 
 ### Prerequisites
