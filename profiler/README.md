@@ -1,254 +1,274 @@
 # Student Profiler
 
-A full-stack application for building student profiles with AI assistance.
+An AI-powered application for building comprehensive student profiles, analyzing documents, and generating personalized recommendations for college applications.
 
-## Overview
+## Architecture
 
-The Student Profiler consists of:
+The Student Profiler follows a microservices architecture with a clear separation between frontend and backend components:
 
-1. **Backend**: FastAPI server with:
-   - Configuration management
-   - DeepSeek R1 API integration
-   - Document analysis
-   - Profile recommendations
-   - WebSocket real-time communication
+```
+┌───────────────────┐     ┌───────────────────────────────────────────┐
+│                   │     │                                           │
+│    Next.js UI     │◄────┤              FastAPI API                  │
+│                   │     │                                           │
+└───────┬───────────┘     └──────────────────┬────────────────────────┘
+        │                                    │
+        │                                    │
+        ▼                                    ▼
+┌───────────────────┐     ┌───────────────────────────────────────────┐
+│                   │     │                                           │
+│  WebSocket Client │◄────┤           Profile Builder                 │
+│                   │     │                                           │
+└───────────────────┘     └──────────────────┬────────────────────────┘
+                                             │
+                                             │
+                                             ▼
+                          ┌───────────────────────────────────────────┐
+                          │                                           │
+                          │          Workflow Executor                │
+                          │                                           │
+                          └──────────────────┬────────────────────────┘
+                                             │
+                                             │
+                                             ▼
+                          ┌───────────────────────────────────────────┐
+                          │  Services                                 │
+                          │                                           │
+                          │  ┌───────────┐ ┌───────────┐ ┌──────────┐ │
+                          │  │           │ │           │ │          │ │
+                          │  │    QA     │ │ Document  │ │Recommender│ │
+                          │  │           │ │  Service  │ │          │ │
+                          │  └───────────┘ └───────────┘ └──────────┘ │
+                          │                                           │
+                          └───────────────────────────────────────────┘
+```
 
-2. **Frontend**: Next.js UI with:
-   - Real-time profile building
-   - Service abstractions
-   - Document uploads
-   - Profile quality scoring
+### Key Components
+
+#### Client-Side
+- **Next.js UI**: Interactive frontend written in React/Next.js
+- **WebSocket Client**: Real-time communication with the server
+- **Service Abstractions**: Type-safe interfaces for backend services
+- **React Components**: Modular UI components for profile building, document upload, and recommendations
+
+#### Server-Side
+- **FastAPI API**: REST and WebSocket endpoints
+- **Profile Builder**: Core logic for profile generation
+- **Workflow Executor**: Manages state transitions and service coordination
+- **Services**:
+  - **QA Service**: Handles question generation and answer processing
+  - **Document Service**: Processes uploaded documents
+  - **Recommendation Service**: Generates personalized recommendations
+
+### Flow
+1. User interacts with the UI to build a profile
+2. UI communicates with the backend via WebSocket
+3. Backend processes requests through the workflow executor
+4. Services handle specialized tasks (QA, document analysis, recommendations)
+5. Results are sent back to the UI in real-time
+
+## Recent Changes
+
+### Backend
+- Updated API prefix from `/api` to `/api/profiler`
+- Improved WebSocket handling with better error recovery
+- Fixed workflow execution with proper state management
+- Enhanced error handling in WebSocket connections
+- Updated configuration validation paths from `services` to `ai_clients`
+- Fixed async initialization of document and recommendation services
+
+### Frontend
+- Upgraded WebSocket service with automatic reconnection
+- Added connection timeout handling (10 seconds)
+- Implemented exponential backoff for reconnection attempts
+- Enhanced error handling with detailed error messages
+- Added message queuing for offline capability
+- Updated environment configuration for proper API server connections
 
 ## Getting Started
 
 ### Prerequisites
-
-- Python 3.8 or higher
-- Node.js 18 or higher
+- Python 3.10+
+- Node.js 18+
 - npm or yarn
+- Docker (optional, for containerized deployment)
 
 ### Setup
 
-1. Clone the repository
-2. Run the setup script to create a virtual environment and install dependencies:
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/yourusername/student-profiler.git
+   cd student-profiler
+   ```
 
-```bash
-chmod +x setup.sh
-./setup.sh
-```
+2. Set up the backend:
+   ```bash
+   cd profiler
+   python -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   pip install -r requirements.txt
+   ```
 
-3. Activate the virtual environment:
+3. Set up the frontend:
+   ```bash
+   cd app/ui
+   npm install
+   ```
 
-```bash
-source profiler/bin/activate
-```
+4. Configure environment variables:
+   - Backend: Copy `config.example.yaml` to `config.yaml` and update values
+   - Frontend: Copy `.env.example` to `.env.local` and update values:
+     ```
+     NEXT_PUBLIC_API_URL=http://localhost:8001
+     NEXT_PUBLIC_WS_URL=ws://localhost:8001
+     NEXT_PUBLIC_API_KEY=your_api_key
+     ```
 
-4. Update the configuration in `profiler/app/backend/config.yaml` with your API keys and settings.
+5. Start the services:
+   ```bash
+   cd profiler
+   ./start_test_env.sh
+   ```
 
-### Environment Variables
-
-You can override configuration settings using environment variables:
-
-```bash
-# Set API key for DeepSeek
-export PROFILER_SERVICES__DEEPSEEK__API_KEY=your_api_key_here
-
-# Set API server port
-export PROFILER_API__PORT=8000
-```
-
-## Usage
-
-The profiler service manager provides an easy way to start, stop and monitor services:
-
-### Starting Services
-
-```bash
-# Start all services
-python profiler.py start
-
-# Start only the API server
-python profiler.py start api
-
-# Start only the UI server
-python profiler.py start ui
-```
+6. Access the application:
+   - UI: http://localhost:3001
+   - API docs: http://localhost:8001/api/profiler/docs
 
 ### Stopping Services
 
+To stop all running services:
 ```bash
-# Stop all services
-python profiler.py stop
-
-# Stop only the API server
-python profiler.py stop api
-```
-
-### Checking Status
-
-```bash
-python profiler.py status
-```
-
-### Viewing Logs
-
-```bash
-# View API server logs
-python profiler.py logs api
-
-# Follow UI server logs
-python profiler.py logs ui -f
-
-# View last 100 lines of API logs
-python profiler.py logs api -n 100
-```
-
-### Cleaning Up
-
-```bash
-# Clean log files
-python profiler.py clean --logs
-
-# Clean PID files
-python profiler.py clean --pids
-
-# Clean everything
-python profiler.py clean --all
+pkill -f "uvicorn|next"
 ```
 
 ## Configuration
 
-The Student Profiler uses a YAML-based configuration system with environment variable overrides.
+### Backend Configuration
+- Main config: `profiler/config.yaml`
+- Environment-specific configs in `profiler/config/`
+- Key configuration sections:
+  - `ai_clients`: Configuration for AI service connections
+  - `services`: Settings for internal services
+  - `database`: Database connection details
+  - `security`: API keys and authentication settings
 
-### Configuration File Location
-
-The system looks for a `config.yaml` file in the following locations (in order):
-
-1. The backend directory
-2. A `config` subdirectory in the backend directory
-3. `/etc/profiler/config.yaml`
-
-### Environment Variable Overrides
-
-Override any configuration value using environment variables:
-
-- Variables must be prefixed with `PROFILER_`
-- Use double underscore (`__`) as a separator for nested keys
-- Example: `PROFILER_SERVICES__DEEPSEEK__API_KEY=your_api_key`
+### Frontend Configuration
+- Environment variables in `.env.local`
+- Key configuration options:
+  - `NEXT_PUBLIC_API_URL`: Backend API URL
+  - `NEXT_PUBLIC_WS_URL`: WebSocket URL
+  - `NEXT_PUBLIC_API_KEY`: API key for authentication
 
 ## Project Structure
 
 ```
 profiler/
-├── app/
-│   ├── backend/           # FastAPI backend
-│   │   ├── api/           # API endpoints
-│   │   ├── core/          # Core functionality
-│   │   ├── services/      # Service layer
-│   │   └── utils/         # Utility functions
-│   └── ui/                # Next.js UI
-│       ├── components/    # React components
-│       ├── lib/           # UI libraries
-│       └── app/           # Next.js app directory
-├── logs/                  # Log files
-├── profiler.py            # Service manager
-└── setup.sh               # Setup script
+├── app/                    # Application code
+│   ├── backend/            # Backend Python code
+│   │   ├── api/            # FastAPI endpoints
+│   │   │   ├── main.py     # API entry point
+│   │   │   ├── routes/     # API route handlers
+│   │   │   └── websocket.py # WebSocket handler
+│   │   ├── core/           # Core business logic
+│   │   │   ├── services/   # Service implementations
+│   │   │   └── workflows/  # Workflow definitions
+│   │   └── utils/          # Utility functions
+│   └── ui/                 # Frontend code
+│       ├── app/            # Next.js app directory
+│       ├── components/     # React components
+│       ├── lib/            # Frontend libraries
+│       │   ├── services/   # Service implementations
+│       │   └── hooks/      # React hooks
+│       └── public/         # Static assets
+├── config/                 # Configuration files
+├── tests/                  # Test suite
+└── scripts/                # Utility scripts
+```
+
+## API Documentation
+
+The API documentation is available at:
+- OpenAPI UI: http://localhost:8001/api/profiler/docs
+- ReDoc UI: http://localhost:8001/api/profiler/redoc
+
+### Key Endpoints
+
+- `GET /api/profiler/health`: Health check endpoint
+- `POST /api/profiler/questions`: Generate questions for profile building
+- `POST /api/profiler/document/analyze`: Analyze uploaded documents
+- `POST /api/profiler/recommendations`: Generate recommendations based on profile
+- `WebSocket /api/ws/{user_id}`: Real-time profile building
+
+## WebSocket Protocol
+
+### Connection
+```javascript
+const ws = new WebSocket(`${WS_URL}/api/ws/${userId}`);
+```
+
+### Message Format
+```json
+{
+  "action": "ACTION_NAME",
+  "payload": {
+    "key1": "value1",
+    "key2": "value2"
+  }
+}
+```
+
+### Actions
+- `ANSWER_QUESTION`: Submit an answer to a question
+- `REQUEST_SECTION`: Request questions for a specific section
+- `VALIDATE_SECTION`: Validate a completed section
+- `REQUEST_REVIEW`: Request human review of a section
+
+### Response Format
+```json
+{
+  "type": "STATE_UPDATE",
+  "state": {
+    "sections": {
+      "personal": {
+        "status": "active",
+        "data": {}
+      },
+      "academic": {
+        "status": "pending",
+        "data": {}
+      }
+    },
+    "status": "active",
+    "currentQuestion": "What are your career goals?",
+    "currentSection": "personal"
+  }
+}
 ```
 
 ## Development
 
-### Backend Development
+### Adding a New Service
 
-Make changes to the FastAPI backend code in `profiler/app/backend/`. The development server will automatically reload when changes are detected.
+1. Define the service interface in `app/backend/core/services/interfaces.py`
+2. Implement the service in `app/backend/core/services/`
+3. Register the service in the service factory
+4. Add configuration in `config.yaml`
 
-### Frontend Development
+### Extending Workflows
 
-Make changes to the Next.js frontend code in `profiler/app/ui/`. The development server will automatically reload when changes are detected.
+1. Define new workflow nodes in `app/backend/core/workflows/`
+2. Update the workflow graph in `create_profile_workflow()`
+3. Add any necessary tools or agents
+4. Register the workflow in the workflow executor
 
-## Testing
+## Contributing
 
-The Profiler API includes a comprehensive test suite to ensure all endpoints function correctly and to prevent regressions.
-
-### Running the Tests
-
-You can run the tests using the provided `run_tests.py` script:
-
-```bash
-# Make the script executable (if not already)
-chmod +x run_tests.py
-
-# Run all tests
-./run_tests.py
-
-# Run tests with coverage report
-./run_tests.py --coverage
-
-# Run specific test module
-./run_tests.py tests/test_basic.py
-
-# Run tests with different verbosity level (0-3)
-./run_tests.py --verbosity 2
-```
-
-Alternatively, you can run specific test files directly:
-
-```bash
-# Run a specific test file directly
-python tests/test_basic.py
-
-# Run endpoint tests with pytest
-python -m pytest tests/test_api_endpoints.py -v
-
-# Run specific endpoint tests
-python -m pytest tests/test_api_endpoints.py::test_analyze_document_endpoint -v
-```
-
-### Test Structure
-
-- **Unit Tests**: Test individual components in isolation
-- **Integration Tests**: Test how components work together
-- **API Tests**: Test the complete API endpoints
-
-The test suite covers:
-- Authentication and authorization
-- API endpoint functionality
-- Error handling
-- Rate limiting
-- End-to-end flows
-- Document analysis workflows
-- Recommendation generation
-- Profile summaries
-- UI interaction flows
-
-### Mock Services
-
-The test suite includes robust mocking for all services:
-
-- **Document Service**: Mocks document analysis and extraction with proper validation
-- **Recommendation Service**: Mocks the recommendation generation process
-- **QA Service**: Mocks the question answering functionality
-
-These mocks ensure tests can run without external dependencies while still providing realistic validation.
-
-### Error Handling Testing
-
-The test suite includes specific tests for error handling:
-- Validation errors (422 status codes)
-- Empty content validation
-- Invalid document types
-- Authentication errors (401 status codes)
-- Rate limiting (429 status codes)
-
-### Creating New Tests
-
-When adding new functionality to the API, be sure to add corresponding tests. Follow these guidelines:
-
-1. Add unit tests for any new utility functions or classes
-2. Update integration tests if component interactions change
-3. Add API tests for any new endpoints
-4. Update existing tests if endpoints' behavior changes
-5. Ensure mocks properly simulate real service behavior
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/my-feature`
+3. Commit your changes: `git commit -am 'Add new feature'`
+4. Push to the branch: `git push origin feature/my-feature`
+5. Submit a pull request
 
 ## License
 
-MIT 
+This project is licensed under the MIT License - see the LICENSE file for details.
