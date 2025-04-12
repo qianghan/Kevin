@@ -27,7 +27,7 @@ from app.backend.services.interfaces import DocumentAnalysisResult, Recommendati
 from app.backend.api.dependencies import get_document_service, get_recommendation_service, get_qa_service
 from app.backend.api.dependencies import verify_api_key, ServiceFactory
 from app.backend.api.middleware import RequestLoggingMiddleware, ErrorLoggingMiddleware
-from app.backend.api.websocket import ConnectionManager, router as websocket_router
+from app.backend.api.websocket import ConnectionManager, router as websocket_router, test_router as websocket_test_router
 from app.backend.api.document_routes import router as document_router
 
 # Configure logging
@@ -48,6 +48,14 @@ app.state.version = "1.0.0"
 app.state.environment = os.getenv("ENVIRONMENT", "development")
 app.state.api_keys = os.getenv("API_KEYS", "test_api_key").split(",")
 
+# Include routers
+app.include_router(document_router, prefix="/api/profiler")
+app.include_router(websocket_router, prefix="/api/profiler")
+
+# Include test router with no prefix and no auth middleware
+# This must be added BEFORE any middleware that would check for auth
+app.include_router(websocket_test_router)
+
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
@@ -64,48 +72,6 @@ app.add_middleware(ErrorLoggingMiddleware)
 # Initialize connection manager
 manager = ConnectionManager()
 
-# Include routers
-app.include_router(document_router, prefix="/api/profiler")
-app.include_router(websocket_router, prefix="/api/profiler")
-
-# Add a bare-bones test WebSocket endpoint with no validation
-@app.websocket("/test-ws")
-async def test_websocket_endpoint(websocket: WebSocket):
-    """
-    Simple test WebSocket endpoint with no validation.
-    """
-    try:
-        # Get API key from query params if present (but don't validate it)
-        api_key = websocket.query_params.get("api_key", "none")
-        logger.info(f"Test WebSocket connection attempt with api_key={api_key}")
-        
-        # Accept the connection immediately
-        await websocket.accept()
-        logger.info(f"Test WebSocket connection accepted")
-        
-        # Send a welcome message
-        await websocket.send_json({"message": "Connected to test WebSocket", "timestamp": datetime.now(timezone.utc).isoformat()})
-        
-        # Just echo back any messages received
-        while True:
-            try:
-                message = await websocket.receive_text()
-                logger.info(f"Test WebSocket message received: {message[:100]}...")
-                await websocket.send_text(f"Echo: {message}")
-            except WebSocketDisconnect:
-                logger.info(f"Test WebSocket disconnected by client")
-                break
-            except Exception as e:
-                logger.error(f"Test WebSocket error: {str(e)}")
-                await websocket.send_json({
-                    "error": str(e),
-                    "timestamp": datetime.now(timezone.utc).isoformat()
-                })
-    except Exception as e:
-        logger.error(f"Test WebSocket connection error: {str(e)}")
-    
-    logger.info("Test WebSocket connection closed")
-
 # Direct WebSocket endpoint without the profiler prefix
 @app.websocket("/api/ws/{user_id}")
 async def direct_websocket_endpoint(websocket: WebSocket, user_id: str):
@@ -121,47 +87,52 @@ async def direct_websocket_endpoint(websocket: WebSocket, user_id: str):
     try:
         # Get API key from query params if present (but don't validate it)
         api_key = websocket.query_params.get("api_key", "none")
-        logger.info(f"WebSocket connection attempt from user_id={user_id} with api_key={api_key}")
+        logger.info(f"Direct WebSocket connection attempt from user_id={user_id} with api_key={api_key}")
+        logger.debug(f"WebSocket headers: {websocket.headers}")
+        logger.debug(f"WebSocket query params: {websocket.query_params}")
         
         # Always accept the connection first without any validation
         await websocket.accept()
-        logger.info(f"WebSocket connection accepted for user_id={user_id}")
+        logger.info(f"Direct WebSocket connection accepted for user_id={user_id}")
         
         # Connect the client to the manager and start handling messages
         try:
             session_id = await manager.connect(websocket, user_id)
-            logger.info(f"WebSocket session established: user_id={user_id}, session_id={session_id}")
+            logger.info(f"Direct WebSocket session established: user_id={user_id}, session_id={session_id}")
             
             # Handle messages
             while True:
                 try:
                     message = await websocket.receive_text()
-                    logger.debug(f"WebSocket message received from session {session_id}: {message[:100]}...")
+                    logger.debug(f"Direct WebSocket message received from session {session_id}: {message[:100]}...")
                     await manager.receive_message(message, websocket)
                 except WebSocketDisconnect:
-                    logger.info(f"WebSocket disconnected by client: session_id={session_id}")
+                    logger.info(f"Direct WebSocket disconnected by client: session_id={session_id}")
                     break
                 except Exception as e:
-                    logger.error(f"WebSocket message handling error: {str(e)}")
+                    logger.error(f"Direct WebSocket message handling error: {str(e)}", exc_info=True)
                     await websocket.send_json({
                         "type": "error",
                         "error": str(e),
                         "timestamp": datetime.now(timezone.utc).isoformat()
                     })
         except Exception as e:
-            logger.error(f"WebSocket session initialization error: {str(e)}")
+            logger.error(f"Direct WebSocket session initialization error: {str(e)}", exc_info=True)
             await websocket.send_json({
                 "type": "error",
-                "error": str(e),
+                "error": f"Session initialization error: {str(e)}",
                 "timestamp": datetime.now(timezone.utc).isoformat()
             })
-            await websocket.close()
+            try:
+                await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
+            except Exception as close_error:
+                logger.error(f"Error closing WebSocket: {str(close_error)}")
                 
     except Exception as e:
-        logger.error(f"WebSocket connection error: {str(e)}")
+        logger.error(f"Direct WebSocket connection error: {str(e)}", exc_info=True)
     finally:
         if session_id:
-            logger.info(f"Cleaning up WebSocket session: session_id={session_id}")
+            logger.info(f"Cleaning up direct WebSocket session: session_id={session_id}")
             manager.disconnect(session_id)
 
 # Rate limiting

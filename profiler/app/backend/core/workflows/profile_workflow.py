@@ -271,9 +271,10 @@ def create_profile_workflow(
             """Synchronous run not supported"""
             raise NotImplementedError("This tool only supports async execution")
     
-    # Create and return a ToolNode with our ProcessProfileTool
+    # Create and return the ProcessProfileTool
     process_profile_tool = ProcessProfileTool()
-    return ToolNode(tools=[process_profile_tool])
+    # Return the tool directly instead of wrapping it in a ToolNode
+    return process_profile_tool
 
 def get_profile_summary_tool(workflow):
     """Get a profile summary tool"""
@@ -302,11 +303,55 @@ def create_workflow_executor(
         recommender_service: Recommendation service
         
     Returns:
-        ToolNode for executing the workflow
+        WorkflowExecutor object with an arun method
     """
-    return create_profile_workflow(
+    # Create the ProcessProfileTool directly from profile workflow
+    # This returns a tool, not a ToolNode
+    process_profile_tool = create_profile_workflow(
         config=config,
         qa_service=qa_service,
         document_service=document_service,
         recommender_service=recommender_service
-    ) 
+    )
+    
+    # Create a WorkflowExecutor that wraps the ProcessProfileTool
+    return WorkflowExecutor(process_profile_tool)
+
+class WorkflowExecutor:
+    """
+    A wrapper around a workflow tool that provides a consistent async interface.
+    
+    This class adapts the tool interface to provide the arun method expected by
+    the ConnectionManager.
+    """
+    
+    def __init__(self, process_profile_tool):
+        """Initialize with a process_profile_tool."""
+        self.process_profile_tool = process_profile_tool
+    
+    async def arun(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Run the workflow asynchronously.
+        
+        Args:
+            state: The current state
+            
+        Returns:
+            Updated state
+        """
+        try:
+            logger.debug(f"Running workflow with state: {state}")
+            
+            # Convert state to dict if needed
+            if hasattr(state, 'model_dump'):
+                state_dict = state.model_dump()
+            else:
+                state_dict = state
+                
+            # Use the ProcessProfileTool directly
+            result = await self.process_profile_tool._arun(state_dict)
+            logger.debug(f"Workflow execution completed with result: {result}")
+            return result
+        except Exception as e:
+            logger.error(f"Error in workflow execution: {str(e)}", exc_info=True)
+            raise 
