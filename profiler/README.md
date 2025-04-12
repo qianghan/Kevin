@@ -37,10 +37,27 @@ The Student Profiler follows a microservices architecture with a clear separatio
                           │  ┌───────────┐ ┌───────────┐ ┌──────────┐ │
                           │  │           │ │           │ │          │ │
                           │  │    QA     │ │ Document  │ │Recommender│ │
-                          │  │           │ │  Service  │ │          │ │
-                          │  └───────────┘ └───────────┘ └──────────┘ │
-                          │                                           │
-                          └───────────────────────────────────────────┘
+                          │  │           │ │  Service  │ │ Service  │ │
+                          │  └───────────┘ └───────────┘ └────┬─────┘ │
+                          │                                    │      │
+                          └────────────────────────────────────┼──────┘
+                                                               │
+                                                               ▼
+                          ┌──────────────────────────────────────────┐
+                          │                                          │
+                          │          University Provider             │
+                          │          Interface                       │
+                          │                                          │
+                          └──────────────────┬───────────────────────┘
+                                             │
+                                             │
+                                             ▼
+          ┌───────────────────────────────────────────────────────────┐
+          │                                                           │
+          │                Kevin University Search API                │
+          │                (/api/search/documents)                    │
+          │                                                           │
+          └───────────────────────────────────────────────────────────┘
 ```
 
 ### Key Components
@@ -59,13 +76,19 @@ The Student Profiler follows a microservices architecture with a clear separatio
   - **QA Service**: Handles question generation and answer processing
   - **Document Service**: Processes uploaded documents
   - **Recommendation Service**: Generates personalized recommendations
+  - **University Provider**: Interface for retrieving university recommendations from external sources
+
+#### External Services
+- **Kevin University Search API**: Provides university recommendations based on student profile data
 
 ### Flow
 1. User interacts with the UI to build a profile
 2. UI communicates with the backend via WebSocket
 3. Backend processes requests through the workflow executor
 4. Services handle specialized tasks (QA, document analysis, recommendations)
-5. Results are sent back to the UI in real-time
+5. Recommendation service queries both internal and external data sources
+6. External university recommendations are merged with internal recommendations
+7. Results are sent back to the UI in real-time
 
 ## Recent Changes
 
@@ -76,6 +99,7 @@ The Student Profiler follows a microservices architecture with a clear separatio
 - Enhanced error handling in WebSocket connections
 - Updated configuration validation paths from `services` to `ai_clients`
 - Fixed async initialization of document and recommendation services
+- **Added Kevin University API integration** for enhanced university recommendations
 
 ### Frontend
 - Upgraded WebSocket service with automatic reconnection
@@ -84,6 +108,125 @@ The Student Profiler follows a microservices architecture with a clear separatio
 - Enhanced error handling with detailed error messages
 - Added message queuing for offline capability
 - Updated environment configuration for proper API server connections
+
+## Kevin API Integration
+
+### Integration Architecture
+
+The integration with Kevin's University API follows SOLID principles with a clean separation of concerns:
+
+```
+┌─────────────────────────────────────────┐     ┌─────────────────────────────────┐
+│            Profiler System              │     │          Kevin System           │
+│                                         │     │                                 │
+│  ┌─────────────────────────────────┐    │     │    ┌─────────────────────────┐  │
+│  │                                 │    │     │    │                         │  │
+│  │     Recommendation Service      │    │     │    │       University API    │  │
+│  │                                 │    │     │    │                         │  │
+│  └──────────────┬──────────────────┘    │     │    └─────────────┬───────────┘  │
+│                 │                        │     │                  │              │
+│  ┌──────────────▼──────────────────┐    │     │    ┌─────────────▼───────────┐  │
+│  │                                 │    │     │    │                         │  │
+│  │  University Provider Interface  │    │     │    │  /api/search/documents  │  │
+│  │                                 │◄───┼─────┼────►                         │  │
+│  └──────────────┬──────────────────┘    │     │    └─────────────────────────┘  │
+│                 │                        │     │                                 │
+│  ┌──────────────▼──────────────────┐    │     └─────────────────────────────────┘
+│  │                                 │    │
+│  │   Kevin University Adapter      │    │
+│  │                                 │    │
+│  └──────────────┬──────────────────┘    │
+│                 │                        │
+│  ┌──────────────▼──────────────────┐    │
+│  │                                 │    │
+│  │   Recommendation Merger         │    │
+│  │                                 │    │
+│  └─────────────────────────────────┘    │
+│                                         │
+└─────────────────────────────────────────┘
+```
+
+### Key Integration Files
+
+- `providers/university_provider.py`: Interface definition
+- `providers/kevin_university_adapter.py`: Implementation for Kevin API
+- `mappers/university_mapper.py`: Maps API responses to internal format
+- `merger.py`: Merges university recommendations with other recommendations
+- `factory.py`: Factory for creating appropriate provider instances
+- `service.py`: Enhanced service using the university provider
+
+### Key Integration Code
+
+**University Provider Interface**:
+```python
+class UniversityProvider(ABC):
+    @abstractmethod
+    async def initialize(self) -> None:
+        pass
+        
+    @abstractmethod
+    async def get_universities(self, profile_data: Dict[str, Any], limit: int = 5) -> List[Dict[str, Any]]:
+        pass
+        
+    @abstractmethod
+    async def get_university_details(self, university_id: str) -> Dict[str, Any]:
+        pass
+        
+    @abstractmethod
+    async def shutdown(self) -> None:
+        pass
+```
+
+**Factory Method**:
+```python
+@staticmethod
+async def create_provider(config) -> Optional[UniversityProvider]:
+    """Create and return a university provider if configured"""
+    logger = logging.getLogger(__name__)
+    
+    # Check if Kevin integration is enabled
+    if config.get("external_services.kevin.enabled", False):
+        logger.info("Creating Kevin University Adapter")
+        provider = KevinUniversityAdapter(config)
+        await provider.initialize()
+        return provider
+        
+    logger.info("No university provider configured")
+    return None
+```
+
+**Service Integration**:
+```python
+# Initialize university provider if enabled
+self.university_provider = await UniversityProviderFactory.create_provider(self.config)
+
+# In get_recommendations method
+if self.university_provider and self._is_profile_complete_enough(profile_state):
+    try:
+        self.logger.info("Getting university recommendations")
+        profile_data = self._extract_university_relevant_data(profile_state)
+        university_recs = await self.university_provider.get_universities(profile_data)
+        self.logger.info(f"Retrieved {len(university_recs)} university recommendations")
+        return await self.recommendation_merger.merge_recommendations(standard_recs, university_recs)
+    except Exception as e:
+        self.logger.error(f"Error getting university recommendations: {e}")
+        # Return standard recommendations if university recs fail
+        return standard_recs
+```
+
+### Configuration
+
+To enable the Kevin University API integration, add the following to your configuration:
+
+```yaml
+external_services:
+  kevin:
+    enabled: true
+    base_url: "http://localhost:5000"  # Kevin API URL
+    api_key: "your-api-key-here"
+    timeout_seconds: 5
+    retry_attempts: 3
+```
 
 ## Getting Started
 
@@ -151,6 +294,7 @@ pkill -f "uvicorn|next"
   - `services`: Settings for internal services
   - `database`: Database connection details
   - `security`: API keys and authentication settings
+  - `external_services`: External API integrations (e.g., Kevin)
 
 ### Frontend Configuration
 - Environment variables in `.env.local`
@@ -172,6 +316,13 @@ profiler/
 │   │   ├── core/           # Core business logic
 │   │   │   ├── services/   # Service implementations
 │   │   │   └── workflows/  # Workflow definitions
+│   │   ├── services/       # Service implementations
+│   │   │   ├── recommendation/ # Recommendation services
+│   │   │   │   ├── providers/  # University provider implementations
+│   │   │   │   ├── mappers/    # Data mapping classes
+│   │   │   │   ├── factory.py  # Provider factory
+│   │   │   │   ├── merger.py   # Recommendation merger
+│   │   │   │   └── service.py  # Main service implementation
 │   │   └── utils/          # Utility functions
 │   └── ui/                 # Frontend code
 │       ├── app/            # Next.js app directory
@@ -253,6 +404,13 @@ const ws = new WebSocket(`${WS_URL}/api/ws/${userId}`);
 2. Implement the service in `app/backend/core/services/`
 3. Register the service in the service factory
 4. Add configuration in `config.yaml`
+
+### Adding a New University Provider
+
+1. Create a new class that implements the `UniversityProvider` interface
+2. Add a factory method to create the provider based on configuration
+3. Add necessary mappers for the provider's data format
+4. Update the configuration to enable the new provider
 
 ### Extending Workflows
 

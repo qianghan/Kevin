@@ -1,56 +1,22 @@
-"""
-Factory for creating recommendation service instances.
-
-This module provides factory methods to create instances of recommendation services.
-"""
-
-import os
 from typing import Optional
+import logging
+from .providers.university_provider import UniversityProvider
+from .providers.kevin_university_adapter import KevinUniversityAdapter
 
-from app.backend.interfaces.recommendation import IRecommendationService
-from app.backend.services.recommendation.service import RecommendationService
-
-
-class RecommendationServiceFactory:
-    """Factory for creating recommendation service instances."""
+class UniversityProviderFactory:
+    """Factory for creating university provider instances"""
     
     @staticmethod
-    def create_service(service_type: Optional[str] = None) -> IRecommendationService:
-        """
-        Create a recommendation service instance.
+    async def create_provider(config) -> Optional[UniversityProvider]:
+        """Create and return a university provider if configured"""
+        logger = logging.getLogger(__name__)
         
-        Args:
-            service_type: The type of recommendation service to create (default: from environment)
+        # Check if Kevin integration is enabled
+        if config.get("external_services.kevin.enabled", False):
+            logger.info("Creating Kevin University Adapter")
+            provider = KevinUniversityAdapter(config)
+            await provider.initialize()
+            return provider
             
-        Returns:
-            An instance of a recommendation service
-        """
-        # Get service type from environment if not provided
-        if service_type is None:
-            service_type = os.getenv("RECOMMENDATION_SERVICE_TYPE", "default")
-        
-        # Create the appropriate service
-        if service_type == "default":
-            return RecommendationService()
-        else:
-            raise ValueError(f"Unsupported recommendation service type: {service_type}")
-    
-    @staticmethod
-    def create_mock_service() -> IRecommendationService:
-        """
-        Create a mock recommendation service for testing.
-        
-        Returns:
-            A mock recommendation service instance
-        """
-        # Create a service with mock configuration
-        service = RecommendationService()
-        
-        # Configure the service for testing
-        service.configure({
-            "model": "mock",
-            "categories": ["academic", "extracurricular", "personal"],
-            "max_recommendations": 10
-        })
-        
-        return service 
+        logger.info("No university provider configured")
+        return None
