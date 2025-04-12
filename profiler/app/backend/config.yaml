@@ -1,6 +1,7 @@
 api:
   host: "0.0.0.0"
   port: 8000
+  api_key: "test-api-key"
   key: "test-api-key"
   log_level: "info"
   detailed_errors: true
@@ -10,6 +11,11 @@ api:
     - "http://127.0.0.1:3000"
     - "http://127.0.0.1:3001"
   version: "0.1.0"
+
+security:
+  api_keys:
+    - "test_api_key"
+    - "test-api-key"
 
 database:
   type: "sqlite"

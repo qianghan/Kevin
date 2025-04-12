@@ -19,16 +19,16 @@ import logging
 import traceback
 import json
 
-from ..utils.config_manager import ConfigManager
-from ..utils.logging import get_logger
-from ..utils.errors import ProfilerError, ValidationError, ResourceNotFoundError
-from ..services.interfaces import IDocumentService, IRecommendationService, IQAService
-from ..services.interfaces import DocumentAnalysisResult, Recommendation, ProfileSummary
-from .dependencies import get_document_service, get_recommendation_service, get_qa_service
-from .dependencies import verify_api_key, ServiceFactory
-from .middleware import RequestLoggingMiddleware, ErrorLoggingMiddleware
-from .websocket import ConnectionManager
-from .document_routes import router as document_router
+from app.backend.utils.config_manager import ConfigManager
+from app.backend.utils.logging import get_logger
+from app.backend.utils.errors import ProfilerError, ValidationError, ResourceNotFoundError
+from app.backend.services.interfaces import IDocumentService, IRecommendationService, IQAService
+from app.backend.services.interfaces import DocumentAnalysisResult, Recommendation, ProfileSummary
+from app.backend.api.dependencies import get_document_service, get_recommendation_service, get_qa_service
+from app.backend.api.dependencies import verify_api_key, ServiceFactory
+from app.backend.api.middleware import RequestLoggingMiddleware, ErrorLoggingMiddleware
+from app.backend.api.websocket import ConnectionManager, router as websocket_router
+from app.backend.api.document_routes import router as document_router
 
 # Configure logging
 logger = get_logger(__name__)
@@ -64,8 +64,105 @@ app.add_middleware(ErrorLoggingMiddleware)
 # Initialize connection manager
 manager = ConnectionManager()
 
-# Include document routes
+# Include routers
 app.include_router(document_router, prefix="/api/profiler")
+app.include_router(websocket_router, prefix="/api/profiler")
+
+# Add a bare-bones test WebSocket endpoint with no validation
+@app.websocket("/test-ws")
+async def test_websocket_endpoint(websocket: WebSocket):
+    """
+    Simple test WebSocket endpoint with no validation.
+    """
+    try:
+        # Get API key from query params if present (but don't validate it)
+        api_key = websocket.query_params.get("api_key", "none")
+        logger.info(f"Test WebSocket connection attempt with api_key={api_key}")
+        
+        # Accept the connection immediately
+        await websocket.accept()
+        logger.info(f"Test WebSocket connection accepted")
+        
+        # Send a welcome message
+        await websocket.send_json({"message": "Connected to test WebSocket", "timestamp": datetime.now(timezone.utc).isoformat()})
+        
+        # Just echo back any messages received
+        while True:
+            try:
+                message = await websocket.receive_text()
+                logger.info(f"Test WebSocket message received: {message[:100]}...")
+                await websocket.send_text(f"Echo: {message}")
+            except WebSocketDisconnect:
+                logger.info(f"Test WebSocket disconnected by client")
+                break
+            except Exception as e:
+                logger.error(f"Test WebSocket error: {str(e)}")
+                await websocket.send_json({
+                    "error": str(e),
+                    "timestamp": datetime.now(timezone.utc).isoformat()
+                })
+    except Exception as e:
+        logger.error(f"Test WebSocket connection error: {str(e)}")
+    
+    logger.info("Test WebSocket connection closed")
+
+# Direct WebSocket endpoint without the profiler prefix
+@app.websocket("/api/ws/{user_id}")
+async def direct_websocket_endpoint(websocket: WebSocket, user_id: str):
+    """
+    Direct WebSocket endpoint for real-time profile building.
+    Uses a simplified approach with no validation.
+    
+    Args:
+        websocket: The WebSocket connection
+        user_id: The user's ID
+    """
+    session_id = None
+    try:
+        # Get API key from query params if present (but don't validate it)
+        api_key = websocket.query_params.get("api_key", "none")
+        logger.info(f"WebSocket connection attempt from user_id={user_id} with api_key={api_key}")
+        
+        # Always accept the connection first without any validation
+        await websocket.accept()
+        logger.info(f"WebSocket connection accepted for user_id={user_id}")
+        
+        # Connect the client to the manager and start handling messages
+        try:
+            session_id = await manager.connect(websocket, user_id)
+            logger.info(f"WebSocket session established: user_id={user_id}, session_id={session_id}")
+            
+            # Handle messages
+            while True:
+                try:
+                    message = await websocket.receive_text()
+                    logger.debug(f"WebSocket message received from session {session_id}: {message[:100]}...")
+                    await manager.receive_message(message, websocket)
+                except WebSocketDisconnect:
+                    logger.info(f"WebSocket disconnected by client: session_id={session_id}")
+                    break
+                except Exception as e:
+                    logger.error(f"WebSocket message handling error: {str(e)}")
+                    await websocket.send_json({
+                        "type": "error",
+                        "error": str(e),
+                        "timestamp": datetime.now(timezone.utc).isoformat()
+                    })
+        except Exception as e:
+            logger.error(f"WebSocket session initialization error: {str(e)}")
+            await websocket.send_json({
+                "type": "error",
+                "error": str(e),
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            })
+            await websocket.close()
+                
+    except Exception as e:
+        logger.error(f"WebSocket connection error: {str(e)}")
+    finally:
+        if session_id:
+            logger.info(f"Cleaning up WebSocket session: session_id={session_id}")
+            manager.disconnect(session_id)
 
 # Rate limiting
 class RateLimiter:
@@ -184,61 +281,6 @@ class ProfileDataRequest(BaseModel):
         }
 
 # API endpoints
-@app.websocket("/api/ws/{user_id}")
-async def websocket_endpoint(websocket: WebSocket, user_id: str):
-    """
-    WebSocket endpoint for real-time profile building.
-    
-    Args:
-        websocket: The WebSocket connection
-        user_id: The user's ID
-    """
-    session_id = None
-    try:
-        logger.info(f"WebSocket connection attempt from user_id={user_id}")
-        
-        # Accept the connection first
-        await websocket.accept()
-        logger.info(f"WebSocket connection accepted for user_id={user_id}")
-        
-        try:
-            # Connect the client to the manager
-            session_id = await manager.connect(websocket, user_id)
-            logger.info(f"WebSocket session established: user_id={user_id}, session_id={session_id}")
-            
-            # Connection manager now sends the initial messages
-            
-            # Handle messages
-            while True:
-                try:
-                    message = await websocket.receive_text()
-                    logger.debug(f"WebSocket message received from session {session_id}: {message[:100]}...")
-                    await manager.receive_message(message, websocket)
-                except WebSocketDisconnect:
-                    logger.info(f"WebSocket disconnected by client: session_id={session_id}")
-                    break
-                except Exception as e:
-                    logger.error(f"WebSocket message handling error: {str(e)}")
-                    await websocket.send_json({
-                        "type": "error",
-                        "error": str(e)
-                    })
-        except Exception as e:
-            logger.error(f"WebSocket session initialization error: {str(e)}")
-            # Send error message with a simple structure that the frontend can handle
-            await websocket.send_json({
-                "error": str(e)
-            })
-            await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
-                
-    except Exception as e:
-        logger.error(f"WebSocket connection error: {str(e)}")
-        # No need to disconnect since connection wasn't established
-    finally:
-        if session_id:
-            logger.info(f"Cleaning up WebSocket session: session_id={session_id}")
-            manager.disconnect(session_id)
-
 @app.post(
     "/api/profiler/ask", 
     response_model=Dict[str, Any],
@@ -446,10 +488,73 @@ async def websocket_debug(user_id: str):
     """Debug endpoint for WebSocket"""
     return {"message": "WebSocket endpoint exists", "user_id": user_id}
 
+# Add a completely separate WebSocket endpoint with no security or validation
+@app.websocket("/open-ws/{user_id}")
+async def open_websocket_endpoint(websocket: WebSocket, user_id: str):
+    """
+    WebSocket endpoint with zero validation for real-time profile building.
+    No security checks - for development only.
+    
+    Args:
+        websocket: The WebSocket connection
+        user_id: The user's ID
+    """
+    session_id = None
+    try:
+        # Log connection attempt
+        logger.info(f"Open WebSocket connection attempt from user_id={user_id}")
+        
+        # Accept the connection immediately without any validation
+        await websocket.accept()
+        logger.info(f"Open WebSocket connection accepted for user_id={user_id}")
+        
+        # Connect to the connection manager to establish workflow
+        try:
+            # Use the existing connection manager to handle the connection
+            session_id = await manager.connect(websocket, user_id)
+            logger.info(f"WebSocket session established: user_id={user_id}, session_id={session_id}")
+            
+            # Handle messages through the connection manager
+            while True:
+                try:
+                    message = await websocket.receive_text()
+                    logger.debug(f"WebSocket message received from session {session_id}: {message[:100]}...")
+                    await manager.receive_message(message, websocket)
+                except WebSocketDisconnect:
+                    logger.info(f"WebSocket disconnected by client: session_id={session_id}")
+                    break
+                except Exception as e:
+                    logger.error(f"WebSocket message handling error: {str(e)}")
+                    await websocket.send_json({
+                        "type": "error",
+                        "error": str(e),
+                        "timestamp": datetime.now(timezone.utc).isoformat()
+                    })
+        except Exception as e:
+            logger.error(f"WebSocket session initialization error: {str(e)}")
+            await websocket.send_json({
+                "type": "error",
+                "error": str(e),
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            })
+            await websocket.close()
+                
+    except Exception as e:
+        logger.error(f"Open WebSocket connection error: {str(e)}")
+    finally:
+        if session_id:
+            logger.info(f"Cleaning up WebSocket session: session_id={session_id}")
+            manager.disconnect(session_id)
+
 # Startup and shutdown events
 @app.on_event("startup")
 async def startup_event():
     """Initialize services on startup."""
+    # Set a default API key if not already set
+    if not hasattr(app.state, "api_keys") or not app.state.api_keys:
+        app.state.api_keys = ["test-api-key", "test_api_key"]
+        logger.info(f"Setting default API keys: {app.state.api_keys}")
+    
     logger.info("Initializing services...")
     await ServiceFactory.initialize_services()
     logger.info("Services initialized successfully.")
@@ -484,8 +589,16 @@ def custom_openapi():
         }
     }
     
-    # Apply security globally
-    openapi_schema["security"] = [{"ApiKeyHeader": []}]
+    # Apply security globally but exempt WebSocket endpoints
+    paths = openapi_schema.get("paths", {})
+    for path, operations in paths.items():
+        # Skip WebSocket paths
+        if "/ws/" in path:
+            continue
+        
+        # Apply security to all other paths
+        for operation in operations.values():
+            operation["security"] = [{"ApiKeyHeader": []}]
     
     app.openapi_schema = openapi_schema
     return app.openapi_schema
