@@ -1,15 +1,41 @@
-import React, { useState } from 'react';
+'use client';
+
+import React, { useState, useEffect } from 'react';
 import { useProfile } from '../lib/contexts/ProfileContext';
-import { ProfileSection, ProfileState } from '../lib/services/types';
+import { ProfileSection, ProfileStatus } from '../lib/services/types';
+
+// Components
+import ProfileNavigation from './profile/ProfileNavigation';
+import ProfileQuestionnaire from './profile/ProfileQuestionnaire';
+import DocumentsSection from './profile/DocumentsSection';
+import ConnectionStatus from './shared/ConnectionStatus';
+import RecommendationsList from './recommendations/RecommendationsList';
 
 // Define valid profile sections
-const PROFILE_SECTIONS = ['education', 'skills', 'experience', 'projects'];
+const PROFILE_SECTIONS: ProfileSection[] = ['academic', 'extracurricular', 'personal', 'essays'];
 
 export default function ProfileBuilder() {
-  const { state, loading, error, sendAnswer, uploadDocument, submitReview } = useProfile();
+  const { 
+    state, 
+    loading, 
+    error, 
+    connectionStatus,
+    recommendations,
+    sendAnswer, 
+    submitReview,
+    navigateToSection,
+    refreshRecommendations 
+  } = useProfile();
+  
+  const [activeView, setActiveView] = useState<'profile' | 'documents' | 'recommendations'>('profile');
   const [userAnswer, setUserAnswer] = useState('');
-  const [uploadStatus, setUploadStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle');
-  const [file, setFile] = useState<File | null>(null);
+  
+  // Update effect to check for state and sections before calling refreshRecommendations
+  useEffect(() => {
+    if (state && state.sections && Object.keys(state.sections).length > 0) {
+      refreshRecommendations();
+    }
+  }, [state, refreshRecommendations]);
 
   if (loading) {
     return (
@@ -53,129 +79,108 @@ export default function ProfileBuilder() {
     }
   };
 
-  const handleUploadDocument = () => {
-    if (file) {
-      setUploadStatus('uploading');
-      uploadDocument(file)
-        .then(() => setUploadStatus('success'))
-        .catch(() => setUploadStatus('error'))
-        .finally(() => setFile(null));
-    }
+  const handleSectionClick = (section: ProfileSection) => {
+    navigateToSection(section);
+  };
+  
+  const handleSwitchView = (view: 'profile' | 'documents' | 'recommendations') => {
+    setActiveView(view);
   };
 
-  const renderSection = (section: string) => {
-    const isActive = state.current_section === section;
-    const completed = state.sections?.[section as keyof typeof state.sections]?.status === 'completed';
-    
-    return (
-      <div 
-        key={section}
-        className={`p-4 border rounded mb-2 ${isActive ? 'border-blue-500' : completed ? 'border-green-500' : 'border-gray-300'}`}
-      >
-        <div className="flex justify-between items-center">
-          <h3 className="font-medium">
-            {section.charAt(0).toUpperCase() + section.slice(1)}
-          </h3>
-          {completed && (
-            <span className="text-green-500">✓ Completed</span>
-          )}
-        </div>
-      </div>
-    );
-  };
-
-  const renderSectionStatus = () => {
-    return (
-      <div className="mb-6">
-        <h3 className="font-semibold mb-2">Section Status</h3>
-        {PROFILE_SECTIONS.map(renderSection)}
-      </div>
-    );
-  };
-
-  const renderCurrentQuestions = () => {
-    if (!state.current_questions || state.current_questions.length === 0) {
-      return (
-        <div className="p-4 bg-yellow-100 rounded">
-          <p>No questions available at the moment.</p>
-        </div>
-      );
-    }
-
-    return (
-      <div className="bg-white border rounded p-4 mb-4">
-        <h3 className="font-semibold mb-2">Current Questions:</h3>
-        <ul className="list-disc pl-5">
-          {state.current_questions.map((question: any, index: number) => (
-            <li key={index} className="mb-2">{typeof question === 'string' ? question : question.text}</li>
-          ))}
-        </ul>
-      </div>
-    );
-  };
+  // Add null/undefined checks for state.sections
+  const completedSectionsCount = state?.sections 
+    ? Object.values(state.sections).filter(section => section.status === 'completed').length 
+    : 0;
+  
+  const totalSections = PROFILE_SECTIONS.length;
+  const progress = Math.round((completedSectionsCount / totalSections) * 100);
 
   return (
-    <div className="max-w-4xl mx-auto p-4">
-      <h1 className="text-2xl font-bold mb-4">Profile Builder</h1>
-      
-      {/* Profile Navigation */}
-      <div className="flex mb-4 border-b overflow-x-auto">
-        {PROFILE_SECTIONS.map((section) => (
-          <button
-            key={section}
-            className={`px-4 py-2 ${state.current_section === section ? 'border-b-2 border-blue-500 text-blue-500' : 'text-gray-500'}`}
-            onClick={() => submitReview({ action: 'switch_section', data: { section } })}
-          >
-            {section.charAt(0).toUpperCase() + section.slice(1)}
-          </button>
-        ))}
+    <div className="max-w-6xl mx-auto p-4">
+      {/* Header with connection status */}
+      <div className="flex justify-between items-center mb-6 border-b pb-4">
+        <h1 className="text-2xl font-bold">Profile Builder</h1>
+        <ConnectionStatus status={connectionStatus} />
       </div>
-
-      {/* Section Status */}
-      {renderSectionStatus()}
       
-      {/* Current Questions */}
-      {renderCurrentQuestions()}
-      
-      {/* Document Upload */}
-      <div className="mb-6">
-        <h3 className="font-semibold mb-2">Upload Document</h3>
-        <input 
-          type="file" 
-          onChange={(e) => setFile(e.target.files?.[0] || null)} 
-          className="mb-2"
+      {/* Progress bar */}
+      <div className="w-full bg-gray-200 rounded-full h-4 mb-6">
+        <div 
+          className="bg-blue-600 h-4 rounded-full transition-all duration-500 ease-in-out"
+          style={{ width: `${progress}%` }}
         />
-        <button
-          onClick={handleUploadDocument}
-          className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-1 px-4 rounded mr-2"
-          disabled={uploadStatus === 'uploading' || !file}
-        >
-          {uploadStatus === 'uploading' ? 'Uploading...' : 'Upload'}
-        </button>
-        {uploadStatus === 'success' && <span className="text-green-500">Upload successful!</span>}
-        {uploadStatus === 'error' && <span className="text-red-500">Upload failed!</span>}
+        <p className="text-sm text-gray-600 mt-1">
+          {completedSectionsCount} of {totalSections} sections completed ({progress}%)
+        </p>
       </div>
       
-      {/* Answer Form */}
-      <div className="mb-6">
-        <h3 className="font-semibold mb-2">Your Answer</h3>
-        <form onSubmit={handleSubmitAnswer} className="mb-4">
-          <textarea
-            value={userAnswer}
-            onChange={(e) => setUserAnswer(e.target.value)}
-            className="w-full p-2 border rounded"
-            rows={4}
-            placeholder="Type your answer here..."
-          ></textarea>
-          <button
-            type="submit"
-            className="mt-2 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
-            disabled={!userAnswer.trim()}
-          >
-            Submit Answer
-          </button>
-        </form>
+      {/* View selector tabs */}
+      <div className="flex border-b mb-6">
+        <button
+          className={`px-4 py-2 ${activeView === 'profile' ? 'border-b-2 border-blue-500 text-blue-500' : 'text-gray-500'}`}
+          onClick={() => handleSwitchView('profile')}
+        >
+          Build Profile
+        </button>
+        <button
+          className={`px-4 py-2 ${activeView === 'documents' ? 'border-b-2 border-blue-500 text-blue-500' : 'text-gray-500'}`}
+          onClick={() => handleSwitchView('documents')}
+        >
+          Documents
+        </button>
+        <button
+          className={`px-4 py-2 ${activeView === 'recommendations' ? 'border-b-2 border-blue-500 text-blue-500' : 'text-gray-500'}`}
+          onClick={() => handleSwitchView('recommendations')}
+        >
+          View Recommendations {recommendations.length > 0 && `(${recommendations.length})`}
+        </button>
       </div>
+      
+      {activeView === 'profile' && (
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          {/* Left sidebar with section navigation */}
+          <div className="md:col-span-1">
+            <h2 className="font-semibold mb-3 text-lg">Profile Sections</h2>
+            <ProfileNavigation 
+              sections={state?.sections || {}}
+              currentSection={state?.current_section || null}
+              onSectionClick={handleSectionClick}
+            />
+          </div>
+          
+          {/* Main content area */}
+          <div className="md:col-span-3">
+            <div className="bg-white shadow-sm rounded-lg p-6">
+              <h2 className="text-xl font-semibold mb-4 capitalize">
+                {state.current_section || 'Select a section'}
+              </h2>
+              
+              {/* Questions and answers */}
+              <div className="mb-6">
+                <ProfileQuestionnaire
+                  questions={state.current_questions}
+                  userAnswer={userAnswer}
+                  onAnswerChange={setUserAnswer}
+                  onSubmit={handleSubmitAnswer}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {activeView === 'documents' && (
+        <div className="bg-white shadow-sm rounded-lg p-6">
+          <DocumentsSection />
+        </div>
+      )}
+      
+      {activeView === 'recommendations' && (
+        <RecommendationsList 
+          recommendations={recommendations}
+          onRefresh={refreshRecommendations}
+        />
+      )}
     </div>
   );
 } 

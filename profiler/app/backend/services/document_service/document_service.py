@@ -9,6 +9,7 @@ import logging
 from typing import Dict, Any, List, Optional, Type
 from datetime import datetime
 import asyncio
+import uuid
 
 from ...core.interfaces import AIClientInterface
 from ...utils.logging import get_logger
@@ -294,3 +295,52 @@ class DocumentService(DocumentServiceInterface):
             logger.error(f"Error detecting document type: {str(e)}")
             # Default to OTHER on error
             return DocumentType.OTHER 
+
+    async def store_document(
+        self, 
+        content: str, 
+        document_type: DocumentType,
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> str:
+        """
+        Store a document and return a unique identifier.
+        
+        Args:
+            content: The document content
+            document_type: Type of the document
+            metadata: Optional metadata about the document
+            
+        Returns:
+            A unique document ID
+        """
+        if not self._initialized:
+            logger.warning("Document service not initialized. Initializing now.")
+            await self.initialize()
+        
+        try:
+            logger.info(f"Storing document of type: {document_type}")
+            
+            # Generate a unique document ID
+            document_id = str(uuid.uuid4())
+            
+            # Add timestamp and document_id to metadata
+            metadata_with_id = {
+                **(metadata or {}),
+                "document_id": document_id,
+                "stored_at": datetime.utcnow().isoformat(),
+                "document_type": document_type.value,
+                "document_length": len(content)
+            }
+            
+            # In a real implementation, this would store the document in a database
+            # For this implementation, we'll just log it
+            logger.info(f"Document stored with ID: {document_id}")
+            
+            # If we had a repository, we would do something like:
+            # await self.repository.store_document(document_id, content, document_type, metadata_with_id)
+            
+            return document_id
+            
+        except Exception as e:
+            logger.error(f"Error storing document: {str(e)}")
+            raise ServiceError(f"Document storage failed: {str(e)}") 

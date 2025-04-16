@@ -305,4 +305,25 @@ def event_loop():
     policy = asyncio.get_event_loop_policy()
     loop = policy.new_event_loop()
     yield loop
+    loop.close()
+
+
+@pytest.fixture(autouse=True)
+async def setup_event_loop(event_loop):
+    """Set up the event loop for each test."""
+    asyncio.set_event_loop(event_loop)
+    yield
+    # Clean up after test
+    await asyncio.sleep(0)  # Allow pending tasks to complete
+
+
+@pytest.fixture
+async def event_loop_instance(event_loop):
+    """Ensure each test has a fresh event loop instance."""
+    asyncio.set_event_loop(event_loop)
+    yield event_loop
+    # Clean up any remaining tasks
+    pending = asyncio.all_tasks(event_loop)
+    for task in pending:
+        task.cancel()
     loop.close() 

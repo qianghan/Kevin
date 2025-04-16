@@ -13,7 +13,7 @@ from unittest.mock import patch, AsyncMock, MagicMock
 
 from app.backend.services.qa_service import QAService
 from app.backend.services.document_service import DocumentService
-from app.backend.services.recommender_service import RecommendationService
+from app.backend.services.recommendation import RecommendationService
 
 
 # Tests for QAService

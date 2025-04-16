@@ -23,12 +23,29 @@ import json
 config = ConfigManager().get_all()
 logger = get_logger(__name__)
 
-class WorkflowConfig(TypedDict):
-    """Configuration for the profile building workflow"""
-    session_timeout_minutes: int
-    max_interactions: int
-    confidence_threshold: float
-    human_review_threshold: float
+class WorkflowConfig:
+    """Configuration for the profile workflow."""
+    
+    def __init__(
+        self,
+        session_timeout_minutes: int = 30,
+        max_interactions: int = 100,
+        confidence_threshold: float = 0.8,
+        human_review_threshold: float = 0.7
+    ):
+        """
+        Initialize workflow configuration.
+        
+        Args:
+            session_timeout_minutes: Minutes until session times out
+            max_interactions: Maximum number of interactions allowed
+            confidence_threshold: Threshold for confidence in answers
+            human_review_threshold: Threshold for requiring human review
+        """
+        self.session_timeout_minutes = session_timeout_minutes
+        self.max_interactions = max_interactions
+        self.confidence_threshold = confidence_threshold
+        self.human_review_threshold = human_review_threshold
 
 def create_profile_workflow(
     config: WorkflowConfig,
@@ -182,7 +199,7 @@ def create_profile_workflow(
                 return True
                 
             # Check if confidence is below threshold
-            if section_data.get("confidence", 0) < config["human_review_threshold"]:
+            if section_data.get("confidence", 0) < config.confidence_threshold:
                 return True
                 
             return False
@@ -195,7 +212,7 @@ def create_profile_workflow(
         """Determine if session should end"""
         try:
             # Check if max interactions reached
-            if state["interaction_count"] >= config["max_interactions"]:
+            if state["interaction_count"] >= config.max_interactions:
                 return True
                 
             # Check if all sections are completed

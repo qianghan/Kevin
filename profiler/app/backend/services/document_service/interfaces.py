@@ -159,6 +159,22 @@ class DocumentServiceInterface(ABC):
         pass
     
     @abstractmethod
+    async def store_document(self, content: str, document_type: DocumentType,
+                            metadata: Optional[Dict[str, Any]] = None) -> str:
+        """
+        Store a document and return a unique identifier.
+        
+        Args:
+            content: The document content
+            document_type: Type of the document
+            metadata: Optional metadata about the document
+            
+        Returns:
+            A unique document ID
+        """
+        pass
+    
+    @abstractmethod
     async def initialize(self) -> None:
         """Initialize the document service"""
         pass

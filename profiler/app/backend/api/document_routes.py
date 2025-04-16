@@ -35,6 +35,13 @@ class DocumentResponse(BaseModel):
     confidence: float = Field(..., description="Confidence score")
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
 
+class DocumentUploadResponse(BaseModel):
+    """Response model for document upload"""
+    document_id: str = Field(..., description="Unique document identifier")
+    filename: str = Field(..., description="Original filename")
+    content_type: str = Field(..., description="Document type detected or provided")
+    status: str = Field("success", description="Upload status")
+
 @router.post("/analyze", response_model=DocumentResponse)
 async def analyze_document(
     request: DocumentRequest,
@@ -85,11 +92,11 @@ async def analyze_document(
             raise HTTPException(status_code=422, detail=str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/upload", response_model=DocumentResponse)
+@router.post("/upload", response_model=DocumentUploadResponse)
 async def upload_document(
     file: UploadFile = File(...),
     document_type: Optional[str] = Form(None),
-    metadata: Optional[str] = Form(None),
+    section: Optional[str] = Form(None),
     document_service: DocumentService = Depends(get_document_service)
 ):
     """
@@ -98,10 +105,10 @@ async def upload_document(
     Args:
         file: Document file
         document_type: Optional document type
-        metadata: Optional metadata (JSON string)
+        section: Optional profile section this document belongs to
         
     Returns:
-        Analysis results
+        Document upload result with document ID
     """
     try:
         # Read file content
@@ -111,27 +118,12 @@ async def upload_document(
         if isinstance(content, bytes):
             content = content.decode("utf-8")
         
-        # Parse metadata if provided
-        meta_dict = {}
-        if metadata:
-            import json
-            try:
-                meta_dict = json.loads(metadata)
-                
-                # Add file info to metadata
-                meta_dict["filename"] = file.filename
-                meta_dict["content_type"] = file.content_type
-            except json.JSONDecodeError:
-                raise HTTPException(
-                    status_code=400, 
-                    detail="Invalid metadata format. Must be valid JSON."
-                )
-        else:
-            # Just add file info
-            meta_dict = {
-                "filename": file.filename,
-                "content_type": file.content_type
-            }
+        # Create metadata from file info
+        meta_dict = {
+            "filename": file.filename,
+            "content_type": file.content_type,
+            "section": section or "general"
+        }
         
         # Determine document type
         if document_type:
@@ -142,14 +134,27 @@ async def upload_document(
         else:
             doc_type = await document_service.detect_document_type(content)
         
-        # Analyze document
-        result = await document_service.analyze(
+        # Store document and get ID
+        document_id = await document_service.store_document(
             content=content,
             document_type=doc_type,
             metadata=meta_dict
         )
         
-        return result
+        # Start analysis in background (don't wait for it)
+        import asyncio
+        asyncio.create_task(document_service.analyze(
+            content=content,
+            document_type=doc_type,
+            metadata=meta_dict
+        ))
+        
+        return DocumentUploadResponse(
+            document_id=document_id,
+            filename=file.filename,
+            content_type=doc_type.value,
+            status="success"
+        )
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

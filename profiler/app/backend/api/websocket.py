@@ -11,6 +11,7 @@ import json
 import asyncio
 import uuid
 from datetime import datetime, timezone
+import logging
 
 from ..utils.logging import get_logger
 from ..utils.errors import ValidationError, ServiceError
@@ -22,14 +23,23 @@ from ..core.workflows.profile_workflow import (
 )
 from ..core.models.state import create_initial_state, ProfileState
 from .dependencies import ServiceFactory
+from app.backend.api.websocket_handler import (
+    WebSocketMessageRouter,
+    DocumentAnalysisHandler,
+    QAHandler,
+    RecommendationHandler
+)
+from app.backend.services.interfaces import (
+    IDocumentService,
+    IRecommendationService,
+    IQAService
+)
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 config = ConfigManager().get_all()
 
-# Create routers - one with auth (main) and one without (for tests)
+# Create router with auth
 router = APIRouter()
-# Create a completely separate router for test endpoints that won't have any auth middleware
-test_router = APIRouter(dependencies=[])
 
 class ConnectionManager:
     """
@@ -45,6 +55,27 @@ class ConnectionManager:
         self.workflow_executors: Dict[str, Any] = {}
         self.session_metadata: Dict[str, Dict[str, Any]] = {}
         self.user_states: Dict[str, ProfileState] = {}
+        self.message_router = WebSocketMessageRouter()
+    
+    def initialize_handlers(
+        self,
+        document_service: IDocumentService,
+        recommendation_service: IRecommendationService,
+        qa_service: IQAService
+    ):
+        """Initialize message handlers with service dependencies"""
+        self.message_router.register_handler(
+            "analyze_document",
+            DocumentAnalysisHandler(document_service)
+        )
+        self.message_router.register_handler(
+            "ask_question",
+            QAHandler(qa_service)
+        )
+        self.message_router.register_handler(
+            "get_recommendations",
+            RecommendationHandler(recommendation_service)
+        )
     
     async def connect(self, websocket: WebSocket, user_id: str) -> str:
         """
@@ -68,6 +99,7 @@ class ConnectionManager:
             self.session_metadata[session_id] = {
                 "user_id": user_id,
                 "connected_at": datetime.now(timezone.utc).isoformat(),
+                "last_activity": datetime.now(timezone.utc).isoformat(),
                 "client_info": {
                     "ip": websocket.client.host if websocket.client else "unknown"
                 }
@@ -169,14 +201,19 @@ class ConnectionManager:
             message: The received message
             websocket: The WebSocket connection
         """
+        session_id = None
         try:
             # Parse message
             data = json.loads(message)
             logger.debug(f"Received message: {data}")
             
-            # Validate session ID
-            session_id = data.get("session_id")
-            if not self.validate_session(session_id):
+            # Get session ID from active connections
+            for sid, ws in self.active_connections.items():
+                if ws == websocket:
+                    session_id = sid
+                    break
+            
+            if not session_id or not self.validate_session(session_id):
                 await self.send_message(session_id, {
                     "type": "error",
                     "error": "Invalid session ID",
@@ -185,8 +222,12 @@ class ConnectionManager:
                 return
             
             # Process the message
-            await self._process_message(session_id, data)
+            await self.message_router.route_message(data, websocket)
             
+            # Update last activity timestamp
+            if session_id:
+                self.session_metadata[session_id]["last_activity"] = datetime.now(timezone.utc).isoformat()
+                
         except json.JSONDecodeError:
             logger.error(f"Invalid JSON in message: {message}")
             # Cannot send an error response without a session ID
@@ -201,10 +242,10 @@ class ConnectionManager:
             if session_id:
                 await self.send_message(session_id, {
                     "type": "error",
-                    "error": "Internal server error",
+                    "error": str(e),
                     "timestamp": datetime.now(timezone.utc).isoformat()
                 })
-                
+    
     async def _process_message(self, session_id: str, data: Dict[str, Any]) -> None:
         """
         Process a valid message and update the state.
@@ -386,62 +427,25 @@ class ConnectionManager:
             del self.user_states[session_id]
         logger.info(f"WebSocket disconnected: session_id={session_id}")
 
+    async def broadcast(self, message: Dict[str, Any], exclude: List[str] = None) -> None:
+        """
+        Broadcast a message to all connected clients.
+        
+        Args:
+            message: The message to broadcast
+            exclude: List of session IDs to exclude from broadcast
+        """
+        exclude = exclude or []
+        for session_id, websocket in self.active_connections.items():
+            if session_id not in exclude:
+                try:
+                    await websocket.send_json(message)
+                except Exception as e:
+                    logger.error(f"Error broadcasting to session {session_id}: {str(e)}")
+                    continue
+
 # Create a global connection manager instance
 manager = ConnectionManager()
-
-# Test endpoint with no auth on a separate router
-@test_router.websocket("/test-ws")
-async def test_websocket_endpoint(websocket: WebSocket):
-    """
-    Simple test WebSocket endpoint for debugging purposes.
-    No authentication required.
-    
-    Args:
-        websocket: The WebSocket connection
-    """
-    try:
-        # Accept connection immediately without any validation
-        await websocket.accept()
-        logger.info("Test WebSocket connected successfully with no auth")
-        
-        # Send welcome message
-        await websocket.send_json({
-            "type": "test_connected",
-            "message": "Connected to test WebSocket endpoint - NO AUTH REQUIRED",
-            "timestamp": datetime.now(timezone.utc).isoformat()
-        })
-        
-        try:
-            # Echo messages back
-            while True:
-                message = await websocket.receive_text()
-                logger.debug(f"Test WebSocket received: {message}")
-                
-                try:
-                    # Try to parse as JSON
-                    data = json.loads(message)
-                    await websocket.send_json({
-                        "type": "echo",
-                        "data": data,
-                        "timestamp": datetime.now(timezone.utc).isoformat()
-                    })
-                except json.JSONDecodeError:
-                    # Send back as text
-                    await websocket.send_json({
-                        "type": "echo",
-                        "message": message,
-                        "timestamp": datetime.now(timezone.utc).isoformat()
-                    })
-                
-        except WebSocketDisconnect:
-            logger.info("Test WebSocket disconnected")
-            
-    except Exception as e:
-        logger.error(f"Test WebSocket error: {str(e)}")
-        try:
-            await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
-        except:
-            pass
 
 @router.websocket("/ws/{user_id}")
 async def websocket_endpoint(websocket: WebSocket, user_id: str):
@@ -454,13 +458,21 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
     """
     try:
         # Log connection attempt with detailed info
-        api_key = websocket.query_params.get("api_key", "none")
-        logger.info(f"WebSocket connection attempt from user_id={user_id} with api_key={api_key}")
+        x_api_key = websocket.query_params.get("x-api-key", "none")
+        logger.info(f"WebSocket connection attempt from user_id={user_id} with api_key={x_api_key}")
         logger.debug(f"WebSocket headers: {websocket.headers}")
         logger.debug(f"WebSocket query params: {websocket.query_params}")
         
-        # Accept connections even without valid API keys for easier testing
-        # In production, we would validate the API key before accepting
+        # Get valid keys from app state
+        from app.backend.api.main import VALID_API_KEYS
+        
+        # Validate API key
+        if x_api_key not in VALID_API_KEYS:
+            logger.warning(f"Invalid API key provided for user {user_id}: {x_api_key}")
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+            
+        # Accept the connection with valid API key
         await websocket.accept()
         logger.info(f"WebSocket connection accepted for user_id={user_id}")
         

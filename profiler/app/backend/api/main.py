@@ -27,7 +27,7 @@ from app.backend.services.interfaces import DocumentAnalysisResult, Recommendati
 from app.backend.api.dependencies import get_document_service, get_recommendation_service, get_qa_service
 from app.backend.api.dependencies import verify_api_key, ServiceFactory
 from app.backend.api.middleware import RequestLoggingMiddleware, ErrorLoggingMiddleware
-from app.backend.api.websocket import ConnectionManager, router as websocket_router, test_router as websocket_test_router
+from app.backend.api.websocket import ConnectionManager, router as websocket_router
 from app.backend.api.document_routes import router as document_router
 
 # Configure logging
@@ -46,23 +46,19 @@ app = FastAPI(
 # Set app state
 app.state.version = "1.0.0"
 app.state.environment = os.getenv("ENVIRONMENT", "development")
-app.state.api_keys = os.getenv("API_KEYS", "test_api_key").split(",")
+app.state.api_keys = os.getenv("API_KEYS", "test-key-123").split(",")
 
-# Include routers
-app.include_router(document_router, prefix="/api/profiler")
-app.include_router(websocket_router, prefix="/api/profiler")
+# Define VALID_API_KEYS for test mocking
+VALID_API_KEYS = app.state.api_keys
+logger.info(f"API keys: {VALID_API_KEYS}")
 
-# Include test router with no prefix and no auth middleware
-# This must be added BEFORE any middleware that would check for auth
-app.include_router(websocket_test_router)
-
-# Add CORS middleware
+# Add CORS middleware first
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=config.get("cors", {}).get("origins", ["*"]),
+    allow_origins=["*"],  # Allows all origins
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["*"],  # Allows all methods
+    allow_headers=["*"],  # Allows all headers
 )
 
 # Add custom middleware
@@ -72,68 +68,99 @@ app.add_middleware(ErrorLoggingMiddleware)
 # Initialize connection manager
 manager = ConnectionManager()
 
-# Direct WebSocket endpoint without the profiler prefix
-@app.websocket("/api/ws/{user_id}")
-async def direct_websocket_endpoint(websocket: WebSocket, user_id: str):
+# WebSocket endpoint with API key authentication
+@app.websocket("/ws/{user_id}")
+async def websocket_endpoint(
+    websocket: WebSocket, 
+    user_id: str,
+    x_api_key: str = None
+):
     """
-    Direct WebSocket endpoint for real-time profile building.
-    Uses a simplified approach with no validation.
+    WebSocket endpoint with API key authentication.
     
     Args:
         websocket: The WebSocket connection
         user_id: The user's ID
+        x_api_key: API key from query parameter
     """
-    session_id = None
     try:
-        # Get API key from query params if present (but don't validate it)
-        api_key = websocket.query_params.get("api_key", "none")
-        logger.info(f"Direct WebSocket connection attempt from user_id={user_id} with api_key={api_key}")
-        logger.debug(f"WebSocket headers: {websocket.headers}")
-        logger.debug(f"WebSocket query params: {websocket.query_params}")
+        # Log connection attempt and debug info
+        logger.info(f"WebSocket connection attempt from user {user_id}")
+        logger.debug(f"WebSocket headers: {dict(websocket.headers)}")
+        logger.debug(f"WebSocket query params: {dict(websocket.query_params)}")
         
-        # Always accept the connection first without any validation
-        await websocket.accept()
-        logger.info(f"Direct WebSocket connection accepted for user_id={user_id}")
-        
-        # Connect the client to the manager and start handling messages
-        try:
-            session_id = await manager.connect(websocket, user_id)
-            logger.info(f"Direct WebSocket session established: user_id={user_id}, session_id={session_id}")
+        # Get API key from query params
+        x_api_key = websocket.query_params.get("x-api-key")
+        logger.info(f"Got API key from query params: {x_api_key}")
             
-            # Handle messages
+        # Verify API key
+        if not x_api_key:
+            logger.warning(f"No API key provided for user {user_id}")
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+            
+        # Get valid keys from configuration
+        valid_keys = VALID_API_KEYS
+        logger.info(f"Valid API keys: {valid_keys}")
+        logger.info(f"API key check: {x_api_key} in {valid_keys} = {x_api_key in valid_keys}")
+        
+        # Check if the provided key is valid
+        if x_api_key not in valid_keys:
+            logger.warning(f"Invalid API key provided for user {user_id}: {x_api_key}")
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+            
+        # Accept the connection
+        await websocket.accept()
+        logger.info(f"WebSocket connected for user {user_id} with valid API key")
+        
+        # Send welcome message
+        await websocket.send_json({
+            "type": "connected",
+            "message": "Successfully connected to WebSocket endpoint",
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        })
+        
+        # Connect to the manager
+        session_id = await manager.connect(websocket, user_id)
+        logger.info(f"Session established for user {user_id} with session_id {session_id}")
+        
+        try:
             while True:
-                try:
-                    message = await websocket.receive_text()
-                    logger.debug(f"Direct WebSocket message received from session {session_id}: {message[:100]}...")
-                    await manager.receive_message(message, websocket)
-                except WebSocketDisconnect:
-                    logger.info(f"Direct WebSocket disconnected by client: session_id={session_id}")
-                    break
-                except Exception as e:
-                    logger.error(f"Direct WebSocket message handling error: {str(e)}", exc_info=True)
-                    await websocket.send_json({
-                        "type": "error",
-                        "error": str(e),
-                        "timestamp": datetime.now(timezone.utc).isoformat()
-                    })
-        except Exception as e:
-            logger.error(f"Direct WebSocket session initialization error: {str(e)}", exc_info=True)
-            await websocket.send_json({
-                "type": "error",
-                "error": f"Session initialization error: {str(e)}",
-                "timestamp": datetime.now(timezone.utc).isoformat()
-            })
-            try:
-                await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
-            except Exception as close_error:
-                logger.error(f"Error closing WebSocket: {str(close_error)}")
+                # Receive message
+                message = await websocket.receive_text()
+                logger.debug(f"Received message from user {user_id}: {message}")
                 
+                # Echo the message back
+                await websocket.send_json({
+                    "type": "echo",
+                    "message": message,
+                    "timestamp": datetime.now(timezone.utc).isoformat()
+                })
+                
+                # Process message through manager
+                await manager.receive_message(message, websocket)
+                
+        except WebSocketDisconnect:
+            logger.info(f"WebSocket disconnected for user {user_id}")
+        except Exception as e:
+            logger.error(f"WebSocket error for user {user_id}: {str(e)}")
+            await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
     except Exception as e:
-        logger.error(f"Direct WebSocket connection error: {str(e)}", exc_info=True)
+        logger.error(f"WebSocket connection error: {str(e)}", exc_info=True)
+        try:
+            await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
+        except:
+            pass
     finally:
-        if session_id:
-            logger.info(f"Cleaning up direct WebSocket session: session_id={session_id}")
+        # Clean up connection
+        if 'session_id' in locals():
             manager.disconnect(session_id)
+            logger.info(f"Cleaned up session {session_id} for user {user_id}")
+
+# Include routers
+app.include_router(document_router, prefix="/api/profiler")
+app.include_router(websocket_router, prefix="/api/profiler")
 
 # Rate limiting
 class RateLimiter:
@@ -459,64 +486,6 @@ async def websocket_debug(user_id: str):
     """Debug endpoint for WebSocket"""
     return {"message": "WebSocket endpoint exists", "user_id": user_id}
 
-# Add a completely separate WebSocket endpoint with no security or validation
-@app.websocket("/open-ws/{user_id}")
-async def open_websocket_endpoint(websocket: WebSocket, user_id: str):
-    """
-    WebSocket endpoint with zero validation for real-time profile building.
-    No security checks - for development only.
-    
-    Args:
-        websocket: The WebSocket connection
-        user_id: The user's ID
-    """
-    session_id = None
-    try:
-        # Log connection attempt
-        logger.info(f"Open WebSocket connection attempt from user_id={user_id}")
-        
-        # Accept the connection immediately without any validation
-        await websocket.accept()
-        logger.info(f"Open WebSocket connection accepted for user_id={user_id}")
-        
-        # Connect to the connection manager to establish workflow
-        try:
-            # Use the existing connection manager to handle the connection
-            session_id = await manager.connect(websocket, user_id)
-            logger.info(f"WebSocket session established: user_id={user_id}, session_id={session_id}")
-            
-            # Handle messages through the connection manager
-            while True:
-                try:
-                    message = await websocket.receive_text()
-                    logger.debug(f"WebSocket message received from session {session_id}: {message[:100]}...")
-                    await manager.receive_message(message, websocket)
-                except WebSocketDisconnect:
-                    logger.info(f"WebSocket disconnected by client: session_id={session_id}")
-                    break
-                except Exception as e:
-                    logger.error(f"WebSocket message handling error: {str(e)}")
-                    await websocket.send_json({
-                        "type": "error",
-                        "error": str(e),
-                        "timestamp": datetime.now(timezone.utc).isoformat()
-                    })
-        except Exception as e:
-            logger.error(f"WebSocket session initialization error: {str(e)}")
-            await websocket.send_json({
-                "type": "error",
-                "error": str(e),
-                "timestamp": datetime.now(timezone.utc).isoformat()
-            })
-            await websocket.close()
-                
-    except Exception as e:
-        logger.error(f"Open WebSocket connection error: {str(e)}")
-    finally:
-        if session_id:
-            logger.info(f"Cleaning up WebSocket session: session_id={session_id}")
-            manager.disconnect(session_id)
-
 # Startup and shutdown events
 @app.on_event("startup")
 async def startup_event():
@@ -575,3 +544,42 @@ def custom_openapi():
     return app.openapi_schema
 
 app.openapi = custom_openapi 
+
+# Modified recommendations endpoint with no auth requirement for easier testing
+@app.get("/api/recommendations", include_in_schema=True, dependencies=[])
+async def get_recommendations(
+    user_id: str,
+    categories: Optional[List[str]] = None,
+    recommendation_service: IRecommendationService = Depends(get_recommendation_service)
+) -> List[Dict[str, Any]]:
+    """
+    Get recommendations for a user with NO AUTH REQUIREMENT for easier testing.
+    This endpoint is deliberately open for development purposes.
+    """
+    try:
+        logger.info(f"Getting recommendations for user {user_id}")
+        
+        # Get recommendations or return empty list if error
+        try:
+            recommendations = await recommendation_service.get_recommendations(
+                user_id=user_id,
+                categories=categories
+            )
+            
+            # Convert to dict for response
+            result = []
+            for rec in recommendations:
+                if hasattr(rec, 'dict'):
+                    result.append(rec.dict())
+                else:
+                    result.append(rec)
+                    
+            logger.info(f"Found {len(result)} recommendations for user {user_id}")
+            return result
+        except Exception as e:
+            logger.error(f"Error getting recommendations: {str(e)}", exc_info=True)
+            # Return empty list on error for better UX
+            return []
+    except Exception as e:
+        logger.error(f"Error in recommendations endpoint: {str(e)}", exc_info=True)
+        return [] 

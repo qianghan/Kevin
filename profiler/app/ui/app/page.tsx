@@ -1,6 +1,7 @@
 'use client';
 
 import { ProfileProvider } from '../lib/contexts/ProfileContext';
+import { DocumentProvider } from '../lib/contexts/DocumentContext';
 import ProfileBuilder from '../components/ProfileBuilder';
 
 export default function Home() {
@@ -9,9 +10,11 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-gray-100">
-      <ProfileProvider userId={userId}>
-        <ProfileBuilder />
-      </ProfileProvider>
+      <DocumentProvider>
+        <ProfileProvider userId={userId}>
+          <ProfileBuilder />
+        </ProfileProvider>
+      </DocumentProvider>
     </main>
   );
 } 
