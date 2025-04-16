@@ -1,9 +1,6 @@
-interface WebSocketMessage {
-    type: string;
-    data?: any;
-    error?: string;
-    timestamp?: string;
-}
+import type { WebSocketMessage } from '../../../shared/types';
+import { validateMessageByType, validateMessage, webSocketMessageSchema } from './validation';
+import { ZodError } from 'zod';
 
 export class WebSocketService {
     private ws: WebSocket | null = null;
@@ -39,13 +36,7 @@ export class WebSocketService {
         };
 
         this.ws.onmessage = (event: MessageEvent) => {
-            try {
-                const message: WebSocketMessage = JSON.parse(event.data);
-                console.log('Received WebSocket message:', message);
-                this.handleMessage(message);
-            } catch (error) {
-                console.error('Error parsing WebSocket message:', error);
-            }
+            this.handleRawMessage(event);
         };
 
         this.ws.onclose = (event: CloseEvent) => {
@@ -74,10 +65,45 @@ export class WebSocketService {
         }, this.reconnectDelay * this.reconnectAttempts);
     }
 
-    private handleMessage(message: WebSocketMessage): void {
+    private handleRawMessage(event: MessageEvent): void {
+        try {
+            // Parse the raw message
+            const rawMessage = JSON.parse(event.data);
+            
+            // First validate that it's a basic WebSocket message
+            const baseMessage = validateMessage(rawMessage, webSocketMessageSchema);
+            console.log('Received WebSocket message:', baseMessage);
+            
+            try {
+                // Then validate based on the message type
+                const validatedMessage = validateMessageByType(baseMessage);
+                this.dispatchMessage(validatedMessage);
+            } catch (error) {
+                if (error instanceof ZodError) {
+                    console.error('Message validation failed:', error.format());
+                    // Still process the message but log the validation error
+                    this.dispatchMessage(baseMessage);
+                } else {
+                    throw error;
+                }
+            }
+        } catch (error) {
+            console.error('Error processing WebSocket message:', error);
+            // Notify error handlers about the invalid message
+            const handlers = this.messageHandlers.get('error');
+            if (handlers) {
+                handlers.forEach(handler => handler({ 
+                    error: 'Invalid message format',
+                    raw: event.data
+                }));
+            }
+        }
+    }
+
+    private dispatchMessage(message: WebSocketMessage): void {
         const handlers = this.messageHandlers.get(message.type);
         if (handlers) {
-            handlers.forEach(handler => handler(message.data));
+            handlers.forEach(handler => handler(message.data || message));
         }
     }
 
@@ -93,7 +119,21 @@ export class WebSocketService {
             timestamp: new Date().toISOString()
         };
 
-        this.ws.send(JSON.stringify(message));
+        try {
+            // Validate outgoing message
+            validateMessage(message, webSocketMessageSchema);
+            this.ws.send(JSON.stringify(message));
+        } catch (error) {
+            console.error('Invalid outgoing message:', error);
+            // Notify error handlers
+            const handlers = this.messageHandlers.get('error');
+            if (handlers) {
+                handlers.forEach(handler => handler({ 
+                    error: 'Invalid outgoing message format',
+                    attempted: message
+                }));
+            }
+        }
     }
 
     onMessage(type: string, handler: (data: any) => void): void {

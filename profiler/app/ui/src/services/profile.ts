@@ -1,46 +1,32 @@
-import { WebSocketService } from './websocket';
+import { getProfileClient, IProfileClient, ProfileData } from './api';
 
-export interface ProfileState {
-    userId: string;
-    status: 'idle' | 'processing' | 'completed' | 'error';
-    progress: number;
-    data?: any;
-    error?: string;
-}
+export type ProfileState = ProfileData;
 
 export class ProfileService {
-    private wsService: WebSocketService;
+    private profileClient: IProfileClient;
     private state: ProfileState;
     private stateHandlers: ((state: ProfileState) => void)[] = [];
 
     constructor(userId: string) {
-        this.wsService = new WebSocketService(userId);
+        this.profileClient = getProfileClient(userId);
         this.state = {
             userId,
             status: 'idle',
             progress: 0
         };
-
-        // Set up WebSocket message handlers
-        this.wsService.onMessage('state_update', (data: ProfileState) => {
-            this.updateState(data);
-        });
-
-        this.wsService.onMessage('error', (error: string) => {
-            this.updateState({
-                ...this.state,
-                status: 'error',
-                error
-            });
+        
+        // Set up profile update handlers
+        this.profileClient.onProfileUpdate((profile) => {
+            this.updateState(profile);
         });
     }
 
     connect(): void {
-        this.wsService.connect();
+        this.profileClient.connect();
     }
 
     disconnect(): void {
-        this.wsService.disconnect();
+        this.profileClient.disconnect();
     }
 
     private updateState(newState: ProfileState): void {
@@ -62,7 +48,16 @@ export class ProfileService {
         return this.state;
     }
 
+    async fetchProfile(): Promise<ProfileState> {
+        const response = await this.profileClient.getProfile(this.state.userId);
+        if (response.status === 'success' && response.data) {
+            this.updateState(response.data);
+            return this.state;
+        }
+        return this.state;
+    }
+
     sendMessage(type: string, data: any): void {
-        this.wsService.sendMessage(type, data);
+        this.profileClient.sendMessage(type, data);
     }
 } 

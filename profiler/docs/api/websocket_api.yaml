@@ -1,0 +1,236 @@
+openapi: 3.0.0
+info:
+  title: Profile Builder WebSocket API
+  version: 1.0.0
+  description: WebSocket API for the profiler application
+
+paths:
+  /ws/{userId}:
+    parameters:
+      - name: userId
+        in: path
+        required: true
+        schema:
+          type: string
+        description: The user ID for the WebSocket connection
+      - name: x-api-key
+        in: query
+        required: true
+        schema:
+          type: string
+        description: API key for authentication
+    get:
+      summary: WebSocket connection endpoint
+      description: |
+        Establishes a WebSocket connection for real-time profile building.
+        After connecting, the server will send an initial state update.
+      responses:
+        101:
+          description: WebSocket connection established
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConnectedMessage'
+
+components:
+  schemas:
+    WebSocketMessage:
+      type: object
+      required:
+        - type
+      properties:
+        type:
+          type: string
+          description: The message type
+        data:
+          type: object
+          description: Message data specific to the message type
+        error:
+          type: string
+          description: Error message, if applicable
+        timestamp:
+          type: string
+          format: date-time
+          description: Message timestamp
+
+    ProfileState:
+      type: object
+      required:
+        - userId
+        - status
+        - progress
+      properties:
+        userId:
+          type: string
+          description: User ID
+        status:
+          type: string
+          enum: [idle, processing, completed, error]
+          description: Current status of the profile
+        progress:
+          type: number
+          minimum: 0
+          maximum: 100
+          description: Progress percentage (0-100)
+        data:
+          type: object
+          additionalProperties: true
+          description: Profile data, structure depends on the current state
+
+    ConnectedMessage:
+      allOf:
+        - $ref: '#/components/schemas/WebSocketMessage'
+        - type: object
+          required:
+            - session_id
+            - message
+          properties:
+            type:
+              type: string
+              enum: [connected]
+            session_id:
+              type: string
+              description: Unique session ID for this connection
+            message:
+              type: string
+              description: Connection confirmation message
+
+    StateUpdateMessage:
+      allOf:
+        - $ref: '#/components/schemas/WebSocketMessage'
+        - type: object
+          required:
+            - data
+          properties:
+            type:
+              type: string
+              enum: [state_update]
+            data:
+              $ref: '#/components/schemas/ProfileState'
+
+    ErrorMessage:
+      allOf:
+        - $ref: '#/components/schemas/WebSocketMessage'
+        - type: object
+          required:
+            - error
+          properties:
+            type:
+              type: string
+              enum: [error]
+            error:
+              type: string
+              description: Error message
+
+    DocumentAnalysisMessage:
+      allOf:
+        - $ref: '#/components/schemas/WebSocketMessage'
+        - type: object
+          required:
+            - data
+          properties:
+            type:
+              type: string
+              enum: [analyze_document]
+            data:
+              type: object
+              required:
+                - documentId
+              properties:
+                documentId:
+                  type: string
+                  description: Unique document ID
+                content:
+                  type: string
+                  description: Document content to analyze
+                url:
+                  type: string
+                  format: uri
+                  description: URL of document to analyze
+
+    DocumentAnalysisResponseMessage:
+      allOf:
+        - $ref: '#/components/schemas/WebSocketMessage'
+        - type: object
+          required:
+            - data
+          properties:
+            type:
+              type: string
+              enum: [analyze_document_response]
+            data:
+              type: object
+              description: Analysis results
+
+    QuestionMessage:
+      allOf:
+        - $ref: '#/components/schemas/WebSocketMessage'
+        - type: object
+          required:
+            - data
+          properties:
+            type:
+              type: string
+              enum: [ask_question]
+            data:
+              type: object
+              required:
+                - question
+              properties:
+                question:
+                  type: string
+                  description: Question to ask
+                context:
+                  type: string
+                  description: Optional context for the question
+
+    QuestionResponseMessage:
+      allOf:
+        - $ref: '#/components/schemas/WebSocketMessage'
+        - type: object
+          required:
+            - data
+          properties:
+            type:
+              type: string
+              enum: [ask_question_response]
+            data:
+              type: object
+              description: Answer to the question
+
+    RecommendationMessage:
+      allOf:
+        - $ref: '#/components/schemas/WebSocketMessage'
+        - type: object
+          required:
+            - data
+          properties:
+            type:
+              type: string
+              enum: [get_recommendations]
+            data:
+              type: object
+              properties:
+                profile_id:
+                  type: string
+                  description: Profile ID to get recommendations for
+                count:
+                  type: integer
+                  minimum: 1
+                  description: Number of recommendations to get
+
+    RecommendationResponseMessage:
+      allOf:
+        - $ref: '#/components/schemas/WebSocketMessage'
+        - type: object
+          required:
+            - data
+          properties:
+            type:
+              type: string
+              enum: [get_recommendations_response]
+            data:
+              type: array
+              items:
+                type: object
+                description: Recommendation item 
