@@ -146,6 +146,14 @@ class ServiceFactory:
         await document_service.initialize()
         await recommendation_service.initialize()
         # QA service is already initialized by the factory
+        
+        # Initialize WebSocket handlers
+        from app.backend.api.main import manager
+        manager.initialize_handlers(
+            document_service=document_service,
+            recommendation_service=recommendation_service,
+            qa_service=qa_service
+        )
     
     @classmethod
     async def shutdown_services(cls):

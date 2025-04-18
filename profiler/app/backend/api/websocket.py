@@ -27,7 +27,9 @@ from app.backend.api.websocket_handler import (
     WebSocketMessageRouter,
     DocumentAnalysisHandler,
     QAHandler,
-    RecommendationHandler
+    RecommendationHandler,
+    HelloHandler,
+    SwitchSectionHandler
 )
 from app.backend.services.interfaces import (
     IDocumentService,
@@ -75,6 +77,25 @@ class ConnectionManager:
         self.message_router.register_handler(
             "get_recommendations",
             RecommendationHandler(recommendation_service)
+        )
+        self.message_router.register_handler(
+            "hello",
+            HelloHandler()
+        )
+        # Also register the connection_init handler
+        self.message_router.register_handler(
+            "connection_init",
+            HelloHandler()  # Reuse the HelloHandler for connection_init
+        )
+        # Fallback for ping messages
+        self.message_router.register_handler(
+            "ping",
+            HelloHandler()  # Reuse the HelloHandler for ping
+        )
+        # Handler for switch_section messages
+        self.message_router.register_handler(
+            "switch_section",
+            SwitchSectionHandler()
         )
     
     async def connect(self, websocket: WebSocket, user_id: str) -> str:
@@ -222,7 +243,11 @@ class ConnectionManager:
                 return
             
             # Process the message
-            await self.message_router.route_message(data, websocket)
+            response = await self.message_router.route_message(data)
+            
+            # Send the response back to the client
+            if response:
+                await self.send_message(session_id, response)
             
             # Update last activity timestamp
             if session_id:

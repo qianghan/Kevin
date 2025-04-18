@@ -3,18 +3,20 @@ import { WebSocketService } from '../../app/ui/src/services/websocket';
 import { MockWebSocketService } from '../ui/utils/test-utils';
 import { waitFor } from '@testing-library/react';
 
+// Create a mock instance directly rather than using jest.mock
+const mockWebSocketService = new MockWebSocketService('test-user');
+
 // Mock the WebSocketService to isolate the ProfileService
 jest.mock('../../app/ui/src/services/websocket', () => {
   return {
     WebSocketService: jest.fn().mockImplementation(() => {
-      return new MockWebSocketService('test-user');
+      return mockWebSocketService;
     })
   };
 });
 
 describe('Profile Service Integration', () => {
   let service: ProfileService;
-  let mockWebSocket: MockWebSocketService;
   
   beforeEach(() => {
     // Clear all mocks
@@ -22,10 +24,6 @@ describe('Profile Service Integration', () => {
     
     // Create a new service instance
     service = new ProfileService('test-user');
-    
-    // Get the mock WebSocket instance
-    mockWebSocket = WebSocketService as unknown as jest.Mock;
-    mockWebSocket = mockWebSocket.mock.results[0].value;
   });
   
   afterEach(() => {
@@ -45,13 +43,13 @@ describe('Profile Service Integration', () => {
     service.connect();
     
     // Simulate a successful connection
-    mockWebSocket.simulateMessage('connected', { 
+    mockWebSocketService.simulateMessage('connected', { 
       status: 'connected',
       session_id: 'test-session-123'
     });
     
     // Simulate initial state update
-    mockWebSocket.simulateMessage('state_update', {
+    mockWebSocketService.simulateMessage('state_update', {
       userId: 'test-user',
       status: 'idle',
       progress: 0
@@ -72,7 +70,7 @@ describe('Profile Service Integration', () => {
   
   it('should send a message through WebSocket', async () => {
     // Spy on the sendMessage method
-    const sendMessageSpy = jest.spyOn(mockWebSocket, 'sendMessage');
+    const sendMessageSpy = jest.spyOn(mockWebSocketService, 'sendMessage');
     
     // Connect to the service
     service.connect();
@@ -102,7 +100,7 @@ describe('Profile Service Integration', () => {
     service.connect();
     
     // Simulate an error
-    mockWebSocket.simulateMessage('error', {
+    mockWebSocketService.simulateMessage('error', {
       error: 'Test error message'
     });
     
@@ -127,26 +125,26 @@ describe('Profile Service Integration', () => {
     service.connect();
     
     // Simulate initial state
-    mockWebSocket.simulateMessage('state_update', {
+    mockWebSocketService.simulateMessage('state_update', {
       userId: 'test-user',
       status: 'idle',
       progress: 0
     });
     
     // Simulate progress updates
-    mockWebSocket.simulateMessage('state_update', {
+    mockWebSocketService.simulateMessage('state_update', {
       userId: 'test-user',
       status: 'processing',
       progress: 25
     });
     
-    mockWebSocket.simulateMessage('state_update', {
+    mockWebSocketService.simulateMessage('state_update', {
       userId: 'test-user',
       status: 'processing',
       progress: 50
     });
     
-    mockWebSocket.simulateMessage('state_update', {
+    mockWebSocketService.simulateMessage('state_update', {
       userId: 'test-user',
       status: 'completed',
       progress: 100,

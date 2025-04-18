@@ -141,44 +141,141 @@ class QAHandler(MessageHandler):
 
 
 class RecommendationHandler(MessageHandler):
-    """Handler for recommendation messages"""
+    """Handler for recommendation requests"""
     
     def __init__(self, recommendation_service: IRecommendationService):
+        """
+        Initialize the handler with a recommendation service.
+        
+        Args:
+            recommendation_service: The recommendation service
+        """
         self.recommendation_service = recommendation_service
     
     async def handle(self, message: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Handle recommendation message.
+        Handle a recommendation request.
         
         Args:
-            message: Recommendation message
+            message: The message to handle
             
         Returns:
-            Recommendations message
+            Response message
         """
         try:
             # Validate the message
-            validated_message = validate_websocket_message(message)
+            validated_message = RecommendationMessage(**message)
             
-            if not isinstance(validated_message, RecommendationMessage):
-                raise ValueError("Invalid recommendation message format")
+            # Get recommendations based on data and categories
+            data = validated_message.data or {}
+            categories = data.get("categories")
             
-            profile_id = validated_message.data.profile_id
-            count = validated_message.data.count or 5  # Default to 5 recommendations
-            
-            # Get recommendations
             recommendations = await self.recommendation_service.get_recommendations(
-                profile_id=profile_id,
-                count=count
+                user_id=data.get("user_id", "anonymous"),
+                profile_data=data.get("profile_data", {}),
+                categories=categories
             )
             
+            # Format recommendations for the response
+            formatted_recommendations = [
+                {
+                    "id": rec.id,
+                    "category": rec.category,
+                    "title": rec.title,
+                    "description": rec.description,
+                    "confidence": rec.confidence,
+                    "relevance": rec.relevance,
+                    "type": rec.type
+                }
+                for rec in recommendations
+            ]
+            
             return {
-                "type": "get_recommendations_response",
-                "data": recommendations,
+                "type": "recommendations",
+                "data": {
+                    "recommendations": formatted_recommendations
+                },
                 "timestamp": datetime.now(timezone.utc).isoformat()
             }
+            
         except Exception as e:
             logger.error(f"Error in recommendations: {e}")
+            logger.debug(traceback.format_exc())
+            return {
+                "type": "error",
+                "error": str(e),
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
+
+
+class HelloHandler(MessageHandler):
+    """Handler for hello messages"""
+    
+    async def handle(self, message: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Handle a hello message.
+        
+        Args:
+            message: The message to handle
+            
+        Returns:
+            Response message
+        """
+        try:
+            # Simply acknowledge the hello message
+            return {
+                "type": "hello_response",
+                "data": {
+                    "message": "Hello received and acknowledged",
+                    "server_time": datetime.now(timezone.utc).isoformat()
+                },
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
+            
+        except Exception as e:
+            logger.error(f"Error handling hello message: {e}")
+            logger.debug(traceback.format_exc())
+            return {
+                "type": "error",
+                "error": str(e),
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
+
+
+class SwitchSectionHandler(MessageHandler):
+    """Handler for switch_section messages"""
+    
+    async def handle(self, message: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Handle a switch_section message.
+        
+        Args:
+            message: The message to handle
+            
+        Returns:
+            Response message
+        """
+        try:
+            # Extract section information
+            data = message.get('data', {})
+            section = data.get('section')
+            
+            if not section:
+                raise ValueError("Section name is required")
+            
+            # Return acknowledgement with the section that was switched to
+            return {
+                "type": "section_switched",
+                "data": {
+                    "section": section,
+                    "message": f"Successfully switched to section: {section}",
+                    "timestamp": datetime.now(timezone.utc).isoformat()
+                },
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
+            
+        except Exception as e:
+            logger.error(f"Error handling switch_section message: {e}")
             logger.debug(traceback.format_exc())
             return {
                 "type": "error",
