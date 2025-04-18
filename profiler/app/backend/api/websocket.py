@@ -411,6 +411,16 @@ class ConnectionManager:
             else:
                 logger.error(f"Invalid review feedback data: {message_data}")
                 raise ValueError("Invalid review feedback data")
+        elif message_type == "switch_section":
+            # Handle section switching
+            section = message_data.get("section")
+            if section:
+                state["current_section"] = section
+                state["last_updated"] = datetime.now(timezone.utc).isoformat()
+                logger.debug(f"Switched to section: {section}")
+            else:
+                logger.error(f"Invalid section switch data: {message_data}")
+                raise ValueError("Invalid section switch data")
         else:
             logger.warning(f"Unknown message type: {message_type}")
         

@@ -7,15 +7,22 @@ This module provides fixtures for FastAPI testing clients and service mocks.
 import os
 import sys
 import pytest
+import pytest_asyncio
 import asyncio
+import docker
+import time
+import uuid
+import logging
 from pathlib import Path
-from typing import Dict, Any, Generator, AsyncGenerator
+from typing import Dict, Any, Generator, AsyncGenerator, Optional, List
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from httpx import AsyncClient
 from unittest.mock import MagicMock, AsyncMock
 from httpx._transports.asgi import ASGITransport
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 # Add the project root to sys.path
 project_root = Path(__file__).parent.parent
@@ -27,6 +34,7 @@ from app.backend.interfaces.qa import IQAService
 from app.backend.interfaces.document import IDocumentService
 from app.backend.interfaces.recommendation import IRecommendationService
 from app.backend.core.deepseek.r1 import DeepSeekR1
+from app.backend.services.profile.database.models import Base
 
 # Mock the DeepSeekR1 class
 class DeepSeekR1:
@@ -326,4 +334,196 @@ async def event_loop_instance(event_loop):
     pending = asyncio.all_tasks(event_loop)
     for task in pending:
         task.cancel()
-    loop.close() 
+    loop.close()
+
+
+@pytest.fixture(scope="session")
+def docker_client() -> docker.DockerClient:
+    """Create a Docker client."""
+    return docker.from_env()
+
+
+@pytest_asyncio.fixture(scope="session")
+async def postgres_container(docker_client: docker.DockerClient) -> Generator:
+    """
+    Start a PostgreSQL container for testing.
+    
+    This fixture starts a PostgreSQL container, creates a test database,
+    and yields the container. After the test session, the container is removed.
+    """
+    logger.info("Starting PostgreSQL container for testing...")
+    
+    # Check if container already exists
+    existing_containers = docker_client.containers.list(
+        all=True,
+        filters={"name": "profiler-test-postgres"}
+    )
+    
+    if existing_containers:
+        container = existing_containers[0]
+        if container.status != "running":
+            logger.info("Starting existing container...")
+            container.start()
+    else:
+        # Create a new container
+        container = docker_client.containers.run(
+            "postgres:15",
+            name="profiler-test-postgres",
+            environment={
+                "POSTGRES_USER": TEST_DB_USER,
+                "POSTGRES_PASSWORD": TEST_DB_PASSWORD,
+                "POSTGRES_DB": "postgres"
+            },
+            ports={f"5432/tcp": TEST_DB_PORT},
+            detach=True,
+            remove=True
+        )
+    
+    # Wait for the container to be ready
+    for _ in range(60):  # 60 attempts, 1 second each
+        try:
+            logs = container.logs().decode("utf-8")
+            if "database system is ready to accept connections" in logs:
+                break
+        except Exception as e:
+            logger.warning(f"Error checking container logs: {e}")
+        
+        time.sleep(1)
+    else:
+        logger.error("PostgreSQL container failed to start")
+        container.stop()
+        container.remove()
+        pytest.fail("PostgreSQL container failed to start")
+    
+    # Create the test database if it doesn't exist
+    exec_result = container.exec_run(
+        f'psql -U {TEST_DB_USER} -c "SELECT 1 FROM pg_database WHERE datname=\'{TEST_DB_NAME}\'"'
+    )
+    
+    if "1 row" not in exec_result.output.decode("utf-8"):
+        logger.info(f"Creating test database: {TEST_DB_NAME}")
+        container.exec_run(
+            f'psql -U {TEST_DB_USER} -c "CREATE DATABASE {TEST_DB_NAME}"'
+        )
+    
+    logger.info(f"PostgreSQL container is ready on port {TEST_DB_PORT}")
+    
+    yield container
+    
+    # Don't stop container after tests to speed up repeated test runs
+    # It will be removed automatically when the program exits
+
+
+@pytest_asyncio.fixture(scope="session")
+async def test_db_url(postgres_container) -> str:
+    """
+    Get the database URL for testing.
+    
+    This fixture uses the PostgreSQL container fixture to build a database URL.
+    """
+    return f"postgresql+asyncpg://{TEST_DB_USER}:{TEST_DB_PASSWORD}@localhost:{TEST_DB_PORT}/{TEST_DB_NAME}"
+
+
+@pytest_asyncio.fixture(scope="session")
+async def test_engine(test_db_url: str) -> Generator:
+    """
+    Create a database engine for testing.
+    
+    This fixture creates a SQLAlchemy engine connected to the test database.
+    It also sets up the database schema for testing.
+    """
+    engine = create_async_engine(
+        test_db_url,
+        echo=False,
+        pool_size=5,
+        max_overflow=10
+    )
+    
+    # Create tables
+    async with engine.begin() as conn:
+        # Drop all tables first to ensure a clean slate
+        await conn.run_sync(Base.metadata.drop_all)
+        
+        # Create tables
+        await conn.run_sync(Base.metadata.create_all)
+    
+    yield engine
+    
+    # Close engine
+    await engine.dispose()
+
+
+@pytest_asyncio.fixture
+async def test_session(test_engine) -> Generator:
+    """
+    Create a database session for testing.
+    
+    This fixture creates a SQLAlchemy session connected to the test database.
+    The session is rolled back after each test to ensure isolation.
+    """
+    session_factory = async_sessionmaker(
+        bind=test_engine,
+        expire_on_commit=False,
+        class_=AsyncSession
+    )
+    
+    async with session_factory() as session:
+        # Start a transaction
+        async with session.begin():
+            # Use a savepoint to allow nested transactions
+            transaction = await session.begin_nested()
+            
+            yield session
+            
+            # Rollback the inner transaction
+            await transaction.rollback()
+        
+        # The outer transaction is automatically closed here
+
+
+@pytest.fixture
+def test_config(test_db_url: str) -> Dict[str, Any]:
+    """
+    Create a configuration dictionary for testing.
+    
+    This fixture creates a configuration dictionary that can be used
+    to initialize services with test settings.
+    """
+    return {
+        "database": {
+            "url": test_db_url,
+            "pool_size": 5,
+            "max_overflow": 10,
+            "echo": False
+        },
+        "security": {
+            "jwt_secret": "test-secret-key",
+            "jwt_expires_seconds": 3600
+        }
+    }
+
+
+@pytest_asyncio.fixture
+async def clean_db(test_engine) -> None:
+    """
+    Clean the database before each test.
+    
+    This fixture drops and recreates all tables to ensure a clean state.
+    """
+    async with test_engine.begin() as conn:
+        # Drop all tables
+        await conn.run_sync(Base.metadata.drop_all)
+        
+        # Create tables
+        await conn.run_sync(Base.metadata.create_all)
+
+
+@pytest.fixture
+def unique_id() -> str:
+    """
+    Generate a unique ID for test resources.
+    
+    This fixture generates a UUID that can be used to create unique
+    resources in tests.
+    """
+    return str(uuid.uuid4()) 

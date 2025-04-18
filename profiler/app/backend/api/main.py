@@ -561,9 +561,13 @@ async def get_recommendations(
         
         # Get recommendations or return empty list if error
         try:
+            # Create a minimal profile state with just the user_id
+            profile_state = {"user_id": user_id}
+            if categories:
+                profile_state["categories"] = categories
+                
             recommendations = await recommendation_service.get_recommendations(
-                user_id=user_id,
-                categories=categories
+                profile_state=profile_state
             )
             
             # Convert to dict for response

@@ -20,11 +20,15 @@ security:
     - "test-api-key"
 
 database:
-  type: "sqlite"
-  url: "sqlite:///profiler.db"
+  type: "postgresql"
+  sqlite_url: "sqlite:///profiler.db"
+  url: "postgresql+asyncpg://postgres:postgres@localhost:5432/profiler"
   pool_size: 20
   max_overflow: 10
   echo: false
+  connect_timeout: 10
+  pool_pre_ping: true
+  pool_recycle: 3600
 
 services:
   qa:

@@ -60,10 +60,11 @@ class ProfileServiceFactory(ProfileFactoryInterface):
                 storage_dir = self.config.get("storage_dir", "./data/profiles")
                 self._components["repository"] = JSONFileProfileRepository(storage_dir=storage_dir)
                 logger.info(f"Created JSONFileProfileRepository with storage_dir={storage_dir}")
-            elif repository_type == "database":
-                # Use database repository (placeholder)
-                self._components["repository"] = DatabaseProfileRepository()
-                logger.info("Created DatabaseProfileRepository")
+            elif repository_type == "database" or repository_type == "postgresql":
+                # Use PostgreSQL database repository
+                db_config = self.config_manager.get_config().get("database", {})
+                self._components["repository"] = DatabaseProfileRepository(config=db_config)
+                logger.info("Created PostgreSQL DatabaseProfileRepository")
             else:
                 # Default to JSON file repository
                 storage_dir = "./data/profiles"

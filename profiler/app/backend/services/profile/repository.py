@@ -14,6 +14,7 @@ from ...utils.errors import ResourceNotFoundError, StorageError
 from ...utils.logging import get_logger
 from .interfaces import ProfileRepositoryInterface
 from .models import Profile
+from .database.repository import PostgreSQLProfileRepository
 
 logger = get_logger(__name__)
 
@@ -211,32 +212,82 @@ class JSONFileProfileRepository(ProfileRepositoryInterface):
             raise StorageError(f"Failed to list profiles: {str(e)}")
 
 
+# Replace placeholder with actual PostgreSQL implementation
 class DatabaseProfileRepository(ProfileRepositoryInterface):
-    """Profile repository implementation using a database."""
+    """Profile repository implementation using PostgreSQL database."""
     
-    # This would be an alternative implementation using a database
-    # For now, it's a placeholder for future implementation
+    def __init__(self, config: Optional[Dict[str, Any]] = None):
+        """
+        Initialize the repository with database configuration.
+        
+        Args:
+            config: Optional database configuration dictionary
+        """
+        self._postgres_repo = PostgreSQLProfileRepository(config)
     
     async def initialize(self) -> None:
-        """Initialize database connection."""
-        pass
+        """Initialize the repository."""
+        await self._postgres_repo.initialize()
     
     async def shutdown(self) -> None:
-        """Close database connection."""
-        pass
+        """Shutdown the repository and release resources."""
+        await self._postgres_repo.shutdown()
     
     async def save_profile(self, profile: Profile) -> Profile:
-        """Save profile to database."""
-        pass
+        """
+        Save a profile to the repository.
+        
+        Args:
+            profile: The profile to save
+            
+        Returns:
+            The saved profile
+            
+        Raises:
+            StorageError: If the profile cannot be saved
+        """
+        return await self._postgres_repo.save_profile(profile)
     
     async def get_profile(self, profile_id: str) -> Profile:
-        """Get profile from database."""
-        pass
+        """
+        Get a profile by ID.
+        
+        Args:
+            profile_id: The ID of the profile to get
+            
+        Returns:
+            The profile
+            
+        Raises:
+            ResourceNotFoundError: If the profile does not exist
+            StorageError: If the profile cannot be retrieved
+        """
+        return await self._postgres_repo.get_profile(profile_id)
     
     async def delete_profile(self, profile_id: str) -> None:
-        """Delete profile from database."""
-        pass
+        """
+        Delete a profile by ID.
+        
+        Args:
+            profile_id: The ID of the profile to delete
+            
+        Raises:
+            ResourceNotFoundError: If the profile does not exist
+            StorageError: If the profile cannot be deleted
+        """
+        await self._postgres_repo.delete_profile(profile_id)
     
     async def list_profiles(self, user_id: Optional[str] = None) -> List[Profile]:
-        """List profiles from database."""
-        pass 
+        """
+        List profiles, optionally filtered by user ID.
+        
+        Args:
+            user_id: Optional user ID to filter by
+            
+        Returns:
+            List of profiles
+            
+        Raises:
+            StorageError: If the profiles cannot be listed
+        """
+        return await self._postgres_repo.list_profiles(user_id) 

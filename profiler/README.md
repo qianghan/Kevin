@@ -480,3 +480,135 @@ const ws = new WebSocket(`${WS_URL}/api/ws/${userId}`);
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Features
+
+- Profile creation and management
+- Document upload and analysis
+- Interactive Q&A for profile building
+- Personalized recommendations
+- Profile export in multiple formats
+- Data persistence with PostgreSQL or JSON files
+
+## Getting Started
+
+### Prerequisites
+
+- Python 3.9+
+- Node.js 16+
+- npm 8+
+- Docker and docker-compose (for PostgreSQL container)
+
+### Installation
+
+1. Clone the repository
+2. Install Python dependencies:
+```bash
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
+
+3. Install UI dependencies:
+```bash
+cd app/ui
+npm install
+```
+
+### Running the Application
+
+Use the provided startup script:
+
+```bash
+./start_test_env.sh
+```
+
+This script will:
+1. Start a PostgreSQL Docker container for data persistence
+2. Start the API server with WebSocket support
+3. Start the UI development server
+
+## Database Configuration
+
+### PostgreSQL (Recommended)
+
+The application uses PostgreSQL for data persistence by default. The database is automatically configured and started as a Docker container when running the application with `start_test_env.sh`.
+
+Configuration is handled through the `config.yaml` file:
+
+```yaml
+database:
+  type: "postgresql"
+  url: "postgresql+asyncpg://postgres:postgres@localhost:5432/profiler"
+  pool_size: 20
+  max_overflow: 10
+```
+
+You can also use the following environment variables to override the database configuration:
+
+- `PROFILER_DATABASE__URL`: Full PostgreSQL connection URL
+- `PROFILER_DATABASE__POOL_SIZE`: Connection pool size
+- `PROFILER_DATABASE__MAX_OVERFLOW`: Maximum overflow connections
+- `PROFILER_PROFILE_SERVICE__REPOSITORY_TYPE`: Set to "postgresql" to use PostgreSQL
+
+### JSON File Storage (Alternative)
+
+For development or testing, you can use JSON file storage instead of PostgreSQL by setting:
+
+```yaml
+profile_service:
+  repository_type: "json_file"
+  storage_dir: "./data/profiles"
+```
+
+### Migrating Data
+
+To migrate profiles from JSON files to PostgreSQL:
+
+```bash
+python -m profiler.scripts.migrate_profiles --source json --destination postgresql
+```
+
+## Development
+
+### Testing
+
+Run the PostgreSQL migration test:
+
+```bash
+./scripts/test_migration.sh
+```
+
+Run the PostgreSQL connection test:
+
+```bash
+python scripts/test_postgres_connection.py
+```
+
+Run the unit tests:
+
+```bash
+pytest tests/
+```
+
+### Docker Integration
+
+The application includes Docker support for the PostgreSQL database. The Docker configuration is defined in `docker-compose.yml`.
+
+To manually start the PostgreSQL container:
+
+```bash
+docker-compose up -d postgres
+```
+
+## Architecture
+
+The application follows a layered architecture:
+
+- **UI Layer**: React/Next.js frontend
+- **API Layer**: FastAPI backend with WebSocket support
+- **Service Layer**: Business logic components
+- **Repository Layer**: Data access layer with PostgreSQL and JSON implementations
+- **Domain Layer**: Core domain models and interfaces
+
+The persistence layer follows the Repository Pattern, providing abstraction over different storage mechanisms.

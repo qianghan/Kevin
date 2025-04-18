@@ -50,6 +50,94 @@ check_process() {
     fi
 }
 
+# Function to check if Docker is installed and running
+check_docker() {
+    if ! command -v docker &> /dev/null; then
+        print_error "Docker is not installed. Please install Docker to use the PostgreSQL container."
+        return 1
+    fi
+    
+    if ! docker info &> /dev/null; then
+        print_error "Docker daemon is not running. Please start Docker to use the PostgreSQL container."
+        return 1
+    fi
+    
+    return 0
+}
+
+# Function to check if docker-compose is installed
+check_docker_compose() {
+    if ! command -v docker-compose &> /dev/null; then
+        print_error "docker-compose is not installed. Please install docker-compose to use the PostgreSQL container."
+        return 1
+    fi
+    
+    return 0
+}
+
+# Function to start the PostgreSQL container
+start_postgres() {
+    print_message "Starting PostgreSQL container..."
+    
+    # Check if Docker and docker-compose are available
+    if ! check_docker || ! check_docker_compose; then
+        print_warning "Skipping PostgreSQL container startup. Using local database settings."
+        return 1
+    fi
+    
+    # Check if the postgres container is already running
+    if docker ps | grep -q "profiler-postgres"; then
+        print_message "PostgreSQL container is already running"
+        DB_PORT=5432
+        return 0
+    fi
+    
+    # Check if port 5432 is available for PostgreSQL
+    if check_port 5432; then
+        print_warning "Port 5432 is in use. Finding an available port..."
+        DB_PORT=$(find_available_port 5432)
+        
+        # Update docker-compose.yml with the new port
+        local temp_file=$(mktemp)
+        sed "s/5432:5432/${DB_PORT}:5432/" docker-compose.yml > "$temp_file"
+        mv "$temp_file" docker-compose.yml
+        print_message "Using port $DB_PORT for PostgreSQL container"
+    else
+        DB_PORT=5432
+    fi
+    
+    # Start the PostgreSQL container
+    if ! docker-compose up -d postgres; then
+        print_error "Failed to start PostgreSQL container"
+        print_warning "Continuing with local database settings"
+        return 1
+    fi
+    
+    # Wait for the PostgreSQL container to be ready (max 30 seconds)
+    print_message "Waiting for PostgreSQL container to be ready..."
+    local attempts=0
+    while [ $attempts -lt 30 ]; do
+        if docker logs profiler-postgres 2>&1 | grep -q "database system is ready to accept connections"; then
+            print_message "PostgreSQL container is ready"
+            sleep 2  # Give it a moment more to fully initialize
+            
+            # Update environment variables for database connection
+            export PROFILER_DATABASE__URL="postgresql+asyncpg://postgres:postgres@localhost:${DB_PORT}/profiler"
+            export PROFILER_PROFILE_SERVICE__REPOSITORY_TYPE="postgresql"
+            
+            print_message "PostgreSQL container started successfully"
+            print_message "Database URL: $PROFILER_DATABASE__URL"
+            return 0
+        fi
+        sleep 1
+        attempts=$((attempts + 1))
+    done
+    
+    print_error "PostgreSQL container took too long to start"
+    print_warning "Continuing with local database settings"
+    return 1
+}
+
 # Function to start a service
 start_service() {
     local service_name=$1
@@ -92,6 +180,24 @@ start_service() {
     return 1
 }
 
+# Function to stop services and containers
+stop_services() {
+    print_message "Stopping services..."
+    
+    # Stop API and UI services
+    pkill -f "uvicorn.*app.backend.api.main:app" || true
+    pkill -f "next.*dev" || true
+    
+    # Stop PostgreSQL container if it was started by this script
+    if [[ "$USE_POSTGRES_CONTAINER" == "true" ]]; then
+        print_message "Stopping PostgreSQL container..."
+        docker-compose down || true
+    fi
+    
+    print_message "All services stopped"
+    exit 0
+}
+
 # Get the script's directory
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$SCRIPT_DIR"
@@ -121,6 +227,12 @@ if [ ! -f "venv/.installed" ]; then
     print_message "Installing dependencies..."
     pip install -r requirements.txt
     touch venv/.installed
+fi
+
+# Start PostgreSQL container if enabled
+USE_POSTGRES_CONTAINER="true"
+if [[ "$USE_POSTGRES_CONTAINER" == "true" ]]; then
+    start_postgres
 fi
 
 # Check if port 8000 is available for API server
@@ -181,11 +293,18 @@ if check_process "uvicorn.*app.backend.api.main:app" && check_process "next.*dev
     print_message "API Server: http://localhost:$API_PORT"
     print_message "UI Server: http://localhost:$UI_PORT"
     print_message "API Documentation: http://localhost:$API_PORT/api/docs"
+    
+    if [[ "$USE_POSTGRES_CONTAINER" == "true" ]] && [[ -n "$DB_PORT" ]]; then
+        print_message "PostgreSQL Database: localhost:$DB_PORT"
+    fi
 else
     print_error "Failed to start one or both services. Check logs for details."
+    stop_services
     exit 1
 fi
 
+# Register trap for clean exit
+trap stop_services INT
+
 # Keep script running and handle Ctrl+C
-trap 'print_message "Stopping services..."; pkill -f "uvicorn.*app.backend.api.main:app"; pkill -f "next.*dev"; exit 0' INT
 while true; do sleep 1; done 

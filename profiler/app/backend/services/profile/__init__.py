@@ -18,6 +18,8 @@ from .repository import JSONFileProfileRepository, DatabaseProfileRepository
 from .validator import BasicProfileValidator
 from .state import DefaultProfileStateCalculator
 from .notifier import WebSocketProfileNotifier, MultiChannelProfileNotifier
+# Import PostgreSQL implementations
+from .database import PostgreSQLProfileRepository, DatabaseManager, Base, ProfileModel, ProfileSectionModel
 
 __all__ = [
     # Main service
@@ -43,5 +45,12 @@ __all__ = [
     'BasicProfileValidator',
     'DefaultProfileStateCalculator',
     'WebSocketProfileNotifier',
-    'MultiChannelProfileNotifier'
+    'MultiChannelProfileNotifier',
+    
+    # Database implementations
+    'PostgreSQLProfileRepository',
+    'DatabaseManager',
+    'Base',
+    'ProfileModel',
+    'ProfileSectionModel'
 ] 
