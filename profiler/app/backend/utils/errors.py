@@ -101,4 +101,28 @@ class APIClientError(ProfilerError):
 class DatabaseError(ProfilerError):
     """Error raised when database operations fail."""
     code = "database_error"
-    status_code = status.HTTP_500_INTERNAL_SERVER_ERROR 
+    status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+
+class MigrationError(DatabaseError):
+    """Exception raised for database migration errors."""
+    pass
+
+class ApplicationError(Exception):
+    """Base class for all application exceptions."""
+    pass
+
+class ConfigError(ApplicationError):
+    """Exception raised for configuration errors."""
+    pass
+
+class ResourceExistsError(ApplicationError):
+    """Exception raised when attempting to create a resource that already exists."""
+    pass
+
+class NetworkError(ApplicationError):
+    """Exception raised for network-related errors."""
+    pass
+
+class TimeoutError(NetworkError):
+    """Exception raised for timeout errors."""
+    pass 
