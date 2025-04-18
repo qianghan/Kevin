@@ -16,4 +16,9 @@ module.exports = {
             tsconfig: 'tsconfig.json',
         },
     },
+    modulePaths: [
+        '<rootDir>/node_modules',
+        '<rootDir>/../../../app/ui/node_modules'
+    ],
+    moduleDirectories: ['node_modules', '../../../app/ui/node_modules']
 }; 
