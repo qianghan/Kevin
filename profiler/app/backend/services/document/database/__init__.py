@@ -1,18 +1,19 @@
 """
-Document Service Database Package.
+Document Service Database Module.
 
-This package provides database implementation for the document service.
+This module provides database models and utilities for the document service.
 """
 
-from .connection import DatabaseManager
-from .models import DocumentModel, DocumentChunkModel, DocumentVersionModel, Base
-from .repository import PostgreSQLDocumentRepository
+from .models import (
+    DocumentModel as Document,
+    DocumentChunkModel as DocumentChunk,
+    DocumentVersionModel as DocumentVersion,
+    DocumentShareModel as DocumentShare
+)
 
 __all__ = [
-    'DatabaseManager',
-    'PostgreSQLDocumentRepository',
-    'DocumentModel',
-    'DocumentChunkModel',
-    'DocumentVersionModel',
-    'Base',
+    "Document",
+    "DocumentChunk",
+    "DocumentVersion",
+    "DocumentShare"
 ] 

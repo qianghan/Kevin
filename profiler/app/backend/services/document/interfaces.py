@@ -6,7 +6,7 @@ following the SOLID principles, particularly Interface Segregation Principle.
 """
 
 from abc import ABC, abstractmethod
-from typing import Dict, List, Any, Optional, Protocol, BinaryIO
+from typing import Dict, List, Any, Optional, Protocol, BinaryIO, Union
 
 from .models import Document, DocumentChunk, DocumentVersion
 
@@ -209,5 +209,72 @@ class DocumentRepositoryInterface(ABC):
         Raises:
             ResourceNotFoundError: If the document or version does not exist
             StorageError: If the document version content cannot be retrieved
+        """
+        pass
+
+class DocumentExportServiceInterface(ABC):
+    """Interface for document export and sharing services."""
+    
+    @abstractmethod
+    async def export_document(
+        self, 
+        document_id: str, 
+        format_type: str,
+        user_id: Optional[str] = None
+    ) -> BinaryIO:
+        """
+        Export a document in the specified format.
+        
+        Args:
+            document_id: ID of the document to export
+            format_type: Format to export to (pdf, docx, html, txt, json)
+            user_id: Optional user ID for access control
+            
+        Returns:
+            File-like object containing the exported document
+        """
+        pass
+    
+    @abstractmethod
+    async def share_document(
+        self,
+        document_id: str,
+        share_method: str,
+        user_id: str,
+        recipients: Optional[List[str]] = None,
+        expiry_hours: Optional[int] = None
+    ) -> str:
+        """
+        Share a document using the specified method.
+        
+        Args:
+            document_id: ID of the document to share
+            share_method: Method to share (email, link)
+            user_id: ID of the user sharing the document
+            recipients: Optional list of email recipients
+            expiry_hours: Optional hours until link expires
+            
+        Returns:
+            Share URL or confirmation message
+        """
+        pass
+    
+    @abstractmethod
+    async def generate_embed_code(
+        self,
+        document_id: str,
+        user_id: str,
+        settings: Dict[str, Any]
+    ) -> str:
+        """
+        Generate HTML embed code for a document.
+        
+        Args:
+            document_id: ID of the document to embed
+            user_id: ID of the user embedding the document
+            settings: Embedding settings (width, height, etc.)
+            
+        Returns:
+            HTML embed code
         """
         pass 

@@ -14,6 +14,10 @@ from app.backend.utils.config_manager import (
     get_websocket_config,
 )
 
+from .pdf_generator import generate_pdf, generate_pdf_from_markdown
+from .docx_generator import generate_docx
+from .html_generator import generate_html
+
 __all__ = [
     'ConfigManager',
     'ConfigurationError',
@@ -26,4 +30,8 @@ __all__ = [
     'get_logging_config',
     'get_security_config',
     'get_websocket_config',
+    'generate_pdf',
+    'generate_pdf_from_markdown',
+    'generate_docx',
+    'generate_html',
 ] 

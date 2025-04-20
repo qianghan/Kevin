@@ -125,4 +125,33 @@ class NetworkError(ApplicationError):
 
 class TimeoutError(NetworkError):
     """Exception raised for timeout errors."""
-    pass 
+    pass
+
+class SecurityError(BaseError):
+    """Exception raised for security-related errors.
+    
+    This includes:
+    - Access control violations
+    - Authentication failures
+    - Invalid security tokens
+    - Failed security scans
+    - Encryption/decryption errors
+    """
+    def __init__(self, message: str, details: Optional[Dict[str, Any]] = None):
+        super().__init__(message)
+        self.details = details or {}
+        self.error_type = "SECURITY_ERROR"
+
+class IntegrationError(BaseError):
+    """Exception raised for integration-related errors.
+    
+    This includes:
+    - External service integration failures
+    - API integration errors
+    - Data synchronization issues
+    - Connection failures
+    """
+    def __init__(self, message: str, details: Optional[Dict[str, Any]] = None):
+        super().__init__(message)
+        self.details = details or {}
+        self.error_type = "INTEGRATION_ERROR" 
