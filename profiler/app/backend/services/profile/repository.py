@@ -290,4 +290,36 @@ class DatabaseProfileRepository(ProfileRepositoryInterface):
         Raises:
             StorageError: If the profiles cannot be listed
         """
-        return await self._postgres_repo.list_profiles(user_id) 
+        return await self._postgres_repo.list_profiles(user_id)
+
+class ProfileRepository:
+    """Factory class for creating a profile repository instance based on configuration."""
+    
+    @staticmethod
+    async def create(repository_type: str, config: Optional[Dict[str, Any]] = None) -> ProfileRepositoryInterface:
+        """
+        Create a repository instance based on the specified type.
+        
+        Args:
+            repository_type: Type of repository ('json_file' or 'postgresql')
+            config: Optional configuration dictionary
+            
+        Returns:
+            An initialized ProfileRepositoryInterface implementation
+            
+        Raises:
+            ValueError: If an unsupported repository type is specified
+        """
+        if repository_type == "json_file":
+            storage_dir = config.get("storage_dir", "./data/profiles") if config else "./data/profiles"
+            repository = JSONFileProfileRepository(storage_dir)
+        elif repository_type == "postgresql":
+            repository = DatabaseProfileRepository(config)
+        else:
+            raise ValueError(f"Unsupported repository type: {repository_type}")
+        
+        # Initialize the repository
+        await repository.initialize()
+        logger.info(f"Created {repository_type} profile repository")
+        
+        return repository 

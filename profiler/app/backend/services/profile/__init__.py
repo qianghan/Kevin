@@ -14,7 +14,7 @@ from .interfaces import (
     ProfileNotifierInterface,
     ProfileFactoryInterface
 )
-from .repository import JSONFileProfileRepository, DatabaseProfileRepository
+from .repository import JSONFileProfileRepository, DatabaseProfileRepository, ProfileRepository
 from .validator import BasicProfileValidator
 from .state import DefaultProfileStateCalculator
 from .notifier import WebSocketProfileNotifier, MultiChannelProfileNotifier
@@ -42,6 +42,7 @@ __all__ = [
     # Implementations
     'JSONFileProfileRepository',
     'DatabaseProfileRepository',
+    'ProfileRepository',
     'BasicProfileValidator',
     'DefaultProfileStateCalculator',
     'WebSocketProfileNotifier',

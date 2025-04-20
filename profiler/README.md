@@ -278,6 +278,75 @@ The Kevin University API integration is designed with robust error handling to e
 
 This error handling strategy ensures that the Kevin University API integration enhances the recommendation system when available but never compromises the core functionality when unavailable.
 
+## Profile Export System
+
+The Profile Export feature allows users to export their profiles in various formats for different purposes.
+
+### Architecture
+
+The Profile Export system follows SOLID principles with a clean interface-based design:
+
+```
+┌─────────────────────────────┐     ┌─────────────────────────────┐
+│                             │     │                             │
+│     Profile Service         │     │      Template System        │
+│                             │     │                             │
+└──────────────┬──────────────┘     └──────────────┬──────────────┘
+               │                                    │
+               │                                    │
+               ▼                                    ▼
+┌─────────────────────────────┐     ┌─────────────────────────────┐
+│                             │     │                             │
+│  ProfileExportInterface     │     │     Template Repository     │
+│                             │     │                             │
+└──────────────┬──────────────┘     └──────────────┬──────────────┘
+               │                                    │
+               │                                    │
+               ▼                                    ▼
+┌─────────────────────────────┐     ┌─────────────────────────────┐
+│                             │     │                             │
+│   ProfileExportService      │◄────┤     Template Renderer       │
+│                             │     │                             │
+└──────────────┬──────────────┘     └──────────────┬──────────────┘
+               │                                    │
+               │                                    │
+               ▼                                    ▼
+┌─────────────────────────────┐     ┌─────────────────────────────┐
+│                             │     │                             │
+│     Export Formatters       │     │      Export Storage         │
+│ (PDF, DOCX, HTML, JSON...)  │     │                             │
+│                             │     │                             │
+└─────────────────────────────┘     └─────────────────────────────┘
+```
+
+### Key Features
+
+- **Multiple Export Formats**: PDF, DOCX, HTML, JSON, YAML, CSV, and Markdown
+- **Template Customization**: Default and custom templates for different purposes
+- **Batch Export**: Export profiles in multiple formats at once
+- **Profile Sharing**: Share exported profiles via email or links
+- **Preview Generation**: Preview exports before downloading
+
+### API Endpoints
+
+- `POST /api/profiler/profile/export`: Export profile in a specific format
+- `POST /api/profiler/profile/export-archive`: Export profile in multiple formats
+- `GET /api/profiler/profile/export/templates`: Get available templates
+- `GET /api/profiler/profile/export/templates/{id}/preview`: Preview a template
+- `POST /api/profiler/profile/export/templates`: Create a custom template
+
+### Implementation Details
+
+The Profile Export service is implemented using:
+
+- `jinja2` for template rendering
+- `pdfkit` and `weasyprint` for PDF generation
+- `python-docx` for DOCX files
+- `markdown` for text formatting
+- `zipfile` for archive creation
+
+For complete details, see the [Profile Export User Guide](docs/profile_export_guide.md) and [API Documentation](docs/api/profile_export_api.md).
+
 ## Getting Started
 
 ### Prerequisites

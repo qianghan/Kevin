@@ -6,7 +6,7 @@ following the SOLID principles, particularly Interface Segregation Principle.
 """
 
 from abc import ABC, abstractmethod
-from typing import Dict, List, Any, Optional, Protocol
+from typing import Dict, List, Any, Optional, Protocol, Tuple, BinaryIO
 
 from .models import Profile, ProfileState, ProfileSectionData
 
@@ -213,5 +213,91 @@ class ProfileFactoryInterface(Protocol):
         
         Returns:
             Profile notifier instance
+        """
+        pass
+
+
+class ProfileExportInterface(ABC):
+    """Interface for profile export services."""
+    
+    @abstractmethod
+    async def initialize(self) -> None:
+        """Initialize the service."""
+        pass
+    
+    @abstractmethod
+    async def shutdown(self) -> None:
+        """Shutdown the service and release resources."""
+        pass
+    
+    @abstractmethod
+    async def export_profile(
+        self,
+        profile_id: str,
+        format_type: str,
+        template_id: Optional[str] = None,
+        user_id: Optional[str] = None
+    ) -> Tuple[BinaryIO, str, str]:
+        """
+        Export a profile in the specified format.
+        
+        Args:
+            profile_id: ID of the profile to export
+            format_type: Format to export to (pdf, docx, html, txt, json)
+            template_id: Optional ID of the template to use
+            user_id: Optional user ID for access control
+            
+        Returns:
+            Tuple containing:
+            - File-like object with the exported profile
+            - Filename for the exported profile
+            - MIME type of the exported profile
+            
+        Raises:
+            ProfileExportError: If export fails for any reason
+        """
+        pass
+    
+    @abstractmethod
+    async def share_profile(
+        self,
+        profile_id: str,
+        share_method: str,
+        user_id: str,
+        recipients: Optional[List[str]] = None,
+        expiry_hours: Optional[int] = None
+    ) -> str:
+        """
+        Share a profile using the specified method.
+        
+        Args:
+            profile_id: ID of the profile to share
+            share_method: Method to share (email, link)
+            user_id: ID of the user sharing the profile
+            recipients: Optional list of email recipients
+            expiry_hours: Optional hours until link expires
+            
+        Returns:
+            Share URL or confirmation message
+        """
+        pass
+    
+    @abstractmethod
+    async def generate_embed_code(
+        self,
+        profile_id: str,
+        user_id: str,
+        settings: Dict[str, Any]
+    ) -> str:
+        """
+        Generate HTML embed code for a profile.
+        
+        Args:
+            profile_id: ID of the profile to embed
+            user_id: ID of the user embedding the profile
+            settings: Embedding settings (width, height, etc.)
+            
+        Returns:
+            HTML embed code
         """
         pass 
