@@ -347,6 +347,43 @@ The Profile Export service is implemented using:
 
 For complete details, see the [Profile Export User Guide](docs/profile_export_guide.md) and [API Documentation](docs/api/profile_export_api.md).
 
+## Recommendation Engine Architecture
+
+The Recommendation Engine is a core component of the Profiler system, designed to provide personalized, actionable recommendations to users based on their profile data, document content, and Q&A interactions.
+
+### Core Components
+
+1. **IRecommendationService**: The primary interface that defines the contract for recommendation operations.
+2. **RecommendationService**: Implementation of the recommendation service that coordinates between data sources and recommendation generation.
+3. **RecommendationCategory**: Enum defining different types of recommendations (SKILL, EXPERIENCE, EDUCATION, etc.).
+4. **Recommendation**: Data model representing individual recommendations with properties like priority, steps, and progress tracking.
+
+### Integration Points
+
+- **Profile Service**: Sources user profile data to contextualize recommendations
+- **Document Service**: Uses document content to generate document-based recommendations
+- **Q&A Service**: Triggers recommendations based on user responses to questions
+- **Notification Service**: Delivers recommendation notifications to users
+
+### Recommendation Generation Flow
+
+1. Data collection from integrated services
+2. Analysis of user context and history
+3. Application of personalization algorithms
+4. Prioritization of potential recommendations
+5. Generation of detailed action steps
+6. Delivery to user with notification
+
+### Key Features
+
+- Personalized recommendation paths
+- Detailed action steps for each recommendation
+- Progress tracking for ongoing recommendations
+- Recommendation history and analytics
+- Peer comparison insights
+
+For detailed implementation information and test results, see [Understanding the Recommendation Engine](profiler/docs/understand_recommendation_engine.md).
+
 ## Getting Started
 
 ### Prerequisites
