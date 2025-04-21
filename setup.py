@@ -12,6 +12,7 @@ setup(
         "pytest",
         "pytest-asyncio",
         "pytest-bdd",
+        "pytest-mock",
         "aiohttp",
         "python-multipart",
         "python-jose[cryptography]",
@@ -22,7 +23,10 @@ setup(
         "pytesseract",
         "pdf2image",
         "markdown",
-        "fpdf"
+        "fpdf",
+        "playwright",
+        "pytest-playwright",
+        "numpy",
     ],
     python_requires=">=3.8",
 ) 
