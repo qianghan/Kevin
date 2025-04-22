@@ -1,4 +1,5 @@
 import { UserDocument, UserPreferences } from '../models/user_model';
+import { RelationshipType, InvitationStatus } from '../models/invitation_model';
 
 /**
  * User profile data transfer object
@@ -9,12 +10,27 @@ export interface UserProfileDTO {
   email?: string;
   image?: string;
   role?: string;
+  testMode?: boolean;
   studentIds?: string[];
   parentIds?: string[];
   partnerIds?: string[];
   preferences?: UserPreferences;
   createdAt?: Date;
   updatedAt?: Date;
+}
+
+/**
+ * User session interface
+ */
+export interface UserSession {
+  id: string;
+  userId: string;
+  token: string;
+  device?: string;
+  ipAddress?: string;
+  lastActive: Date;
+  expiresAt: Date;
+  isValid: boolean;
 }
 
 /**
@@ -25,7 +41,7 @@ export interface IAuthenticationService {
   /**
    * Authenticate a user with email and password
    */
-  authenticate(email: string, password: string): Promise<UserProfileDTO | null>;
+  authenticate(email: string, password: string, metadata?: { device?: string, ipAddress?: string }): Promise<{ user: UserProfileDTO, token: string }>;
   
   /**
    * Register a new user
@@ -51,6 +67,31 @@ export interface IAuthenticationService {
    * Change a user's password (requires current password)
    */
   changePassword(userId: string, currentPassword: string, newPassword: string): Promise<boolean>;
+
+  /**
+   * Create a new session for a user
+   */
+  createSession(userId: string, metadata?: { device?: string, ipAddress?: string }): Promise<UserSession>;
+
+  /**
+   * Get all active sessions for a user
+   */
+  getUserSessions(userId: string): Promise<UserSession[]>;
+
+  /**
+   * Invalidate a specific session (logout)
+   */
+  invalidateSession(sessionId: string): Promise<boolean>;
+
+  /**
+   * Invalidate all sessions for a user (force logout from all devices)
+   */
+  invalidateAllSessions(userId: string): Promise<boolean>;
+
+  /**
+   * Validate a token against active sessions
+   */
+  validateToken(token: string): Promise<{ isValid: boolean, userId?: string }>;
 }
 
 /**
@@ -116,10 +157,46 @@ export interface IUserRelationshipService {
 }
 
 /**
+ * Admin service interface
+ * Handles administrative operations
+ */
+export interface IAdminService {
+  /**
+   * Get all users with optional filtering
+   */
+  getAllUsers(filter?: Partial<UserProfileDTO>): Promise<UserProfileDTO[]>;
+  
+  /**
+   * Toggle test mode for a user
+   */
+  setTestMode(userId: string, enabled: boolean): Promise<UserProfileDTO>;
+  
+  /**
+   * Get all users in test mode
+   */
+  getTestModeUsers(): Promise<UserProfileDTO[]>;
+  
+  /**
+   * Force logout a user
+   */
+  forceLogout(userId: string): Promise<boolean>;
+  
+  /**
+   * Disable a user account
+   */
+  disableAccount(userId: string): Promise<boolean>;
+  
+  /**
+   * Enable a user account
+   */
+  enableAccount(userId: string): Promise<boolean>;
+}
+
+/**
  * Comprehensive user service interface
  * Combines all user-related service interfaces
  */
-export interface IUserService extends IAuthenticationService, IUserProfileService, IUserRelationshipService {
+export interface IUserService extends IAuthenticationService, IUserProfileService, IUserRelationshipService, IAdminService {
   // This interface combines all the functionality from the specialized interfaces
 }
 
@@ -149,6 +226,11 @@ export interface IUserRepository {
   update(id: string, userData: Partial<UserDocument>): Promise<UserDocument | null>;
   
   /**
+   * Update a user by ID (alias for update)
+   */
+  updateById(id: string, userData: Partial<UserDocument>): Promise<UserDocument | null>;
+  
+  /**
    * Delete a user
    */
   delete(id: string): Promise<boolean>;
@@ -162,4 +244,244 @@ export interface IUserRepository {
    * Search users by query
    */
   search(query: string, excludeId?: string, limit?: number): Promise<UserDocument[]>;
+  
+  /**
+   * Find all users
+   */
+  findAll(filter?: Partial<UserDocument>): Promise<UserDocument[]>;
+  
+  /**
+   * Get the user model
+   */
+  getUserModel(): any;
+}
+
+/**
+ * Session repository interface
+ */
+export interface ISessionRepository {
+  /**
+   * Create a new session
+   */
+  createSession(sessionData: Partial<UserSession>): Promise<any>;
+  
+  /**
+   * Find a session by token
+   */
+  findSessionByToken(token: string): Promise<any>;
+  
+  /**
+   * Find all sessions for a user
+   */
+  findSessionsByUser(userId: string): Promise<any[]>;
+  
+  /**
+   * Invalidate a session by ID
+   */
+  invalidateSession(sessionId: string): Promise<boolean>;
+  
+  /**
+   * Invalidate all sessions for a user
+   */
+  invalidateAllUserSessions(userId: string): Promise<boolean>;
+  
+  /**
+   * Update a session
+   */
+  updateSession(sessionId: string, data: Partial<UserSession>): Promise<any>;
+  
+  /**
+   * Map a session document to DTO
+   */
+  mapSessionToDTO(session: any): UserSession;
+}
+
+/**
+ * Interface for invitation service
+ */
+export interface IInvitationService {
+  /**
+   * Create a new invitation
+   * @param inviterId ID of the user sending the invitation
+   * @param email Email of the recipient
+   * @param relationship Type of relationship being established
+   * @param message Optional message to include in the invitation
+   * @param expiresIn Optional expiration time in hours (default 72)
+   */
+  createInvitation(
+    inviterId: string,
+    email: string,
+    relationship: RelationshipType,
+    message?: string,
+    expiresIn?: number
+  ): Promise<{ id: string; token: string }>;
+
+  /**
+   * Get invitation by token
+   * @param token Unique invitation token
+   */
+  getInvitationByToken(token: string): Promise<InvitationDTO | null>;
+
+  /**
+   * Get all invitations sent by a user
+   * @param userId ID of the inviter
+   */
+  getInvitationsByInviter(userId: string): Promise<InvitationDTO[]>;
+
+  /**
+   * Get all invitations received by an email
+   * @param email Email of the recipient
+   */
+  getInvitationsByEmail(email: string): Promise<InvitationDTO[]>;
+
+  /**
+   * Get all pending invitations for an email
+   * @param email Email of the recipient
+   */
+  getPendingInvitationsByEmail(email: string): Promise<InvitationDTO[]>;
+
+  /**
+   * Accept an invitation
+   * @param token Invitation token
+   * @param userId ID of the user accepting the invitation
+   */
+  acceptInvitation(token: string, userId: string): Promise<InvitationDTO>;
+
+  /**
+   * Reject an invitation
+   * @param token Invitation token
+   */
+  rejectInvitation(token: string): Promise<InvitationDTO>;
+
+  /**
+   * Cancel an invitation (by the original sender)
+   * @param invitationId ID of the invitation
+   * @param inviterId ID of the user who sent the invitation
+   */
+  cancelInvitation(invitationId: string, inviterId: string): Promise<boolean>;
+
+  /**
+   * Expire all pending invitations that have passed their expiration date
+   */
+  expireInvitations(): Promise<number>;
+}
+
+/**
+ * Data Transfer Object for Invitation
+ */
+export interface InvitationDTO {
+  id: string;
+  email: string;
+  inviterId: string;
+  inviterName: string;
+  inviterEmail: string;
+  inviterRole: string;
+  relationship: RelationshipType;
+  status: InvitationStatus;
+  message?: string;
+  expiresAt: Date;
+  createdAt: Date;
+  updatedAt: Date;
+  acceptedById?: string;
+  acceptedAt?: Date;
+  rejectedAt?: Date;
+}
+
+/**
+ * Audit log event types for sensitive operations
+ */
+export enum AuditEventType {
+  USER_LOGIN = 'user_login',
+  USER_LOGIN_FAILED = 'user_login_failed',
+  USER_LOGOUT = 'user_logout',
+  USER_CREATED = 'user_created',
+  USER_UPDATED = 'user_updated',
+  USER_DELETED = 'user_deleted',
+  PASSWORD_RESET_REQUESTED = 'password_reset_requested',
+  PASSWORD_RESET = 'password_reset',
+  PASSWORD_CHANGED = 'password_changed',
+  EMAIL_VERIFICATION = 'email_verification',
+  EMAIL_CHANGED = 'email_changed',
+  ACCOUNT_LOCKED = 'account_locked',
+  ACCOUNT_UNLOCKED = 'account_unlocked',
+  RELATIONSHIP_ADDED = 'relationship_added',
+  RELATIONSHIP_REMOVED = 'relationship_removed',
+  INVITATION_CREATED = 'invitation_created',
+  INVITATION_ACCEPTED = 'invitation_accepted',
+  INVITATION_REJECTED = 'invitation_rejected',
+  INVITATION_CANCELLED = 'invitation_cancelled',
+  ADMIN_ACTION = 'admin_action'
+}
+
+/**
+ * Audit log entry data transfer object
+ */
+export interface AuditLogEntryDTO {
+  id: string;
+  timestamp: Date;
+  userId?: string;
+  targetUserId?: string;
+  eventType: AuditEventType;
+  ipAddress?: string;
+  userAgent?: string;
+  details?: Record<string, any>;
+  success: boolean;
+}
+
+/**
+ * Audit log service interface
+ * Handles logging of security-relevant events for audit purposes
+ */
+export interface IAuditLogService {
+  /**
+   * Log an audit event
+   * @param eventType Type of event being logged
+   * @param userId ID of the user performing the action (if available)
+   * @param success Whether the operation was successful
+   * @param metadata Additional metadata about the event
+   */
+  logEvent(
+    eventType: AuditEventType,
+    userId?: string,
+    success?: boolean,
+    metadata?: {
+      targetUserId?: string;
+      ipAddress?: string;
+      userAgent?: string;
+      details?: Record<string, any>;
+    }
+  ): Promise<void>;
+
+  /**
+   * Get audit log entries for a specific user
+   * @param userId ID of the user
+   * @param limit Maximum number of entries to return
+   * @param offset Number of entries to skip
+   */
+  getUserAuditLog(userId: string, limit?: number, offset?: number): Promise<AuditLogEntryDTO[]>;
+
+  /**
+   * Get all audit log entries
+   * @param filter Optional filter criteria
+   * @param limit Maximum number of entries to return
+   * @param offset Number of entries to skip
+   */
+  getAuditLog(
+    filter?: {
+      eventTypes?: AuditEventType[];
+      startDate?: Date;
+      endDate?: Date;
+      userId?: string;
+      success?: boolean;
+    },
+    limit?: number,
+    offset?: number
+  ): Promise<AuditLogEntryDTO[]>;
+
+  /**
+   * Get security events for a specific IP address
+   * @param ipAddress IP address to check
+   * @param limit Maximum number of entries to return
+   */
+  getIPSecurityEvents(ipAddress: string, limit?: number): Promise<AuditLogEntryDTO[]>;
 } 

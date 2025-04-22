@@ -224,5 +224,58 @@ export const createUserRouter = (userService: IUserService) => {
     }
   });
   
+  /**
+   * Admin routes for user management
+   */
+
+  // Add admin role check middleware
+  const checkAdminRole = (req: any, res: any, next: any) => {
+    if (req.user && req.user.role === 'admin') {
+      next();
+    } else {
+      res.status(403).json({ error: 'Access denied. Admin role required.' });
+    }
+  };
+
+  // Get all users (admin only)
+  router.get('/admin/users', isAuthenticated, checkAdminRole, async (req: any, res: any) => {
+    try {
+      const users = await userService.getAllUsers();
+      res.json({ data: users });
+    } catch (error) {
+      console.error('Error getting all users:', error);
+      res.status(500).json({ error: 'Failed to get users' });
+    }
+  });
+
+  // Get users with test mode enabled (admin only)
+  router.get('/admin/users/test-mode', isAuthenticated, checkAdminRole, async (req: any, res: any) => {
+    try {
+      const users = await userService.getTestModeUsers();
+      res.json({ data: users });
+    } catch (error) {
+      console.error('Error getting test mode users:', error);
+      res.status(500).json({ error: 'Failed to get test mode users' });
+    }
+  });
+
+  // Enable test mode for a user (admin only)
+  router.post('/admin/users/:userId/test-mode', isAuthenticated, checkAdminRole, async (req: any, res: any) => {
+    try {
+      const { userId } = req.params;
+      const { enabled } = req.body;
+      
+      if (typeof enabled !== 'boolean') {
+        return res.status(400).json({ error: 'Enabled status must be a boolean' });
+      }
+      
+      const user = await userService.setTestMode(userId, enabled);
+      res.json({ data: user });
+    } catch (error) {
+      console.error('Error setting test mode:', error);
+      res.status(500).json({ error: 'Failed to set test mode' });
+    }
+  });
+  
   return router;
 }; 

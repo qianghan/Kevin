@@ -18,6 +18,7 @@ export { MongoUserRepository } from './services/user_repository';
 // Export routers
 export { createUserRouter } from './api/user_router';
 export { createAuthRouter } from './api/auth_router';
+export { default as serviceRouter } from './routes/service_routes';
 
 // Factory function to create a complete user management system
 import { UserService } from './services/user_service';

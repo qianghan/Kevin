@@ -1,0 +1,81 @@
+he User Management Service will support authentication, role-based authorization, account relationships (e.g., student-parent), service entitlements, and administrative controls for a university application platform featuring chat, profiler, and essay-writing tools.
+
+Roles supported:
+
+- **Student**
+- **Parent**
+- **Admin**
+- **Support**
+
+The system uses **JWT** for session-based authentication and will support **service registration** and **role-based access control (RBAC)** for current and future services.
+
+---
+
+## **✅ MVP User Stories (Minimal Viable Product)**
+
+### **🧍 User Registration & Authentication**
+
+- As a **student**, I want to register an account using my email and password.
+- As a **parent**, I want to register an account using my email and password.
+- As a **user**, I want to log in with my credentials and receive a JWT for authentication.
+- As a **user**, I want to log out and invalidate my session.
+
+### **👨‍👩‍👧 Account Relationship (Student-Parent)**
+
+- As a **student**, I want to invite one or more parents via email to link to my account.
+- As a **parent**, I want to accept or reject a student’s invitation.
+- As a **parent**, I want to invite one or more children (students) to link with me.
+- As a **student**, I want to accept or reject a parent’s request.
+
+### **🔐 Role-Based Access**
+
+- As an **admin**, I want to view a list of all users and their roles.
+- As an **admin**, I want to view the services granted to each user.
+- As a **support** user, I want read-only access to user lists and their activity summaries.
+
+---
+
+## **🧱 Core User Stories**
+
+### **🛂 JWT-based Access Control**
+
+- As a **logged-in user**, I want to use my JWT token to access protected resources (e.g., chat, profiler).
+- As a **service**, I want to verify the JWT token to determine access rights.
+
+### **🧩 Service Management**
+
+- As an **admin**, I want to register new services into the platform (e.g., EssayPro).
+- As an **admin**, I want to assign or revoke access to services per user.
+- As an **admin**, I want to define which roles can access each service.
+
+### **🧾 Activity & Issue Overview**
+
+- As an **admin**, I want to view a dashboard of users’ recent activity (e.g., last login, essay drafts).
+- As an **admin**, I want to flag users experiencing system issues (e.g., failed logins, blocked actions).
+
+---
+
+## **🚀 Advanced / Enhancements**
+
+### **🌐 OAuth / SSO Support**
+
+- As a **user**, I want to log in via Google or Apple (OAuth) instead of email/password.
+
+### **📊 Analytics & Insights**
+
+- As an **admin**, I want aggregated statistics on service usage by role, time period, or geography.
+- As an **admin**, I want to export user and usage reports as CSV.
+
+### **🛡️ Security and Controls**
+
+- As an **admin**, I want to force logout or disable any user account.
+- As a **user**, I want to receive an email notification if my account is accessed from a new device.
+
+### **🔄 Account Switching / Delegation**
+
+- As a **parent**, I want to switch between my linked student accounts.
+- As a **support** role, I want to impersonate a user (read-only) for troubleshooting purposes.
+
+### **🧪 Testing & Sandboxing**
+
+- As an **admin**, I want to assign “test” mode to users to access beta services without affecting production data.

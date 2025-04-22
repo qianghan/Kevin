@@ -1,0 +1,1257 @@
+openapi: 3.0.3
+info:
+  title: User Management System API
+  description: API documentation for the User Management System
+  version: 1.0.0
+  contact:
+    name: Kevin Platform Team
+servers:
+  - url: /api/userman
+    description: User Management API Base URL
+
+tags:
+  - name: Authentication
+    description: User authentication operations
+  - name: User Management
+    description: User profile and account management
+  - name: Admin
+    description: Administrative operations
+  - name: Service
+    description: Service registration and entitlements
+  - name: Relationships
+    description: User relationship management
+
+paths:
+  /auth/register:
+    post:
+      tags:
+        - Authentication
+      summary: Register a new user
+      description: Creates a new user account with email and password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+                - name
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  minLength: 8
+                name:
+                  type: string
+                role:
+                  type: string
+                  enum: [student, parent, admin, support]
+      responses:
+        '201':
+          description: User created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+        '400':
+          description: Invalid input
+        '409':
+          description: User already exists
+
+  /auth/login:
+    post:
+      tags:
+        - Authentication
+      summary: User login
+      description: Authenticates a user and returns a JWT token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Successful login
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                  user:
+                    $ref: '#/components/schemas/UserProfile'
+        '401':
+          description: Invalid credentials
+        '403':
+          description: Account locked or email not verified
+
+  /auth/logout:
+    post:
+      tags:
+        - Authentication
+      summary: User logout
+      description: Invalidates the current user session
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Successfully logged out
+        '401':
+          description: Unauthorized
+
+  /auth/verify-email/{token}:
+    get:
+      tags:
+        - Authentication
+      summary: Verify email address
+      description: Verifies a user's email address using the provided token
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Email verified successfully
+        '400':
+          description: Invalid or expired token
+
+  /auth/reset-password:
+    post:
+      tags:
+        - Authentication
+      summary: Request password reset
+      description: Sends a password reset link to the user's email
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        '200':
+          description: Password reset email sent
+        '404':
+          description: User not found
+
+  /auth/reset-password/{token}:
+    post:
+      tags:
+        - Authentication
+      summary: Reset password with token
+      description: Resets the user's password using the provided token
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - newPassword
+              properties:
+                newPassword:
+                  type: string
+                  minLength: 8
+      responses:
+        '200':
+          description: Password reset successfully
+        '400':
+          description: Invalid or expired token
+
+  /users/profile:
+    get:
+      tags:
+        - User Management
+      summary: Get current user profile
+      description: Retrieves the profile of the currently authenticated user
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: User profile retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+        '401':
+          description: Unauthorized
+
+    put:
+      tags:
+        - User Management
+      summary: Update user profile
+      description: Updates the profile of the currently authenticated user
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserProfileUpdate'
+      responses:
+        '200':
+          description: User profile updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+        '400':
+          description: Invalid input
+        '401':
+          description: Unauthorized
+
+  /users/change-password:
+    post:
+      tags:
+        - User Management
+      summary: Change user password
+      description: Changes the password of the currently authenticated user
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - currentPassword
+                - newPassword
+              properties:
+                currentPassword:
+                  type: string
+                newPassword:
+                  type: string
+                  minLength: 8
+      responses:
+        '200':
+          description: Password changed successfully
+        '400':
+          description: Invalid input
+        '401':
+          description: Unauthorized or incorrect current password
+
+  /users/change-email:
+    post:
+      tags:
+        - User Management
+      summary: Change user email
+      description: Initiates the process to change the email of the currently authenticated user
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - newEmail
+                - password
+              properties:
+                newEmail:
+                  type: string
+                  format: email
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Email change initiated, verification email sent
+        '400':
+          description: Invalid input
+        '401':
+          description: Unauthorized or incorrect password
+        '409':
+          description: Email already in use
+
+  /users/preferences:
+    get:
+      tags:
+        - User Management
+      summary: Get user preferences
+      description: Retrieves the preferences of the currently authenticated user
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: User preferences retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserPreferences'
+        '401':
+          description: Unauthorized
+
+    put:
+      tags:
+        - User Management
+      summary: Update user preferences
+      description: Updates the preferences of the currently authenticated user
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserPreferences'
+      responses:
+        '200':
+          description: User preferences updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserPreferences'
+        '400':
+          description: Invalid input
+        '401':
+          description: Unauthorized
+
+  /users/search:
+    get:
+      tags:
+        - User Management
+      summary: Search for users
+      description: Searches for users by name or email
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: query
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 10
+      responses:
+        '200':
+          description: Users found
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UserProfile'
+        '401':
+          description: Unauthorized
+
+  /users/relationships:
+    get:
+      tags:
+        - Relationships
+      summary: Get user relationships
+      description: Retrieves all relationships of the currently authenticated user
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Relationships retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UserRelationship'
+        '401':
+          description: Unauthorized
+
+  /users/relationships/{relationshipType}:
+    get:
+      tags:
+        - Relationships
+      summary: Get relationships by type
+      description: Retrieves relationships of the specified type for the currently authenticated user
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: relationshipType
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [parent, student, coparent]
+      responses:
+        '200':
+          description: Relationships retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UserRelationship'
+        '401':
+          description: Unauthorized
+
+  /users/invitations:
+    get:
+      tags:
+        - Relationships
+      summary: Get user invitations
+      description: Retrieves all invitations sent to or by the currently authenticated user
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Invitations retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Invitation'
+        '401':
+          description: Unauthorized
+
+    post:
+      tags:
+        - Relationships
+      summary: Create invitation
+      description: Creates a new invitation to establish a relationship
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - relationship
+              properties:
+                email:
+                  type: string
+                  format: email
+                relationship:
+                  type: string
+                  enum: [parent, student, coparent]
+                message:
+                  type: string
+      responses:
+        '201':
+          description: Invitation created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Invitation'
+        '400':
+          description: Invalid input
+        '401':
+          description: Unauthorized
+        '409':
+          description: Relationship already exists or invitation already sent
+
+  /users/invitations/{invitationId}/accept:
+    post:
+      tags:
+        - Relationships
+      summary: Accept invitation
+      description: Accepts an invitation to establish a relationship
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: invitationId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Invitation accepted successfully
+        '400':
+          description: Invalid invitation
+        '401':
+          description: Unauthorized
+        '404':
+          description: Invitation not found
+
+  /users/invitations/{invitationId}/reject:
+    post:
+      tags:
+        - Relationships
+      summary: Reject invitation
+      description: Rejects an invitation to establish a relationship
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: invitationId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Invitation rejected successfully
+        '400':
+          description: Invalid invitation
+        '401':
+          description: Unauthorized
+        '404':
+          description: Invitation not found
+
+  /admin/users:
+    get:
+      tags:
+        - Admin
+      summary: Get all users
+      description: Retrieves all users with optional filtering
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: role
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [student, parent, admin, support]
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: testMode
+          in: query
+          required: false
+          schema:
+            type: boolean
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Users retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  users:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/UserProfile'
+                  total:
+                    type: integer
+                  page:
+                    type: integer
+                  totalPages:
+                    type: integer
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden - Admin access required
+
+  /admin/users/{userId}:
+    get:
+      tags:
+        - Admin
+      summary: Get user details
+      description: Retrieves detailed information about a specific user
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: User details retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserDetails'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden - Admin access required
+        '404':
+          description: User not found
+
+  /admin/users/{userId}/role:
+    put:
+      tags:
+        - Admin
+      summary: Update user role
+      description: Updates the role of a specific user
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - role
+              properties:
+                role:
+                  type: string
+                  enum: [student, parent, admin, support]
+      responses:
+        '200':
+          description: User role updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+        '400':
+          description: Invalid input
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden - Admin access required
+        '404':
+          description: User not found
+
+  /admin/users/{userId}/test-mode:
+    put:
+      tags:
+        - Admin
+      summary: Toggle test mode
+      description: Enables or disables test mode for a specific user
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - enabled
+              properties:
+                enabled:
+                  type: boolean
+      responses:
+        '200':
+          description: Test mode toggled successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+        '400':
+          description: Invalid input
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden - Admin access required
+        '404':
+          description: User not found
+
+  /admin/users/test-mode:
+    get:
+      tags:
+        - Admin
+      summary: Get test mode users
+      description: Retrieves all users in test mode
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Test mode users retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UserProfile'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden - Admin access required
+
+  /services:
+    get:
+      tags:
+        - Service
+      summary: Get all services
+      description: Retrieves all registered services
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Services retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Service'
+        '401':
+          description: Unauthorized
+
+    post:
+      tags:
+        - Service
+      summary: Register service
+      description: Registers a new service
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ServiceRegistration'
+      responses:
+        '201':
+          description: Service registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Service'
+        '400':
+          description: Invalid input
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden - Admin access required
+        '409':
+          description: Service already exists
+
+  /services/{serviceId}:
+    get:
+      tags:
+        - Service
+      summary: Get service details
+      description: Retrieves detailed information about a specific service
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: serviceId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Service details retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Service'
+        '401':
+          description: Unauthorized
+        '404':
+          description: Service not found
+
+    put:
+      tags:
+        - Service
+      summary: Update service
+      description: Updates a specific service
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: serviceId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ServiceUpdate'
+      responses:
+        '200':
+          description: Service updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Service'
+        '400':
+          description: Invalid input
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden - Admin access required
+        '404':
+          description: Service not found
+
+  /services/entitlements:
+    get:
+      tags:
+        - Service
+      summary: Get user entitlements
+      description: Retrieves all service entitlements for the current user
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: User entitlements retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ServiceEntitlement'
+        '401':
+          description: Unauthorized
+
+  /services/entitlements/{serviceId}:
+    get:
+      tags:
+        - Service
+      summary: Get user entitlement for service
+      description: Retrieves the entitlement for a specific service for the current user
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: serviceId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: User entitlement retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceEntitlement'
+        '401':
+          description: Unauthorized
+        '404':
+          description: Service entitlement not found
+
+  /services/access:
+    post:
+      tags:
+        - Service
+      summary: Check service access
+      description: Checks if the current user has access to a specific service and endpoint
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - serviceId
+                - endpoint
+              properties:
+                serviceId:
+                  type: string
+                endpoint:
+                  type: string
+      responses:
+        '200':
+          description: Access check result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  hasAccess:
+                    type: boolean
+                  reason:
+                    type: string
+        '400':
+          description: Invalid input
+        '401':
+          description: Unauthorized
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    UserProfile:
+      type: object
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+        role:
+          type: string
+          enum: [student, parent, admin, support]
+        emailVerified:
+          type: boolean
+        image:
+          type: string
+          format: uri
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        testMode:
+          type: boolean
+        profileCompleteness:
+          type: number
+          minimum: 0
+          maximum: 100
+        preferences:
+          $ref: '#/components/schemas/UserPreferences'
+
+    UserProfileUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        image:
+          type: string
+          format: uri
+        preferences:
+          $ref: '#/components/schemas/UserPreferences'
+
+    UserPreferences:
+      type: object
+      properties:
+        theme:
+          type: string
+          enum: [light, dark, system]
+        language:
+          type: string
+          enum: [en, es, fr]
+        emailNotifications:
+          type: boolean
+        timezone:
+          type: string
+
+    UserDetails:
+      allOf:
+        - $ref: '#/components/schemas/UserProfile'
+        - type: object
+          properties:
+            sessions:
+              type: array
+              items:
+                $ref: '#/components/schemas/Session'
+            entitlements:
+              type: array
+              items:
+                $ref: '#/components/schemas/ServiceEntitlement'
+            relationships:
+              type: array
+              items:
+                $ref: '#/components/schemas/UserRelationship'
+            accountStatus:
+              type: string
+              enum: [active, locked, suspended]
+            lastLogin:
+              type: string
+              format: date-time
+            loginCount:
+              type: integer
+            devices:
+              type: array
+              items:
+                $ref: '#/components/schemas/Device'
+
+    Session:
+      type: object
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        token:
+          type: string
+        expires:
+          type: string
+          format: date-time
+        ipAddress:
+          type: string
+        userAgent:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        lastActive:
+          type: string
+          format: date-time
+
+    Device:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+        lastActive:
+          type: string
+          format: date-time
+        ipAddress:
+          type: string
+        userAgent:
+          type: string
+        trusted:
+          type: boolean
+
+    UserRelationship:
+      type: object
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        relatedUserId:
+          type: string
+        relationship:
+          type: string
+          enum: [parent, student, coparent]
+        createdAt:
+          type: string
+          format: date-time
+        relatedUser:
+          $ref: '#/components/schemas/UserProfile'
+
+    Invitation:
+      type: object
+      properties:
+        id:
+          type: string
+        fromUserId:
+          type: string
+        toEmail:
+          type: string
+          format: email
+        toUserId:
+          type: string
+        relationship:
+          type: string
+          enum: [parent, student, coparent]
+        status:
+          type: string
+          enum: [pending, accepted, rejected, expired]
+        message:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        fromUser:
+          $ref: '#/components/schemas/UserProfile'
+        toUser:
+          $ref: '#/components/schemas/UserProfile'
+
+    Service:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        displayName:
+          type: string
+        description:
+          type: string
+        baseUrl:
+          type: string
+          format: uri
+        iconUrl:
+          type: string
+          format: uri
+        accessType:
+          type: string
+          enum: [public, role_based, restricted]
+        allowedRoles:
+          type: array
+          items:
+            type: string
+            enum: [student, parent, admin, support]
+        endpoints:
+          type: array
+          items:
+            type: object
+            properties:
+              path:
+                type: string
+              method:
+                type: string
+                enum: [GET, POST, PUT, DELETE, PATCH]
+              requiredPermissions:
+                type: array
+                items:
+                  type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    ServiceRegistration:
+      type: object
+      required:
+        - name
+        - displayName
+        - description
+        - baseUrl
+        - accessType
+      properties:
+        name:
+          type: string
+        displayName:
+          type: string
+        description:
+          type: string
+        baseUrl:
+          type: string
+          format: uri
+        iconUrl:
+          type: string
+          format: uri
+        accessType:
+          type: string
+          enum: [public, role_based, restricted]
+        allowedRoles:
+          type: array
+          items:
+            type: string
+            enum: [student, parent, admin, support]
+        endpoints:
+          type: array
+          items:
+            type: object
+            properties:
+              path:
+                type: string
+              method:
+                type: string
+                enum: [GET, POST, PUT, DELETE, PATCH]
+              requiredPermissions:
+                type: array
+                items:
+                  type: string
+        apiKey:
+          type: string
+        apiSecret:
+          type: string
+
+    ServiceUpdate:
+      type: object
+      properties:
+        displayName:
+          type: string
+        description:
+          type: string
+        baseUrl:
+          type: string
+          format: uri
+        iconUrl:
+          type: string
+          format: uri
+        accessType:
+          type: string
+          enum: [public, role_based, restricted]
+        allowedRoles:
+          type: array
+          items:
+            type: string
+            enum: [student, parent, admin, support]
+        endpoints:
+          type: array
+          items:
+            type: object
+            properties:
+              path:
+                type: string
+              method:
+                type: string
+                enum: [GET, POST, PUT, DELETE, PATCH]
+              requiredPermissions:
+                type: array
+                items:
+                  type: string
+        apiKey:
+          type: string
+        apiSecret:
+          type: string
+
+    ServiceEntitlement:
+      type: object
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        serviceId:
+          type: string
+        hasAccess:
+          type: boolean
+        grantedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        restrictions:
+          type: array
+          items:
+            type: string
+        service:
+          $ref: '#/components/schemas/Service'
+``` 

@@ -420,4 +420,117 @@ export class UserService implements IUserService {
       return [];
     }
   }
+
+  /**
+   * Get all users with optional filtering
+   * @param filter Optional filter for users
+   * @returns Array of user profiles matching the filter
+   */
+  async getAllUsers(filter?: Partial<UserProfileDTO>): Promise<UserProfileDTO[]> {
+    try {
+      // Convert DTO filter to document filter
+      const docFilter: Partial<UserDocument> = {};
+      
+      if (filter) {
+        if (filter.role) docFilter.role = filter.role as any;
+        if (filter.testMode !== undefined) docFilter.testMode = filter.testMode;
+        // Add other filter mappings as needed
+      }
+      
+      const users = await this.userRepository.findAll(docFilter);
+      return users.map(user => this.mapUserToProfile(user));
+    } catch (error) {
+      console.error('Error getting all users:', error);
+      throw new Error('Failed to get users');
+    }
+  }
+
+  /**
+   * Toggle test mode for a user
+   * @param userId User ID to modify
+   * @param enabled Whether test mode should be enabled
+   * @returns Updated user profile
+   */
+  async setTestMode(userId: string, enabled: boolean): Promise<UserProfileDTO> {
+    try {
+      const user = await this.userRepository.update(userId, { testMode: enabled });
+      
+      if (!user) {
+        throw new Error('User not found');
+      }
+      
+      return this.mapUserToProfile(user);
+    } catch (error) {
+      console.error('Error setting test mode:', error);
+      throw new Error('Failed to set test mode');
+    }
+  }
+
+  /**
+   * Get all users in test mode
+   * @returns Array of user profiles with test mode enabled
+   */
+  async getTestModeUsers(): Promise<UserProfileDTO[]> {
+    try {
+      const users = await this.userRepository.findAll({ testMode: true });
+      return users.map(user => this.mapUserToProfile(user));
+    } catch (error) {
+      console.error('Error getting test mode users:', error);
+      throw new Error('Failed to get test mode users');
+    }
+  }
+
+  /**
+   * Force logout a user
+   * This is a placeholder implementation. In a production system,
+   * this would need to invalidate the user's active tokens.
+   * @param userId User ID to log out
+   * @returns Success status
+   */
+  async forceLogout(userId: string): Promise<boolean> {
+    try {
+      // Implementation would depend on how you're handling
+      // token storage and validation
+      console.log(`Force logout for user ${userId}`);
+      return true;
+    } catch (error) {
+      console.error('Error forcing logout:', error);
+      throw new Error('Failed to force logout');
+    }
+  }
+
+  /**
+   * Disable a user account
+   * This is a placeholder implementation.
+   * @param userId User ID to disable
+   * @returns Success status
+   */
+  async disableAccount(userId: string): Promise<boolean> {
+    try {
+      // In a real implementation, you'd set an "enabled" flag to false
+      // or implement a soft delete
+      console.log(`Disable account for user ${userId}`);
+      return true;
+    } catch (error) {
+      console.error('Error disabling account:', error);
+      throw new Error('Failed to disable account');
+    }
+  }
+
+  /**
+   * Enable a user account
+   * This is a placeholder implementation.
+   * @param userId User ID to enable
+   * @returns Success status
+   */
+  async enableAccount(userId: string): Promise<boolean> {
+    try {
+      // In a real implementation, you'd set an "enabled" flag to true
+      console.log(`Enable account for user ${userId}`);
+      return true;
+    } catch (error) {
+      console.error('Error enabling account:', error);
+      throw new Error('Failed to enable account');
+    }
+  }
 } 

@@ -143,4 +143,19 @@ export class MongoUserRepository implements IUserRepository {
       return [];
     }
   }
+
+  /**
+   * Find all users with optional filter
+   * @param filter Optional filter to apply
+   * @returns Array of users matching the filter
+   */
+  async findAll(filter?: Partial<UserDocument>): Promise<UserDocument[]> {
+    try {
+      const UserModel = getUserModel();
+      return await UserModel.find(filter || {}).exec();
+    } catch (error) {
+      console.error('Error finding all users:', error);
+      throw new Error('Database error while finding users');
+    }
+  }
 } 

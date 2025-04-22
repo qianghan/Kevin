@@ -91,61 +91,114 @@ export const createAuthRouter = (userService: IUserService) => {
         return res.status(400).json({ message: 'Email is required' });
       }
       
+      // Always return success even if email doesn't exist (for security)
       await userService.requestPasswordReset(email);
-      
-      // Don't reveal if the user exists for security
-      res.json({ message: 'If your email is registered, you will receive reset instructions' });
+      res.json({ message: 'Password reset instructions sent to your email' });
     } catch (error) {
-      console.error('Password reset request error:', error);
-      res.status(500).json({ message: 'Internal server error' });
+      console.error('Error requesting password reset:', error);
+      // Still return success for security
+      res.json({ message: 'Password reset instructions sent to your email' });
     }
   });
   
   /**
-   * Reset password with token
+   * Reset password with a token
    */
   router.post('/reset-password', async (req: Request, res: Response) => {
     try {
       const { token, newPassword } = req.body;
       
       if (!token || !newPassword) {
-        return res.status(400).json({ message: 'Missing required fields' });
+        return res.status(400).json({ message: 'Token and new password are required' });
       }
       
       const success = await userService.resetPassword(token, newPassword);
       
-      if (!success) {
-        return res.status(400).json({ message: 'Invalid or expired token' });
+      if (success) {
+        res.json({ message: 'Password reset successfully' });
+      } else {
+        res.status(400).json({ message: 'Invalid or expired token' });
       }
-      
-      res.json({ message: 'Password reset successful' });
     } catch (error) {
-      console.error('Password reset error:', error);
-      res.status(500).json({ message: 'Internal server error' });
+      console.error('Error resetting password:', error);
+      res.status(500).json({ message: 'Failed to reset password' });
     }
   });
   
   /**
-   * Verify email
+   * Verify email with a verification token
    */
-  router.get('/verify-email/:token', async (req: Request, res: Response) => {
+  router.get('/verify-email/:token', async (req, res) => {
     try {
       const { token } = req.params;
       
-      if (!token) {
-        return res.status(400).json({ message: 'Token is required' });
+      const verified = await userService.verifyEmail(token);
+      
+      if (verified) {
+        res.json({ message: 'Email verified successfully' });
+      } else {
+        res.status(400).json({ message: 'Invalid or expired token' });
       }
-      
-      const success = await userService.verifyEmail(token);
-      
-      if (!success) {
-        return res.status(400).json({ message: 'Invalid or expired token' });
-      }
-      
-      res.json({ message: 'Email verified successfully' });
     } catch (error) {
-      console.error('Email verification error:', error);
-      res.status(500).json({ message: 'Internal server error' });
+      console.error('Error verifying email:', error);
+      res.status(500).json({ message: 'Failed to verify email' });
+    }
+  });
+  
+  /**
+   * Logout (invalidate current session)
+   */
+  router.post('/logout', isAuthenticated, async (req, res) => {
+    try {
+      const sessionId = req.headers['session-id'] as string;
+      
+      if (!sessionId) {
+        return res.status(400).json({ message: 'Session ID is required' });
+      }
+      
+      const success = await userService.invalidateSession(sessionId);
+      
+      if (success) {
+        res.json({ message: 'Logged out successfully' });
+      } else {
+        res.status(400).json({ message: 'Failed to logout' });
+      }
+    } catch (error) {
+      console.error('Error logging out:', error);
+      res.status(500).json({ message: 'Failed to logout' });
+    }
+  });
+  
+  /**
+   * Get all active sessions for the current user
+   */
+  router.get('/sessions', isAuthenticated, async (req, res) => {
+    try {
+      const userId = (req as any).userId;
+      const sessions = await userService.getUserSessions(userId);
+      res.json({ data: sessions });
+    } catch (error) {
+      console.error('Error getting sessions:', error);
+      res.status(500).json({ message: 'Failed to get sessions' });
+    }
+  });
+  
+  /**
+   * Logout from all devices (invalidate all sessions)
+   */
+  router.post('/logout-all', isAuthenticated, async (req, res) => {
+    try {
+      const userId = (req as any).userId;
+      const success = await userService.invalidateAllSessions(userId);
+      
+      if (success) {
+        res.json({ message: 'Logged out from all devices successfully' });
+      } else {
+        res.status(400).json({ message: 'Failed to logout from all devices' });
+      }
+    } catch (error) {
+      console.error('Error logging out from all devices:', error);
+      res.status(500).json({ message: 'Failed to logout from all devices' });
     }
   });
   

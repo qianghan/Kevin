@@ -11,6 +11,15 @@ export interface UserPreferences {
 }
 
 /**
+ * Profile completeness tracking interface
+ */
+export interface ProfileCompleteness {
+  score: number; // Overall completeness score (0-100)
+  missingFields: string[]; // Array of field names that are missing
+  lastUpdated: Date; // When the score was last calculated
+}
+
+/**
  * Base user properties shared across the system
  */
 export interface BaseUser {
@@ -20,6 +29,11 @@ export interface BaseUser {
   password?: string;
   emailVerified?: Date;
   preferences?: UserPreferences;
+  testMode?: boolean; // Flag to indicate if user is in test mode
+  profileCompleteness?: ProfileCompleteness; // Profile completeness tracking
+  lastLoginAt?: Date; // When the user last logged in
+  failedLoginAttempts?: number; // Number of consecutive failed login attempts
+  lockedUntil?: Date; // Timestamp until which the account is locked
   createdAt: Date;
   updatedAt: Date;
 }
@@ -27,7 +41,7 @@ export interface BaseUser {
 /**
  * Available user roles in the system
  */
-export type UserRole = 'student' | 'parent' | 'admin';
+export type UserRole = 'student' | 'parent' | 'admin' | 'support';
 
 /**
  * Mongoose document interface for User
@@ -65,11 +79,39 @@ const UserSchema = new Schema<UserDocument>(
     emailVerified: {
       type: Date,
     },
+    lastLoginAt: {
+      type: Date
+    },
+    failedLoginAttempts: {
+      type: Number,
+      default: 0
+    },
+    lockedUntil: {
+      type: Date
+    },
     role: {
       type: String,
-      enum: ['student', 'parent', 'admin'],
+      enum: ['student', 'parent', 'admin', 'support'],
       required: true,
       default: 'student',
+    },
+    testMode: {
+      type: Boolean,
+      default: false,
+    },
+    profileCompleteness: {
+      score: {
+        type: Number,
+        default: 0
+      },
+      missingFields: {
+        type: [String],
+        default: []
+      },
+      lastUpdated: {
+        type: Date,
+        default: Date.now
+      }
     },
     studentIds: [{
       type: Schema.Types.ObjectId,
@@ -102,6 +144,63 @@ UserSchema.index({ email: 1 });
 UserSchema.index({ role: 1 });
 UserSchema.index({ studentIds: 1 });
 UserSchema.index({ parentIds: 1 });
+UserSchema.index({ testMode: 1 }); // Add index for testMode
+UserSchema.index({ "profileCompleteness.score": 1 }); // Index for profile completeness score
+
+/**
+ * Calculate profile completeness score based on filled fields
+ * @param user User document
+ * @returns Profile completeness score (0-100)
+ */
+export const calculateProfileCompleteness = (user: UserDocument): ProfileCompleteness => {
+  const requiredFields = ['name', 'email', 'image'];
+  const preferenceFields = ['preferences.theme', 'preferences.language'];
+  
+  // Fields that should be filled based on user role
+  const roleBasedFields: Record<UserRole, string[]> = {
+    student: [],
+    parent: ['studentIds'],
+    admin: [],
+    support: []
+  };
+  
+  // All fields that should be checked for this user
+  const fieldsToCheck = [...requiredFields, ...preferenceFields, ...(roleBasedFields[user.role] || [])];
+  const missingFields: string[] = [];
+  
+  // Check each field
+  fieldsToCheck.forEach(field => {
+    if (field.includes('.')) {
+      // Handle nested fields
+      const [parent, child] = field.split('.');
+      if (!user[parent] || !user[parent][child]) {
+        missingFields.push(field);
+      }
+    } else if (!user[field] || (Array.isArray(user[field]) && user[field].length === 0)) {
+      missingFields.push(field);
+    }
+  });
+  
+  // Calculate score as percentage of completed fields
+  const filledFields = fieldsToCheck.length - missingFields.length;
+  const score = Math.round((filledFields / fieldsToCheck.length) * 100);
+  
+  return {
+    score,
+    missingFields,
+    lastUpdated: new Date()
+  };
+};
+
+// Pre-save middleware to calculate profile completeness
+UserSchema.pre('save', function(next) {
+  // Only recalculate if relevant fields have changed
+  if (this.isModified('name') || this.isModified('email') || this.isModified('image') ||
+      this.isModified('preferences') || this.isModified('studentIds') || this.isModified('parentIds')) {
+    this.profileCompleteness = calculateProfileCompleteness(this);
+  }
+  next();
+});
 
 /**
  * Interface for the User model with static methods
@@ -111,6 +210,7 @@ export interface UserModel extends Model<UserDocument> {
   findByIds(ids: string[]): Promise<UserDocument[]>;
   findStudents(parentId: string): Promise<UserDocument[]>;
   findParents(studentId: string): Promise<UserDocument[]>;
+  updateLoginTimestamp(userId: string): Promise<boolean>;
 }
 
 // Static method implementations
@@ -128,6 +228,15 @@ UserSchema.statics.findStudents = async function(parentId: string): Promise<User
 
 UserSchema.statics.findParents = async function(studentId: string): Promise<UserDocument[]> {
   return this.find({ studentIds: studentId });
+};
+
+// Update the user's last login timestamp
+UserSchema.statics.updateLoginTimestamp = async function(userId: string): Promise<boolean> {
+  const result = await this.updateOne(
+    { _id: userId },
+    { lastLoginAt: new Date() }
+  );
+  return result.modifiedCount > 0;
 };
 
 // Create the model
