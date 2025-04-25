@@ -16,7 +16,9 @@
     "db:test": "cd db && node test-mongodb.js",
     "db:logs": "docker logs kevin-ui-mongodb",
     "db:shell": "docker exec -it kevin-ui-mongodb mongosh kevindb -u kevinuser -p kevin_password",
-    "db:reset": "cd db && docker-compose down && rm -rf data/* && docker-compose up -d"
+    "db:reset": "cd db && docker-compose down && rm -rf data/* && docker-compose up -d",
+    "storybook": "start-storybook -p 6006",
+    "build-storybook": "build-storybook"
   },
   "dependencies": {
     "@auth/mongodb-adapter": "^3.8.0",
