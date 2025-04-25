@@ -28,6 +28,8 @@ import inspect
 # Removing the problematic import temporarily
 # from langchain.callbacks.base import BaseCallbackHandler
 # from langchain.callbacks.manager import CallbackManager
+from pathlib import Path
+from functools import lru_cache
 
 # Add parent directory to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
@@ -480,113 +482,55 @@ def web_search(state: AgentState) -> AgentState:
 # Generate answer based on available documents
 def generate_answer(state: AgentState) -> AgentState:
     """Generate an answer using the LLM."""
-    workflow_logger.info("Generating answer with LLM")
-    
-    query = state.get("query", "")
-    if not query:
-        # Try to get query from the last message
-        if state["messages"] and len(state["messages"]) > 0:
-            last_message = state["messages"][-1]
-            if isinstance(last_message, HumanMessage):
-                query = last_message.content
-                state["query"] = query
-    
-    # Get the agent instance to update real-time thinking steps
+    query = state["query"]
     agent_instance = None
-    for frame in inspect.stack():
-        if 'self' in frame.frame.f_locals and isinstance(frame.frame.f_locals['self'], UniversityAgent):
-            agent_instance = frame.frame.f_locals['self']
-            break
+    if "agent_instance" in state:
+        agent_instance = state["agent_instance"]
     
-    # Combine all available documents
+    # Initialize thinking steps if not present
+    if "thinking_steps" not in state:
+        state["thinking_steps"] = []
+    thinking_steps = state["thinking_steps"]
+    
+    # Combine documents from retrieval and web search
     documents = state.get("documents", []).copy()
-    web_documents = state.get("web_documents", [])
-    if web_documents:
-        documents.extend(web_documents)
+    if "web_documents" in state and state["web_documents"]:
+        documents.extend(state["web_documents"])
     
-    # Get thinking steps
-    thinking_steps = state.get("thinking_steps", [])
-    start_time = time.time()
-    
-    # Log the retrieval process info
+    # If no documents were retrieved, add a note
     if not documents:
-        workflow_logger.warning("No documents available for context")
-        
-        # Add thinking step for no documents
         thinking_steps.append({
             "type": "no_documents",
             "time": time.strftime("%H:%M:%S"),
-            "description": "No context documents available",
+            "description": "No relevant documents found",
             "duration_ms": 0,
-            "content": "Answer will be generated based solely on the query, without additional context."
+            "content": "Proceeding to generate an answer with general knowledge..."
         })
         
         # Update real-time thinking steps
         if agent_instance and hasattr(agent_instance, 'latest_thinking_steps'):
             agent_instance.latest_thinking_steps = thinking_steps.copy()
     else:
-        # Add thinking step for document retrieval
+        # Count and describe retrieved documents
+        num_docs = len(documents)
         thinking_steps.append({
-            "type": "documents_retrieved",
+            "type": "document_count",
             "time": time.strftime("%H:%M:%S"),
-            "description": f"Retrieved {len(documents)} documents for context",
-            "duration_ms": int((time.time() - start_time) * 1000),
-            "content": f"Using {len(documents)} documents as context for generating answer."
+            "description": f"{num_docs} document(s) retrieved",
+            "duration_ms": 0,
+            "content": "Proceeding to generate an answer based on retrieved documents..."
         })
         
         # Update real-time thinking steps
         if agent_instance and hasattr(agent_instance, 'latest_thinking_steps'):
             agent_instance.latest_thinking_steps = thinking_steps.copy()
     
-    # Initialize LLM if not done already
-    logger.info("Initializing LLM")
-    try:
-        # First, set up the language model
-        # Check if we're in DeepSeek-only mode
-        if os.environ.get('USE_DEEPSEEK_ONLY') == '1':
-            logger.info("USE_DEEPSEEK_ONLY is set - only using DeepSeek API")
-            from src.models.deepseek_client import DeepSeekAPI
-            llm = DeepSeekAPI()  # Load with default settings from config
-        else:
-            # Otherwise, try loading the local LLM
-            try:
-                llm = HuggingFacePipeline(
-                    pipeline=pipeline(
-                        "text-generation",
-                        model="mistralai/Mistral-7B-Instruct-v0.1",
-                        tokenizer="mistralai/Mistral-7B-Instruct-v0.1",
-                        torch_dtype=torch.bfloat16,
-                        device_map="auto",
-                        max_new_tokens=512,
-                        do_sample=True,
-                        temperature=0.7,
-                        top_k=50,
-                        top_p=0.95
-                    )
-                )
-            except Exception as e:
-                logger.error(f"Failed to load Mistral: {e}. Falling back to DeepSeek API.")
-                from src.models.deepseek_client import DeepSeekAPI
-                llm = DeepSeekAPI()  # Load with default settings from config
-    except Exception as e:
-        logger.error(f"Failed to initialize LLM: {e}")
-        raise RuntimeError(f"Failed to initialize LLM: {e}")
-    
-    # Add thinking step for prompt creation
-    thinking_steps.append({
-        "type": "prompt_creation",
-        "time": time.strftime("%H:%M:%S"),
-        "description": "Creating LLM prompt",
-        "duration_ms": int((time.time() - start_time) * 1000),
-        "content": f"Preparing prompt with {len(documents)} documents"
-    })
-    
-    # Update real-time thinking steps
-    if agent_instance and hasattr(agent_instance, 'latest_thinking_steps'):
-        agent_instance.latest_thinking_steps = thinking_steps.copy()
-    
-    # Now create the prompt
-    prompt = create_prompt_for_llm(query, documents)
+    # Now create the prompt with conversation history from state messages using the fallback mechanism
+    prompt = create_prompt_with_fallback(
+        query, 
+        documents, 
+        state.get("messages", [])
+    )
     
     # Log the prompt for debugging
     if os.environ.get('LOG_PROMPTS'):
@@ -605,6 +549,27 @@ def generate_answer(state: AgentState) -> AgentState:
     # Update real-time thinking steps
     if agent_instance and hasattr(agent_instance, 'latest_thinking_steps'):
         agent_instance.latest_thinking_steps = thinking_steps.copy()
+    
+    # Get the LLM instance
+    try:
+        llm = get_llm()
+    except Exception as e:
+        logger.error(f"Error getting LLM: {e}", exc_info=True)
+        # Return a fallback answer
+        state["answer"] = "I encountered a problem while processing your query. Please try again."
+        state["output"] = "I encountered a problem while processing your query. Please try again."
+        state["response"] = "I encountered a problem while processing your query. Please try again."
+        state["has_answered"] = True
+        thinking_steps.append({
+            "type": "error",
+            "time": time.strftime("%H:%M:%S"),
+            "description": "Error getting LLM",
+            "duration_ms": int((time.time() - llm_start_time) * 1000),
+            "content": f"Error: {e}",
+            "error": True
+        })
+        state["thinking_steps"] = thinking_steps
+        return state
     
     # Generate the answer using the LLM
     messages = [SystemMessage(content=prompt)]
@@ -754,8 +719,8 @@ def generate_answer(state: AgentState) -> AgentState:
         "type": "completion",
         "time": time.strftime("%H:%M:%S"),
         "description": "Answer ready",
-        "duration_ms": int((time.time() - start_time) * 1000),
-        "content": f"Total time: {(time.time() - start_time):.2f}s"
+        "duration_ms": int((time.time() - llm_start_time) * 1000),
+        "content": f"Total time: {(time.time() - llm_start_time):.2f}s"
     })
     
     # Update state with thinking steps
@@ -996,47 +961,103 @@ class UniversityAgent:
         logger.debug("Running graph directly")
         return self.graph.run(state)
         
-    def _custom_workflow(self, state):
-        """Directly execute the workflow functions to ensure state preservation"""
-        logger.info("Running custom workflow implementation")
+    def _custom_workflow(self, state: AgentState) -> AgentState:
+        """
+        Custom workflow implementation for improved performance and control.
+        This method orchestrates the execution of the agent workflow.
         
-        # Step 1: Route the query
-        route_decision = decide_search_method(state)
-        logger.info(f"Routing decision: {route_decision}")
-        
-        # Step 2: Perform search based on routing decision
-        if route_decision == "vector_search":
-            state = retrieve_from_vectorstore(state)
-        else:  # web_search
-            state = web_search(state)
+        Args:
+            state: The initial state to use
             
-        # Step 3: Generate answer
-        state = generate_answer(state)
-        
-        # Make sure the answer is preserved
-        if "answer" in state and state["answer"]:
-            answer = state["answer"]
-            # Store answer in instance variable for debugging and fallback
-            self.last_answer = answer
-            logger.info(f"Saving answer for preservation: {answer[:100]}...")
+        Returns:
+            The final agent state after processing
+        """
+        try:
+            workflow_logger.info("Starting custom workflow execution")
             
-            # Ensure it's in all relevant state keys
-            state["answer"] = answer
-            state["output"] = answer
-            state["response"] = answer
+            # Inject agent instance into state for thinking step updates
+            state["agent_instance"] = self
+            
+            # Make the routing decision
+            initial_routing = decide_search_method(state)
+            
+            # Log the routing decision
+            workflow_logger.info(f"Initial routing decision: {initial_routing}")
+            
+            # Execute the appropriate pathway based on routing decision
+            if initial_routing in ["vector_search", "vectorstore", "hybrid"]:
+                # Retrieve documents
+                state = retrieve_from_vectorstore(state)
+                
+                # Optional web search (if requested or if results are insufficient)
+                if state.get("use_web_search", False) or len(state.get("documents", [])) == 0:
+                    state = web_search(state)
+                
+                # Generate the final answer
+                state = generate_answer(state)
+                
+            elif initial_routing == "websearch" or initial_routing == "web_search":
+                # Perform web search first
+                state = web_search(state)
+                
+                # Generate the final answer
+                state = generate_answer(state)
+                
+            else:
+                # Default path - just generate an answer with what we have
+                state = generate_answer(state)
+                
+            # Ensure there's an answer in the output
+            if "answer" not in state or not state["answer"]:
+                if "output" in state and state["output"]:
+                    state["answer"] = state["output"]
+                    
+            # Save the response for later reference
+            state["response"] = state.get("answer", state.get("output", "I couldn't generate an answer."))
+            
+            # Remove the agent instance reference to avoid circular dependencies
+            if "agent_instance" in state:
+                del state["agent_instance"]
+            
+            workflow_logger.info("Custom workflow completed successfully")
+            return state
         
-        # Step 4: Finalize response
-        state = finalize_response(state)
+        except Exception as e:
+            logger.error(f"Error in custom workflow: {str(e)}", exc_info=True)
+            
+            # Ensure there's at least a basic answer in the output
+            error_message = f"I encountered a problem while processing your query. Please try again."
+            state["answer"] = error_message
+            state["output"] = error_message
+            state["response"] = error_message
+            state["has_error"] = True
+            
+            # Add the error to thinking steps
+            if "thinking_steps" not in state:
+                state["thinking_steps"] = []
+            
+            state["thinking_steps"].append({
+                "type": "error",
+                "time": time.strftime("%H:%M:%S"),
+                "description": "Error in workflow execution",
+                "duration_ms": 0,
+                "content": f"Error: {str(e)}"
+            })
+            
+            # Remove the agent instance reference to avoid circular dependencies
+            if "agent_instance" in state:
+                del state["agent_instance"]
+            
+            return state
         
-        return state
-        
-    def query(self, question: str, use_web_search: bool = False) -> Dict[str, Any]:
+    def query(self, question: str, use_web_search: bool = False, conversation_history=None) -> Dict[str, Any]:
         """
         Process a query through the agent.
         
         Args:
             question: The query to process
             use_web_search: Whether to use web search
+            conversation_history: Optional list of previous messages for context
             
         Returns:
             Dict containing the answer and other information
@@ -1045,9 +1066,68 @@ class UniversityAgent:
         query_id = f"query_{int(time.time())}"
         logger.info(f"Processing query ID {query_id}: {question}")
         
+        # Initialize messages with conversation history if available
+        messages = []
+        if conversation_history:
+            try:
+                # Check if conversation_history is already in message format
+                if conversation_history and all(hasattr(msg, 'type') for msg in conversation_history):
+                    # Already in correct format, use directly
+                    messages = conversation_history
+                    logger.info(f"Using pre-formatted conversation history with {len(messages)} messages")
+                else:
+                    # Convert from API format to message format
+                    logger.info(f"Including {len(conversation_history)} previous messages for context")
+                    
+                    # Performance optimization: Process only the 5 most recent messages for better concurrency
+                    max_messages = 5
+                    # Process only the most recent messages (limit to 5 for performance)
+                    messages_to_process = min(len(conversation_history), max_messages)
+                    
+                    # Pre-allocate memory for better performance
+                    messages = [None] * messages_to_process
+                    
+                    # Process only the most recent messages with direct indexing for better performance
+                    for i in range(messages_to_process):
+                        idx = len(conversation_history) - messages_to_process + i
+                        if idx < 0:
+                            continue
+                        
+                        msg = conversation_history[idx]
+                        
+                        # Fast path for langchain message objects
+                        if hasattr(msg, 'content') and hasattr(msg, 'type'):
+                            messages[i] = msg
+                            continue
+                        
+                        # Simple validation using get with default for better performance
+                        role = msg.get("role", "") if isinstance(msg, dict) else ""
+                        content = msg.get("content", "") if isinstance(msg, dict) else ""
+                        
+                        # Skip empty or invalid messages
+                        if not content or not role:
+                            continue
+                        
+                        # Convert to appropriate message type
+                        if role == "user":
+                            messages[i] = HumanMessage(content=content)
+                        elif role == "assistant":
+                            messages[i] = AIMessage(content=content)
+                    
+                    # Filter out None values
+                    messages = [msg for msg in messages if msg is not None]
+            except Exception as e:
+                # Log error but continue with current question only
+                logger.error(f"Error processing conversation history: {str(e)}")
+                logger.info("Continuing with current question only")
+                messages = []
+        
+        # Add current question
+        messages.append(HumanMessage(content=question))
+        
         # Initialize state
         state = {
-            "messages": [HumanMessage(content=question)],
+            "messages": messages,
             "documents": [],
             "web_documents": [],
             "has_answered": False,
@@ -1160,72 +1240,240 @@ class UniversityAgent:
         
         return result
 
-def create_prompt_for_llm(query: str, documents: List[Document]) -> str:
-    """Create a prompt for the LLM based on the query and retrieved documents."""
-    # Define maximum content length per document to keep prompts manageable
+@lru_cache(maxsize=128)
+def _create_cached_prompt_part(content: str, role: str) -> str:
+    """Cached version of prompt part creation for better performance"""
+    role_name = "User" if role == "user" else "Assistant"
+    return f"{role_name}: {content[:500] + '...' if len(content) > 500 else content}"
+
+# Create a copy of the original function for fallback
+def create_original_prompt_for_llm(query: str, documents: List[Document]) -> str:
+    """Create a prompt for the LLM based on the query and retrieved documents, without conversation history."""
+    # Define maximum content length for documents
     MAX_DOCUMENT_CONTENT_LENGTH = 800  # Characters per document
     MAX_TOTAL_DOCUMENT_LENGTH = 6000   # Total characters for all documents
     
     # Format documents with limited content length
     formatted_docs = []
-    total_length = 0
+    total_doc_length = 0
     
-    for i, doc in enumerate(documents):
-        # Get content and metadata
-        content = doc.page_content if hasattr(doc, 'page_content') else str(doc)
-        
-        # Limit content length for each document
-        if len(content) > MAX_DOCUMENT_CONTENT_LENGTH:
-            content = content[:MAX_DOCUMENT_CONTENT_LENGTH] + "..."
-        
-        # Get source if available
-        source = ""
-        if hasattr(doc, 'metadata'):
-            source = doc.metadata.get('source', '')
-        
-        # Format document with source if available
-        if source:
-            formatted_doc = f"Document {i+1} [Source: {source}]:\n{content}\n\n"
-        else:
-            formatted_doc = f"Document {i+1}:\n{content}\n\n"
-        
-        # Check if adding this document would exceed our total limit
-        if total_length + len(formatted_doc) <= MAX_TOTAL_DOCUMENT_LENGTH:
+    # Only process documents if they exist and if we're under the length limit
+    if documents:
+        # More efficient document processing
+        for i, doc in enumerate(documents[:10]):  # Limit to 10 docs maximum
+            # Extract content and relevant metadata
+            doc_content = doc.page_content
+            
+            # Truncate content if needed
+            if len(doc_content) > MAX_DOCUMENT_CONTENT_LENGTH:
+                doc_content = doc_content[:MAX_DOCUMENT_CONTENT_LENGTH] + "..."
+            
+            # Format document with metadata
+            doc_source = doc.metadata.get("source", "Unknown")
+            doc_title = doc.metadata.get("title", f"Document {i+1}")
+            formatted_doc = f"Document {i+1}: {doc_title}\nSource: {doc_source}\nContent: {doc_content}\n"
+            
+            # Check length limit
+            if total_doc_length + len(formatted_doc) > MAX_TOTAL_DOCUMENT_LENGTH:
+                formatted_docs.append("(Additional documents omitted due to length constraints)")
+                break
+                
             formatted_docs.append(formatted_doc)
-            total_length += len(formatted_doc)
+            total_doc_length += len(formatted_doc)
+    
+    # Build the prompt
+    system_message = "You are a university information assistant. Answer questions based on the provided documents. If you can't find the answer in the documents, acknowledge that you don't know instead of making up information."
+    
+    # Join prompt parts efficiently
+    prompt_parts = [
+        system_message,
+        "\n\nRELEVANT DOCUMENTS:" if formatted_docs else "",
+    ]
+    prompt_parts.extend(formatted_docs)
+    prompt_parts.extend([
+        "\n\nCURRENT QUERY:",
+        f"User: {query}",
+        "\n\nPlease provide a helpful response to the query based on the relevant documents. If the documents don't contain relevant information, use your general knowledge but make it clear when you're doing so."
+    ])
+    
+    return "\n".join(prompt_parts)
+
+def create_prompt_with_fallback(query: str, documents: List[Document], messages=None) -> str:
+    """
+    Create a prompt with fallback to original prompt format if conversation history processing fails.
+    This function provides a safe wrapper around create_prompt_for_llm to ensure we always get a valid prompt.
+    
+    Args:
+        query: The query to process
+        documents: List of documents to include
+        messages: Optional conversation history
+        
+    Returns:
+        A formatted prompt with or without conversation history
+    """
+    try:
+        # Try to create prompt with conversation history
+        if messages and len(messages) > 1:
+            return create_prompt_for_llm(query, documents, messages)
         else:
-            # If we're going to exceed the limit, add a truncated version or skip
-            remaining_length = MAX_TOTAL_DOCUMENT_LENGTH - total_length
-            if remaining_length > 100:  # Only add if we can include meaningful content
-                truncated_doc = formatted_doc[:remaining_length] + "..."
-                formatted_docs.append(truncated_doc)
-            # Add note about documents being truncated
-            formatted_docs.append(f"Note: {len(documents) - (i+1)} more documents were retrieved but truncated to save space.")
-            break
-    
-    # Combine documents
-    documents_text = "\n".join(formatted_docs) if formatted_docs else "No relevant documents found."
-    
-    # Create system prompt
-    system_prompt = f"""You are Kevin, a professional consultant for Canadian universities. You help potential students find information about programs, admissions, scholarships, campus life, and more.
-    
-Your goal is to provide accurate, helpful information based on the provided documents. If the documents don't contain the answer, you should say so rather than making up information. Always cite your sources when possible.
+            # If no history, use original prompt format
+            return create_original_prompt_for_llm(query, documents)
+    except Exception as e:
+        # Log error and fall back to original prompt
+        logger.error(f"Error creating prompt with conversation history: {str(e)}")
+        logger.info("Falling back to original prompt format without history")
+        return create_original_prompt_for_llm(query, documents)
 
-USER QUERY: {query}
-
-RETRIEVED DOCUMENTS:
-{documents_text}
-
-INSTRUCTIONS:
-1. Answer the query using ONLY the information in the documents above.
-2. If the documents don't contain enough information to fully answer the query, acknowledge this and suggest what additional information might be helpful.
-3. Be concise but comprehensive.
-4. Format your answer in Markdown for readability.
-5. Do not reference these instructions in your answer.
-6. Do not make up information that is not in the documents.
-"""
+def create_prompt_for_llm(query: str, documents: List[Document], messages=None) -> str:
+    """
+    Create a prompt for the LLM based on the query, retrieved documents, and conversation history.
     
-    return system_prompt
+    Args:
+        query: The query to process
+        documents: Retrieved documents
+        messages: Optional conversation history
+        
+    Returns:
+        A prompt string for the LLM
+    """
+    # Performance optimization - use try-except for faster error handling
+    try:
+        # Early exit if there's no history - use the original prompt
+        if not messages or len(messages) <= 1:
+            return create_original_prompt_for_llm(query, documents)
+            
+        # Define maximum content length for documents and history
+        MAX_DOCUMENT_CONTENT_LENGTH = 800  # Characters per document
+        MAX_TOTAL_DOCUMENT_LENGTH = 6000   # Total characters for all documents
+        MAX_HISTORY_LENGTH = 2000  # Characters for conversation history
+        
+        # Format documents with limited content length
+        formatted_docs = []
+        total_doc_length = 0
+        
+        # Only process documents if they exist and if we're under the length limit
+        if documents:
+            # More efficient document processing with index tracking
+            for i, doc in enumerate(documents[:8]):  # Limit to 8 documents for performance
+                # Extract content and relevant metadata
+                doc_content = doc.page_content
+                
+                # Truncate content if needed
+                if len(doc_content) > MAX_DOCUMENT_CONTENT_LENGTH:
+                    doc_content = doc_content[:MAX_DOCUMENT_CONTENT_LENGTH] + "..."
+                
+                # Format document with metadata
+                doc_source = doc.metadata.get("source", "Unknown")
+                doc_title = doc.metadata.get("title", f"Document {i+1}")
+                formatted_doc = f"Document {i+1}: {doc_title}\nSource: {doc_source}\nContent: {doc_content}\n"
+                
+                # Check length limit for better performance
+                if total_doc_length + len(formatted_doc) > MAX_TOTAL_DOCUMENT_LENGTH:
+                    formatted_docs.append("(Additional documents omitted due to length constraints)")
+                    break
+                    
+                formatted_docs.append(formatted_doc)
+                total_doc_length += len(formatted_doc)
+        
+        # Skip history processing if no messages or just the current query
+        if not messages or len(messages) <= 1:
+            # Build the prompt without history
+            prompt_parts = [
+                "You are a university information assistant. Answer questions based on the provided documents. If you can't find the answer in the documents, acknowledge that you don't know instead of making up information."
+            ]
+            
+            if formatted_docs:
+                prompt_parts.append("\n\nRELEVANT DOCUMENTS:")
+                prompt_parts.extend(formatted_docs)
+            
+            prompt_parts.append("\n\nCURRENT QUERY:")
+            prompt_parts.append(f"User: {query}")
+            prompt_parts.append("\n\nPlease provide a helpful response to the current query based on the relevant documents. If the documents don't contain relevant information, use your general knowledge but make it clear when you're doing so.")
+            
+            return "\n".join(prompt_parts)
+        
+        # Process conversation history efficiently for inclusion in the prompt
+        # Only include the most recent 4-6 messages for performance
+        selected_msgs = messages[:-1]  # Exclude current query which is handled separately
+        
+        # Modified: Always include the first message plus the most recent ones
+        MAX_HISTORY_MSGS = 5
+        if len(selected_msgs) > MAX_HISTORY_MSGS:
+            # Keep the first message plus most recent messages (preserving context)
+            first_message = selected_msgs[:1]
+            recent_messages = selected_msgs[-(MAX_HISTORY_MSGS-1):]
+            selected_msgs = first_message + recent_messages
+        
+        # Format history with cached prompt parts for better performance
+        conversation_parts = []
+        total_history_length = 0
+        is_truncated = False
+        
+        # Process messages in a single pass for better performance
+        for msg in selected_msgs:
+            # Handle special case for ellipsis placeholder
+            if msg == "...":
+                placeholder = "[Several messages omitted for brevity]"
+                conversation_parts.append(placeholder)
+                total_history_length += len(placeholder)
+                continue
+            
+            # Determine role
+            role = "user" if isinstance(msg, HumanMessage) else "assistant"
+            
+            # Quick content access with failsafe
+            try:
+                content = msg.content
+            except (AttributeError, TypeError):
+                continue
+            
+            # Use cached prompt part creation
+            formatted_msg = _create_cached_prompt_part(content, role)
+            
+            # Check if adding would exceed limit
+            if total_history_length + len(formatted_msg) <= MAX_HISTORY_LENGTH:
+                conversation_parts.append(formatted_msg)
+                total_history_length += len(formatted_msg)
+            else:
+                # Mark that the conversation was truncated
+                if not conversation_parts:
+                    # Can't fit any messages
+                    conversation_parts.append("[Conversation truncated due to length]")
+                else:
+                    # Mark as truncated
+                    conversation_parts.append("[Earlier conversation truncated due to length limits]")
+                is_truncated = True
+                break
+        
+        # Build the prompt - optimized for efficiency
+        system_instruction = "You are a university information assistant. Answer questions based on the provided documents and conversation history. If you can't find the answer in the documents or conversation history, acknowledge that you don't know instead of making up information."
+        
+        prompt_parts = [system_instruction]
+        
+        # Add documents section if available
+        if formatted_docs:
+            prompt_parts.append("\n\nRELEVANT DOCUMENTS:")
+            prompt_parts.extend(formatted_docs)
+        
+        # Add conversation history if available
+        if conversation_parts:
+            prompt_parts.append("\n\nCONVERSATION HISTORY:")
+            prompt_parts.extend(conversation_parts)
+        
+        # Always add the current query section
+        prompt_parts.append("\n\nCURRENT QUERY:")
+        prompt_parts.append(f"User: {query}")
+        
+        # Add final instruction
+        prompt_parts.append("\n\nPlease provide a helpful response to the current query based on the conversation history and relevant documents. If you don't have enough information to answer, acknowledge that you don't know.")
+        
+        # Join and return prompt
+        return "\n".join(prompt_parts)
+        
+    except Exception as e:
+        # Fallback to original prompt in case of any errors
+        logger.error(f"Error creating prompt with history: {str(e)}. Falling back to original prompt.")
+        return create_original_prompt_for_llm(query, documents)
 
 if __name__ == "__main__":
     # Example usage
