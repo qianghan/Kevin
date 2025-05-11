@@ -1,0 +1,199 @@
+import { useState, useEffect } from 'react';
+import { Box, Button, Container, Flex, Heading, Input, Text, Textarea, VStack, useToast } from '@chakra-ui/react';
+
+// Simulate chat session data
+const MOCK_SESSIONS = [
+  { id: 'session1', title: 'Test Session' },
+  { id: 'session2', title: 'Another Session' },
+];
+
+// Simulate chat messages
+const MOCK_MESSAGES = [
+  { id: 'msg1', type: 'user', content: 'Hello KAI', timestamp: new Date().toISOString() },
+  { id: 'msg2', type: 'ai', content: 'Hello! How can I assist you today?', timestamp: new Date().toISOString() },
+];
+
+export default function ChatPage() {
+  const [sessions, setSessions] = useState(MOCK_SESSIONS);
+  const [activeSession, setActiveSession] = useState(MOCK_SESSIONS[0]);
+  const [messages, setMessages] = useState(MOCK_MESSAGES);
+  const [inputValue, setInputValue] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const toast = useToast();
+
+  // Handle sending a message
+  const handleSendMessage = () => {
+    if (!inputValue.trim()) return;
+    
+    // Add user message
+    const userMessage = {
+      id: `user-${Date.now()}`,
+      type: 'user',
+      content: inputValue,
+      timestamp: new Date().toISOString(),
+    };
+    
+    setMessages([...messages, userMessage]);
+    setInputValue('');
+    setIsLoading(true);
+    
+    // Simulate AI response after delay
+    setTimeout(() => {
+      const aiMessage = {
+        id: `ai-${Date.now()}`,
+        type: 'ai',
+        content: `I'm a simulated response to: "${inputValue}"`,
+        timestamp: new Date().toISOString(),
+      };
+      
+      setMessages(prev => [...prev, aiMessage]);
+      setIsLoading(false);
+    }, 1500);
+  };
+
+  // Create new chat session
+  const handleNewChat = () => {
+    const newSession = {
+      id: `session-${Date.now()}`,
+      title: 'New Chat',
+    };
+    
+    setSessions([newSession, ...sessions]);
+    setActiveSession(newSession);
+    setMessages([]);
+    
+    toast({
+      title: 'New chat created',
+      status: 'success',
+      duration: 2000,
+    });
+  };
+
+  return (
+    <Container maxW="container.xl" h="100vh" p={4}>
+      <Flex h="full" gap={4}>
+        {/* Left sidebar */}
+        <Box w="250px" bg="gray.100" p={4} borderRadius="md" overflowY="auto">
+          <Button 
+            colorScheme="teal" 
+            w="full" 
+            mb={4} 
+            onClick={handleNewChat}
+          >
+            New Chat
+          </Button>
+          
+          <VStack align="stretch" spacing={2}>
+            {sessions.map(session => (
+              <Box 
+                key={session.id}
+                p={2}
+                borderRadius="md"
+                bg={activeSession.id === session.id ? 'teal.100' : 'transparent'}
+                cursor="pointer"
+                _hover={{ bg: 'teal.50' }}
+                onClick={() => setActiveSession(session)}
+                className="chat-session-item"
+                data-session-id={session.id}
+              >
+                <Text fontWeight={activeSession.id === session.id ? 'bold' : 'normal'}>
+                  {session.title}
+                </Text>
+              </Box>
+            ))}
+          </VStack>
+        </Box>
+        
+        {/* Main chat area */}
+        <Flex 
+          flex={1} 
+          flexDir="column" 
+          bg="white" 
+          borderRadius="md" 
+          border="1px solid" 
+          borderColor="gray.200"
+          className="chat-container"
+          data-session-id={activeSession.id}
+        >
+          {/* Chat header */}
+          <Box p={4} borderBottom="1px solid" borderColor="gray.200" className="chat-header">
+            <Heading size="md">{activeSession.title}</Heading>
+          </Box>
+          
+          {/* Messages */}
+          <VStack 
+            flex={1} 
+            p={4} 
+            overflowY="auto" 
+            spacing={4} 
+            align="stretch"
+          >
+            {messages.map(message => (
+              <Box 
+                key={message.id}
+                alignSelf={message.type === 'user' ? 'flex-end' : 'flex-start'}
+                bg={message.type === 'user' ? 'teal.100' : 'gray.100'}
+                p={3}
+                borderRadius="lg"
+                maxW="80%"
+                className={message.type === 'user' ? 'user-message' : 'ai-message'}
+              >
+                <Text>{message.content}</Text>
+                <Text fontSize="xs" color="gray.500" mt={1}>
+                  {new Date(message.timestamp).toLocaleTimeString()}
+                </Text>
+              </Box>
+            ))}
+            
+            {isLoading && (
+              <Box alignSelf="flex-start" p={3} borderRadius="lg" bg="gray.100">
+                <Text>Thinking...</Text>
+              </Box>
+            )}
+          </VStack>
+          
+          {/* Input area */}
+          <Box p={4} borderTop="1px solid" borderColor="gray.200">
+            <Flex gap={2}>
+              <Textarea 
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                placeholder="Type your message..."
+                resize="none"
+                rows={1}
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSendMessage();
+                  }
+                }}
+                className="chat-input"
+              />
+              <Button 
+                colorScheme="teal"
+                onClick={handleSendMessage}
+                isLoading={isLoading}
+                className="send-button"
+              >
+                Send
+              </Button>
+              <Button 
+                variant="outline"
+                className="attachment-button"
+                onClick={() => {
+                  toast({
+                    title: 'Attachment feature',
+                    description: 'This would open a file picker in a real implementation',
+                    status: 'info',
+                  });
+                }}
+              >
+                Attach
+              </Button>
+            </Flex>
+          </Box>
+        </Flex>
+      </Flex>
+    </Container>
+  );
+} 

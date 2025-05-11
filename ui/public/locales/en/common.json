@@ -1,0 +1,63 @@
+{
+  "app": {
+    "title": "KAI",
+    "description": "Your AI-powered academic assistant"
+  },
+  "navigation": {
+    "home": "Home",
+    "chat": "Chat",
+    "profile": "Profile",
+    "settings": "Settings",
+    "help": "Help",
+    "logout": "Logout"
+  },
+  "chat": {
+    "newChat": "New Chat",
+    "placeholder": "Ask me anything...",
+    "send": "Send",
+    "thinking": "Thinking...",
+    "noMessages": "No messages yet. Start a conversation!",
+    "savedChats": "Saved Chats",
+    "loadMore": "Load More",
+    "exportChat": "Export Chat",
+    "deleteChat": "Delete Chat",
+    "search": "Search in chats"
+  },
+  "profile": {
+    "name": "Name",
+    "email": "Email",
+    "language": "Language",
+    "darkMode": "Dark Mode",
+    "save": "Save Changes",
+    "changePassword": "Change Password",
+    "currentPassword": "Current Password",
+    "newPassword": "New Password",
+    "confirmPassword": "Confirm Password"
+  },
+  "settings": {
+    "general": "General",
+    "account": "Account",
+    "notifications": "Notifications",
+    "privacy": "Privacy",
+    "language": "Language",
+    "theme": "Theme",
+    "autoSave": "Auto Save"
+  },
+  "language": {
+    "en": "English",
+    "zh": "Chinese (Simplified)",
+    "fr": "French"
+  },
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "search": "Search",
+    "loading": "Loading...",
+    "error": "An error occurred",
+    "success": "Success!",
+    "confirm": "Confirm",
+    "back": "Back"
+  }
+} 

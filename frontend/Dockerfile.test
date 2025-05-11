@@ -1,0 +1,24 @@
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Install dependencies first (for better caching)
+COPY package.json package-lock.json ./
+RUN npm ci
+
+# Copy the rest of the application code
+COPY . .
+
+# Set environment variables
+ENV NODE_ENV=test
+ENV PORT=3000
+
+# Health check
+HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=3 \
+  CMD wget -q -O - http://localhost:3000/api/health || exit 1
+
+# Expose port
+EXPOSE 3000
+
+# Start the application in development mode for testing
+CMD ["npm", "run", "dev"] 

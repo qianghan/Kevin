@@ -1,0 +1,82 @@
+version: '3.8'
+
+services:
+  # Backend services
+  kai-api:
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile.test
+    ports:
+      - "4000:4000"
+    environment:
+      - NODE_ENV=test
+      - DB_CONNECTION_STRING=mongodb://mongo:27017/kai-test
+    depends_on:
+      - mongo
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      
+  # Database
+  mongo:
+    image: mongo:5.0
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-test-data:/data/db
+    
+  # UI services
+  kai-ui:
+    build:
+      context: ../../ui
+      dockerfile: Dockerfile.test
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=test
+      - API_URL=http://kai-api:4000
+    depends_on:
+      - kai-api
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      
+  # Frontend application
+  kai-frontend:
+    build:
+      context: ../
+      dockerfile: Dockerfile.test
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=test
+      - API_URL=http://kai-api:4000
+      - UI_URL=http://kai-ui:3001
+    depends_on:
+      - kai-ui
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      
+  # Test runner
+  test-runner:
+    build:
+      context: ./
+      dockerfile: Dockerfile
+    depends_on:
+      - kai-frontend
+    volumes:
+      - ./test-results:/app/test-results
+    environment:
+      - FRONTEND_URL=http://kai-frontend:3000
+      - API_URL=http://kai-api:4000
+      - UI_URL=http://kai-ui:3001
+
+volumes:
+  mongo-test-data: 

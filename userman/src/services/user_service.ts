@@ -2,6 +2,9 @@ import { compare, hash } from 'bcrypt';
 import { IUserService, UserProfileDTO } from './interfaces';
 import { IUserRepository } from './interfaces';
 import { UserDocument, UserPreferences } from '../models/user_model';
+import { sign } from 'jsonwebtoken';
+
+const JWT_SECRET = process.env.JWT_SECRET || 'default-secret-key';
 
 /**
  * Converts a UserDocument to a UserProfileDTO
@@ -40,24 +43,35 @@ export class UserService implements IUserService {
   /**
    * Authenticate a user with email and password
    */
-  async authenticate(email: string, password: string): Promise<UserProfileDTO | null> {
+  async authenticate(email: string, password: string): Promise<{ user: UserProfileDTO, token: string }> {
     try {
       const user = await this.userRepository.findByEmail(email);
       
       if (!user || !user.password) {
-        return null;
+        throw new Error('Invalid credentials');
       }
       
       const isPasswordValid = await compare(password, user.password);
       
       if (!isPasswordValid) {
-        return null;
+        throw new Error('Invalid credentials');
       }
       
-      return mapUserToDTO(user);
+      const userDTO = mapUserToDTO(user);
+      const token = sign(
+        { 
+          userId: userDTO.id,
+          email: userDTO.email,
+          role: userDTO.role
+        },
+        JWT_SECRET,
+        { expiresIn: '30d' }
+      );
+
+      return { user: userDTO, token };
     } catch (error) {
       console.error('Authentication error:', error);
-      return null;
+      throw error;
     }
   }
   

@@ -1,0 +1,27 @@
+{
+  "common": {
+    "loading": "加载中...",
+    "error": "发生错误",
+    "retry": "重试",
+    "cancel": "取消",
+    "save": "保存",
+    "delete": "删除",
+    "edit": "编辑",
+    "close": "关闭"
+  },
+  "chat": {
+    "newChat": "新对话",
+    "send": "发送",
+    "thinking": "思考中...",
+    "placeholder": "在这里输入您的消息...",
+    "emptyState": "开始新的对话"
+  },
+  "nav": {
+    "chat": "对话",
+    "profile": "个人资料",
+    "settings": "设置",
+    "logout": "退出登录"
+  },
+  "hello": "你好",
+  "welcome": "欢迎来到KAI！"
+} 

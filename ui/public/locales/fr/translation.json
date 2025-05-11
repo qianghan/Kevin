@@ -1,0 +1,27 @@
+{
+  "common": {
+    "loading": "Chargement...",
+    "error": "Une erreur est survenue",
+    "retry": "Réessayer",
+    "cancel": "Annuler",
+    "save": "Enregistrer",
+    "delete": "Supprimer",
+    "edit": "Modifier",
+    "close": "Fermer"
+  },
+  "chat": {
+    "newChat": "Nouvelle conversation",
+    "send": "Envoyer",
+    "thinking": "Réflexion...",
+    "placeholder": "Tapez votre message ici...",
+    "emptyState": "Démarrez une nouvelle conversation"
+  },
+  "nav": {
+    "chat": "Chat",
+    "profile": "Profil",
+    "settings": "Paramètres",
+    "logout": "Déconnexion"
+  },
+  "hello": "Bonjour",
+  "welcome": "Bienvenue chez KAI !"
+} 

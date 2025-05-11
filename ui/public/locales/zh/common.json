@@ -1,0 +1,63 @@
+{
+  "app": {
+    "title": "KAI",
+    "description": "您的AI学术助手"
+  },
+  "navigation": {
+    "home": "首页",
+    "chat": "聊天",
+    "profile": "个人资料",
+    "settings": "设置",
+    "help": "帮助",
+    "logout": "退出登录"
+  },
+  "chat": {
+    "newChat": "新建聊天",
+    "placeholder": "问我任何问题...",
+    "send": "发送",
+    "thinking": "思考中...",
+    "noMessages": "暂无消息。开始一个对话吧！",
+    "savedChats": "已保存的聊天",
+    "loadMore": "加载更多",
+    "exportChat": "导出聊天",
+    "deleteChat": "删除聊天",
+    "search": "搜索聊天"
+  },
+  "profile": {
+    "name": "姓名",
+    "email": "邮箱",
+    "language": "语言",
+    "darkMode": "深色模式",
+    "save": "保存更改",
+    "changePassword": "修改密码",
+    "currentPassword": "当前密码",
+    "newPassword": "新密码",
+    "confirmPassword": "确认密码"
+  },
+  "settings": {
+    "general": "通用",
+    "account": "账户",
+    "notifications": "通知",
+    "privacy": "隐私",
+    "language": "语言",
+    "theme": "主题",
+    "autoSave": "自动保存"
+  },
+  "language": {
+    "en": "英语",
+    "zh": "中文（简体）",
+    "fr": "法语"
+  },
+  "common": {
+    "save": "保存",
+    "cancel": "取消",
+    "delete": "删除",
+    "edit": "编辑",
+    "search": "搜索",
+    "loading": "加载中...",
+    "error": "发生错误",
+    "success": "成功！",
+    "confirm": "确认",
+    "back": "返回"
+  }
+} 

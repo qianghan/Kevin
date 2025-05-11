@@ -1,0 +1,63 @@
+{
+  "app": {
+    "title": "KAI",
+    "description": "Votre assistant académique alimenté par l'IA"
+  },
+  "navigation": {
+    "home": "Accueil",
+    "chat": "Chat",
+    "profile": "Profil",
+    "settings": "Paramètres",
+    "help": "Aide",
+    "logout": "Déconnexion"
+  },
+  "chat": {
+    "newChat": "Nouvelle conversation",
+    "placeholder": "Posez-moi n'importe quelle question...",
+    "send": "Envoyer",
+    "thinking": "Réflexion en cours...",
+    "noMessages": "Pas encore de messages. Commencez une conversation !",
+    "savedChats": "Conversations enregistrées",
+    "loadMore": "Charger plus",
+    "exportChat": "Exporter la conversation",
+    "deleteChat": "Supprimer la conversation",
+    "search": "Rechercher dans les conversations"
+  },
+  "profile": {
+    "name": "Nom",
+    "email": "Email",
+    "language": "Langue",
+    "darkMode": "Mode sombre",
+    "save": "Enregistrer les modifications",
+    "changePassword": "Changer le mot de passe",
+    "currentPassword": "Mot de passe actuel",
+    "newPassword": "Nouveau mot de passe",
+    "confirmPassword": "Confirmer le mot de passe"
+  },
+  "settings": {
+    "general": "Général",
+    "account": "Compte",
+    "notifications": "Notifications",
+    "privacy": "Confidentialité",
+    "language": "Langue",
+    "theme": "Thème",
+    "autoSave": "Sauvegarde automatique"
+  },
+  "language": {
+    "en": "Anglais",
+    "zh": "Chinois (simplifié)",
+    "fr": "Français"
+  },
+  "common": {
+    "save": "Enregistrer",
+    "cancel": "Annuler",
+    "delete": "Supprimer",
+    "edit": "Modifier",
+    "search": "Rechercher",
+    "loading": "Chargement...",
+    "error": "Une erreur est survenue",
+    "success": "Succès !",
+    "confirm": "Confirmer",
+    "back": "Retour"
+  }
+} 

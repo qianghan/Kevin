@@ -1,13 +1,13 @@
 import mongoose from 'mongoose';
 import { IUserRepository } from './interfaces';
-import { UserDocument, getUserModel } from '../models/user_model';
+import { UserDocument, getUserModel, UserModel } from '../models/user_model';
 
 /**
  * MongoDB implementation of the user repository
  * Follows Repository pattern for data access
  */
 export class MongoUserRepository implements IUserRepository {
-  private User: ReturnType<typeof getUserModel>;
+  private User: UserModel;
 
   /**
    * Constructor initializes the User model
@@ -23,7 +23,8 @@ export class MongoUserRepository implements IUserRepository {
    */
   async findById(id: string): Promise<UserDocument | null> {
     try {
-      return await this.User.findById(id);
+      const users = await this.User.findByIds([id]);
+      return users[0] || null;
     } catch (error) {
       console.error('Error finding user by ID:', error);
       return null;
@@ -51,8 +52,7 @@ export class MongoUserRepository implements IUserRepository {
    */
   async create(userData: Partial<UserDocument>): Promise<UserDocument> {
     try {
-      const user = new this.User(userData);
-      return await user.save();
+      return await this.User.create(userData);
     } catch (error) {
       console.error('Error creating user:', error);
       throw error;
@@ -67,15 +67,25 @@ export class MongoUserRepository implements IUserRepository {
    */
   async update(id: string, userData: Partial<UserDocument>): Promise<UserDocument | null> {
     try {
-      return await this.User.findByIdAndUpdate(
-        id,
-        { $set: userData },
-        { new: true }
-      );
+      const user = await this.findById(id);
+      if (!user) return null;
+
+      Object.assign(user, userData);
+      return await user.save();
     } catch (error) {
       console.error('Error updating user:', error);
       return null;
     }
+  }
+
+  /**
+   * Update a user by ID (alias for update)
+   * @param id User ID
+   * @param userData User data to update
+   * @returns Updated user document or null if not found
+   */
+  async updateById(id: string, userData: Partial<UserDocument>): Promise<UserDocument | null> {
+    return this.update(id, userData);
   }
 
   /**
@@ -85,8 +95,11 @@ export class MongoUserRepository implements IUserRepository {
    */
   async delete(id: string): Promise<boolean> {
     try {
-      const result = await this.User.findByIdAndDelete(id);
-      return !!result;
+      const user = await this.findById(id);
+      if (!user) return false;
+
+      await user.deleteOne();
+      return true;
     } catch (error) {
       console.error('Error deleting user:', error);
       return false;
@@ -107,7 +120,9 @@ export class MongoUserRepository implements IUserRepository {
         case 'parents':
           return await this.User.findParents(userId);
         case 'partners':
-          return await this.User.find({ partnerIds: userId });
+          const user = await this.findById(userId);
+          if (!user || !user.partnerIds) return [];
+          return await this.User.findByIds(user.partnerIds.map(id => id.toString()));
         default:
           return [];
       }
@@ -151,11 +166,18 @@ export class MongoUserRepository implements IUserRepository {
    */
   async findAll(filter?: Partial<UserDocument>): Promise<UserDocument[]> {
     try {
-      const UserModel = getUserModel();
-      return await UserModel.find(filter || {}).exec();
+      return await this.User.find(filter || {}).exec();
     } catch (error) {
       console.error('Error finding all users:', error);
       throw new Error('Database error while finding users');
     }
+  }
+
+  /**
+   * Get the user model
+   * @returns The user model
+   */
+  getUserModel(): UserModel {
+    return this.User;
   }
 } 

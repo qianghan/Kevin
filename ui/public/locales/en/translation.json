@@ -1,0 +1,27 @@
+{
+  "common": {
+    "loading": "Loading...",
+    "error": "An error occurred",
+    "retry": "Retry",
+    "cancel": "Cancel",
+    "save": "Save",
+    "delete": "Delete",
+    "edit": "Edit",
+    "close": "Close"
+  },
+  "chat": {
+    "newChat": "New Chat",
+    "send": "Send",
+    "thinking": "Thinking...",
+    "placeholder": "Type your message here...",
+    "emptyState": "Start a new conversation"
+  },
+  "nav": {
+    "chat": "Chat",
+    "profile": "Profile",
+    "settings": "Settings",
+    "logout": "Logout"
+  },
+  "hello": "Hello",
+  "welcome": "Welcome to KAI!"
+} 
