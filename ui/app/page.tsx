@@ -14,8 +14,9 @@ export default function Home() {
     if (status === 'authenticated') {
       router.push('/chat');
     } else if (status === 'unauthenticated') {
-      // If not authenticated, redirect to login page
-      router.push('/login');
+      // If not authenticated, redirect to login page with language
+      const lang = window.navigator.language.split('-')[0] || 'en';
+      router.push(`/${lang}/login`);
     }
     // If status is 'loading', we'll wait for the status to change
   }, [status, router]);

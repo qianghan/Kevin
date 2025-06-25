@@ -14,8 +14,8 @@ export function LoginForm({ callbackUrl = '/dashboard' }: LoginFormProps) {
   const { login, isLoading, error } = useAuth();
   const router = useRouter();
   const [formData, setFormData] = useState<LoginCredentials>({
-    email: '',
-    password: '',
+    email: 'qiang@kevin.ai',
+    password: 'kevin',
     rememberMe: false
   });
 
@@ -36,9 +36,22 @@ export function LoginForm({ callbackUrl = '/dashboard' }: LoginFormProps) {
     }
   };
 
+  // Add help text for users to know which credentials to use
+  const helpText = (
+    <div className="text-sm text-gray-600 mb-4">
+      <p>Admin credentials:</p>
+      <ul className="list-disc list-inside">
+        <li>Email: qiang@kevin.ai</li>
+        <li>Password: kevin</li>
+      </ul>
+    </div>
+  );
+
   return (
     <div className="w-full max-w-md mx-auto bg-white p-8 rounded-lg shadow-md">
       <h2 className="text-2xl font-bold text-center mb-6">Sign In</h2>
+      
+      {helpText}
       
       {error && (
         <div className="mb-4 p-3 bg-red-50 border border-red-300 text-red-900 rounded">

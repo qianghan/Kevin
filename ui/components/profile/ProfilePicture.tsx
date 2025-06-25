@@ -1,14 +1,14 @@
 'use client';
 
 import React, { useState, useRef } from 'react';
-import { useUserProfile } from '@/hooks/useUserProfile';
+import { useUserContext } from '@/features/user/context/UserContext';
 import Image from 'next/image';
 
 export function ProfilePicture() {
-  const { user, uploadProfilePicture, isLoading, error } = useUserProfile();
+  const { profile, updateProfile, isLoading, error } = useUserContext();
   const [isDragging, setIsDragging] = useState(false);
   const [success, setSuccess] = useState(false);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | undefined>(undefined);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleDragEnter = (e: React.DragEvent) => {
@@ -49,7 +49,7 @@ export function ProfilePicture() {
     
     // Upload the image
     setSuccess(false);
-    const result = await uploadProfilePicture(file);
+    const result = await updateProfile({ image: previewUrl });
     if (result) {
       setSuccess(true);
       // Hide success message after 3 seconds
@@ -77,7 +77,7 @@ export function ProfilePicture() {
     fileInputRef.current?.click();
   };
 
-  const profileImage = previewUrl || user?.profilePicture || '/default-avatar.png';
+  const profileImage = previewUrl || profile?.image || '/default-avatar.png';
 
   return (
     <div className="p-4 max-w-md mx-auto">

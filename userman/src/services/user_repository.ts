@@ -1,6 +1,7 @@
-import mongoose from 'mongoose';
 import { IUserRepository } from './interfaces';
-import { UserDocument, getUserModel, UserModel } from '../models/user_model';
+import { UserDocument, UserModel } from '../models/user_model';
+import mongoose from 'mongoose';
+import { NotFoundError } from '../utils/errors';
 
 /**
  * MongoDB implementation of the user repository
@@ -13,7 +14,7 @@ export class MongoUserRepository implements IUserRepository {
    * Constructor initializes the User model
    */
   constructor() {
-    this.User = getUserModel();
+    this.User = mongoose.model<UserDocument, UserModel>('User');
   }
 
   /**
@@ -22,13 +23,7 @@ export class MongoUserRepository implements IUserRepository {
    * @returns User document or null if not found
    */
   async findById(id: string): Promise<UserDocument | null> {
-    try {
-      const users = await this.User.findByIds([id]);
-      return users[0] || null;
-    } catch (error) {
-      console.error('Error finding user by ID:', error);
-      return null;
-    }
+    return this.User.findById(id);
   }
 
   /**
@@ -37,55 +32,31 @@ export class MongoUserRepository implements IUserRepository {
    * @returns User document or null if not found
    */
   async findByEmail(email: string): Promise<UserDocument | null> {
-    try {
-      return await this.User.findByEmail(email);
-    } catch (error) {
-      console.error('Error finding user by email:', error);
-      return null;
-    }
+    return this.User.findByEmail(email);
   }
 
   /**
    * Create a new user
-   * @param userData User data to create
+   * @param data User data to create
    * @returns Created user document
    */
-  async create(userData: Partial<UserDocument>): Promise<UserDocument> {
-    try {
-      return await this.User.create(userData);
-    } catch (error) {
-      console.error('Error creating user:', error);
-      throw error;
-    }
+  async create(data: Partial<UserDocument>): Promise<UserDocument> {
+    const user = new this.User(data);
+    return user.save();
   }
 
   /**
    * Update a user
    * @param id User ID
-   * @param userData User data to update
+   * @param data User data to update
    * @returns Updated user document or null if not found
    */
-  async update(id: string, userData: Partial<UserDocument>): Promise<UserDocument | null> {
-    try {
-      const user = await this.findById(id);
-      if (!user) return null;
-
-      Object.assign(user, userData);
-      return await user.save();
-    } catch (error) {
-      console.error('Error updating user:', error);
-      return null;
+  async update(id: string, data: Partial<UserDocument>): Promise<UserDocument> {
+    const user = await this.User.findByIdAndUpdate(id, data, { new: true });
+    if (!user) {
+      throw new NotFoundError('User not found');
     }
-  }
-
-  /**
-   * Update a user by ID (alias for update)
-   * @param id User ID
-   * @param userData User data to update
-   * @returns Updated user document or null if not found
-   */
-  async updateById(id: string, userData: Partial<UserDocument>): Promise<UserDocument | null> {
-    return this.update(id, userData);
+    return user;
   }
 
   /**
@@ -94,16 +65,8 @@ export class MongoUserRepository implements IUserRepository {
    * @returns True if deleted, false otherwise
    */
   async delete(id: string): Promise<boolean> {
-    try {
-      const user = await this.findById(id);
-      if (!user) return false;
-
-      await user.deleteOne();
-      return true;
-    } catch (error) {
-      console.error('Error deleting user:', error);
-      return false;
-    }
+    const result = await this.User.findByIdAndDelete(id);
+    return !!result;
   }
 
   /**
@@ -116,13 +79,13 @@ export class MongoUserRepository implements IUserRepository {
     try {
       switch (relationship) {
         case 'students':
-          return await this.User.findStudents(userId);
+          return await this.findStudents(userId);
         case 'parents':
-          return await this.User.findParents(userId);
+          return await this.findParents(userId);
         case 'partners':
           const user = await this.findById(userId);
           if (!user || !user.partnerIds) return [];
-          return await this.User.findByIds(user.partnerIds.map(id => id.toString()));
+          return await this.findByIds(user.partnerIds.map(id => id.toString()));
         default:
           return [];
       }
@@ -179,5 +142,81 @@ export class MongoUserRepository implements IUserRepository {
    */
   getUserModel(): UserModel {
     return this.User;
+  }
+
+  async updatePassword(id: string, hashedPassword: string): Promise<UserDocument> {
+    const user = await this.User.findByIdAndUpdate(
+      id,
+      { password: hashedPassword },
+      { new: true }
+    );
+
+    if (!user) {
+      throw new NotFoundError('User not found');
+    }
+
+    return user;
+  }
+
+  async updatePreferences(id: string, preferences: any): Promise<UserDocument> {
+    const user = await this.User.findByIdAndUpdate(
+      id,
+      { preferences },
+      { new: true }
+    );
+
+    if (!user) {
+      throw new NotFoundError('User not found');
+    }
+
+    return user;
+  }
+
+  async findByIds(ids: string[]): Promise<UserDocument[]> {
+    return this.User.find({ _id: { $in: ids } });
+  }
+
+  async findByRole(role: string): Promise<UserDocument[]> {
+    return this.User.find({ role });
+  }
+
+  async findByRoles(roles: string[]): Promise<UserDocument[]> {
+    return this.User.find({ role: { $in: roles } });
+  }
+
+  async findByService(serviceName: string): Promise<UserDocument[]> {
+    return this.User.find({ services: serviceName });
+  }
+
+  async findByServiceAndRole(serviceName: string, role: string): Promise<UserDocument[]> {
+    return this.User.find({ services: serviceName, role });
+  }
+
+  async findByServiceAndRoles(serviceName: string, roles: string[]): Promise<UserDocument[]> {
+    return this.User.find({ services: serviceName, role: { $in: roles } });
+  }
+
+  async findStudents(userId: string): Promise<UserDocument[]> {
+    const user = await this.findById(userId);
+    if (!user || !user.studentIds || user.studentIds.length === 0) {
+      return [];
+    }
+    return this.findByIds(user.studentIds.map(id => id.toString()));
+  }
+
+  async findParents(userId: string): Promise<UserDocument[]> {
+    const user = await this.findById(userId);
+    if (!user || !user.parentIds || user.parentIds.length === 0) {
+      return [];
+    }
+    return this.findByIds(user.parentIds.map(id => id.toString()));
+  }
+
+  async findPartners(userId: string): Promise<UserDocument[]> {
+    const user = await this.findById(userId);
+    if (!user || !user.partnerIds || user.partnerIds.length === 0) {
+      return [];
+    }
+    return this.findByIds(user.partnerIds.map(id => id.toString()));
   }
 } 

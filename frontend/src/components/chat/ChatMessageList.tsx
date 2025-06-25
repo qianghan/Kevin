@@ -18,12 +18,16 @@ import AIMessage from './AIMessage';
  */
 const estimateMessageHeight = (content: string): number => {
   const baseHeight = 80; // Base height for avatar, timestamp, etc.
-  const charsPerLine = 60; // Estimated characters per line
+  const charsPerLine = 40; // Reduced from 60 to account for word wrapping
   const lineHeight = 24; // Height per line in pixels
+  const maxHeight = 800; // Maximum height for a single message
   
-  // Calculate lines based on content length (rough estimate)
+  // Calculate lines based on content length and word wrapping
   const lines = Math.ceil(content.length / charsPerLine);
-  return baseHeight + (lines * lineHeight);
+  const estimatedHeight = baseHeight + (lines * lineHeight);
+  
+  // Return the minimum of estimated height and max height
+  return Math.min(estimatedHeight, maxHeight);
 };
 
 /**
@@ -60,7 +64,7 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
     const isLast = index === messages.length - 1;
     
     return (
-      <Box style={style} width="100%" px={4}>
+      <Box style={style} width="100%" px={4} overflow="hidden">
         {message.role === 'user' ? (
           <UserMessage
             message={message}

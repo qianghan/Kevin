@@ -1,5 +1,19 @@
 import { Request, Response, NextFunction } from 'express';
 import { IAuthenticationService } from '../services/interfaces';
+import { getAuthService } from '../services';
+import { UserRole } from '../models/user_model';
+
+declare global {
+  namespace Express {
+    interface Request {
+      userId?: string;
+      user?: {
+        id: string;
+        role: UserRole;
+      };
+    }
+  }
+}
 
 /**
  * Middleware to check if the user is authenticated
@@ -46,7 +60,7 @@ export const authenticate = (authService: IAuthenticationService) => {
  */
 export const checkAdminRole = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    if (!req.user || req.user.role !== 'admin') {
+    if (!req.user || req.user.role !== UserRole.ADMIN) {
       return res.status(403).json({
         success: false,
         message: 'Admin privileges required'
@@ -68,7 +82,7 @@ export const checkAdminRole = async (req: Request, res: Response, next: NextFunc
  */
 export const checkSupportRole = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    if (!req.user || (req.user.role !== 'support' && req.user.role !== 'admin')) {
+    if (!req.user || (req.user.role !== UserRole.ADMIN)) {
       return res.status(403).json({
         success: false,
         message: 'Support privileges required'
@@ -81,6 +95,41 @@ export const checkSupportRole = async (req: Request, res: Response, next: NextFu
     res.status(500).json({
       success: false,
       message: 'Authorization check failed'
+    });
+  }
+};
+
+/**
+ * Middleware to validate JWT token
+ */
+export const validateToken = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({
+        success: false,
+        message: 'No token provided'
+      });
+    }
+
+    const token = authHeader.split(' ')[1];
+    const authService = getAuthService();
+    const validation = await authService.validateToken(token);
+
+    if (!validation.isValid) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid or expired token'
+      });
+    }
+
+    req.userId = validation.userId;
+    next();
+  } catch (error) {
+    console.error('Token validation error:', error);
+    res.status(401).json({
+      success: false,
+      message: 'Token validation failed'
     });
   }
 }; 

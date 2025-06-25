@@ -1,5 +1,6 @@
 import express, { Request, Response } from 'express';
 import { IUserService } from '../services/interfaces';
+import { isAuthenticated } from '../middleware/auth';
 
 /**
  * Factory function to create an authentication router
@@ -13,28 +14,25 @@ export const createAuthRouter = (userService: IUserService) => {
    */
   router.post('/register', async (req: Request, res: Response) => {
     try {
-      const { name, email, password, role } = req.body;
+      const { email, password, role, firstName, lastName } = req.body;
       
       // Basic validation
-      if (!name || !email || !password) {
+      if (!email || !password) {
         return res.status(400).json({ message: 'Missing required fields' });
       }
       
       // Register user
       try {
         const user = await userService.register({
-          name,
           email,
+          firstName,
+          lastName,
           role: role || 'student'
         }, password);
         
-        // Remove sensitive data from response
-        const userResponse = { ...user };
-        delete (userResponse as any).password;
-        
         res.status(201).json({ 
           message: 'User registered successfully',
-          data: userResponse
+          data: user
         });
       } catch (error: any) {
         res.status(409).json({ message: error.message || 'Registration failed' });
@@ -57,23 +55,20 @@ export const createAuthRouter = (userService: IUserService) => {
         return res.status(400).json({ message: 'Missing email or password' });
       }
       
-      // Authenticate user
-      const user = await userService.authenticate(email, password);
-      
-      if (!user) {
+      try {
+        // Authenticate user
+        const { user, token } = await userService.authenticate(email, password);
+        
+        res.json({ 
+          message: 'Login successful',
+          data: {
+            user,
+            token
+          }
+        });
+      } catch (authError) {
         return res.status(401).json({ message: 'Invalid email or password' });
       }
-      
-      // In a real implementation, this is where you would generate JWT tokens
-      // or set up sessions
-      
-      res.json({ 
-        message: 'Login successful',
-        data: {
-          user,
-          // token: 'jwt-token-would-go-here'
-        }
-      });
     } catch (error) {
       console.error('Login error:', error);
       res.status(500).json({ message: 'Internal server error' });

@@ -39,6 +39,10 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
       display="flex"
       flexDirection="column"
       boxShadow="sm"
+      maxWidth={{ base: '100%', md: '90vw', lg: '1200px', xl: '1400px' }}
+      width="100%"
+      mx="auto"
+      my={8}
       {...boxProps}
     >
       {/* Loading overlay */}

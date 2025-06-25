@@ -87,9 +87,9 @@ export default function DashboardLayout({
         )}
 
         {/* Sidebar */}
-        <div className={`bg-white shadow-md transition-all duration-300 ${
-          sidebarCollapsed ? 'w-0 -ml-64' : 'w-64'
-        } z-10`}>
+        <aside className={`fixed inset-y-0 left-0 z-10 bg-white shadow-md transition-all duration-300 ${
+          sidebarCollapsed ? 'w-0 -translate-x-full' : 'w-64 translate-x-0'
+        }`}>
           <div className="h-full flex flex-col">
             <div className="p-4 border-b flex justify-between items-center">
               <div className="flex items-center">
@@ -109,7 +109,7 @@ export default function DashboardLayout({
               </button>
             </div>
             
-            <nav className="p-4 flex-grow">
+            <nav className="p-4 flex-grow overflow-y-auto">
               <ul className="space-y-2">
                 <li>
                   <Link 
@@ -204,12 +204,14 @@ export default function DashboardLayout({
               </div>
             </div>
           </div>
-        </div>
+        </aside>
 
         {/* Main content */}
-        <div className="flex-1 overflow-hidden transition-all duration-300">
+        <main className={`flex-1 transition-all duration-300 ${
+          sidebarCollapsed ? 'ml-0' : 'ml-64'
+        }`}>
           {children}
-        </div>
+        </main>
       </div>
     </UserProvider>
   );

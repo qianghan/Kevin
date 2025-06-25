@@ -1,26 +1,58 @@
 'use client';
 
-import React, { Suspense } from 'react';
+import React, { Suspense, useEffect } from 'react';
 import { useRouteParams } from '@/hooks/useRouteParams';
 import ServerLangPage from './ServerPage';
+import { useSession } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
 
 function ClientLangPage({
   params,
 }: {
   params: { lang: string } | Promise<{ lang: string }>;
 }) {
-  // Use our custom hook to safely access params
   const routeParams = useRouteParams(params);
+  const { status } = useSession();
+  const router = useRouter();
+
+  // Redirect unauthenticated users to /[lang]/login
+  useEffect(() => {
+    if (routeParams.lang && status === "unauthenticated") {
+      router.replace(`/${routeParams.lang}/login`);
+    }
+  }, [routeParams.lang, status, router]);
   
-  // Show loading state until params are resolved
-  if (!routeParams.lang) {
-    return <div>Loading...</div>;
+  // Show loading state until params are resolved or session is checked
+  if (!routeParams.lang || status === "loading") {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mx-auto"></div>
+          <p className="mt-4 text-lg text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+  
+  // If authenticated, redirect to chat
+  if (status === "authenticated") {
+    router.replace(`/${routeParams.lang}/chat`);
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mx-auto"></div>
+          <p className="mt-4 text-lg text-gray-600">Redirecting to chat...</p>
+        </div>
+      </div>
+    );
   }
   
   return (
-    <main>
-      <h1>Welcome to KAI ({routeParams.lang})</h1>
-      <p>This is the {routeParams.lang} landing page.</p>
+    <main className="flex items-center justify-center min-h-screen bg-gray-50">
+      <div className="text-center">
+        <h1 className="text-3xl font-bold text-gray-900 mb-4">Welcome to KAI ({routeParams.lang})</h1>
+        <p className="text-lg text-gray-600">Please log in to continue.</p>
+      </div>
     </main>
   );
 }

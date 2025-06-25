@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Providers } from "./providers";
 import "./globals.css";
+import { StagewiseToolbar } from '@stagewise/toolbar-next';
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -23,9 +24,13 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const stagewiseConfig = { plugins: [] };
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`}>
       <body>
+        {process.env.NODE_ENV === 'development' && (
+          <StagewiseToolbar config={stagewiseConfig} />
+        )}
         <Providers>
           {children}
         </Providers>

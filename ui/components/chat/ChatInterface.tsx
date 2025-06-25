@@ -21,16 +21,18 @@
  *    using chatService.checkHealth()
  */
 
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
-import { ChatRequest, ChatResponse } from '@/services/ChatService';
+import { ChatRequest, ChatResponse, ChatService } from '@/services/ChatService';
 import { ChatMessage } from '@/models/ChatSession';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { generateContextSummary } from '@/lib/utils/contextSummary';
 import { useChat } from '@/hooks/useChat';
 import { chatService } from '@/services/ChatService';
+import { backendApiService } from '@/lib/services/BackendApiService';
+import Image from 'next/image';
 
 /**
  * MIGRATION STATUS:
@@ -87,15 +89,22 @@ export default function ChatInterface({
   onNewSession,
   initialMessages = [] 
 }: ChatInterfaceProps) {
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [conversations, setConversations] = useState<any[]>([]);
+  const [isLoadingConversations, setIsLoadingConversations] = useState(false);
+  const [hasMoreConversations, setHasMoreConversations] = useState(true);
+  const [page, setPage] = useState(1);
+  const conversationsEndRef = useRef<HTMLDivElement>(null);
+  const conversationsContainerRef = useRef<HTMLDivElement>(null);
   const [messages, setMessages] = useState<ChatMessage[]>(() => {
-    // Ensure initialMessages is properly formatted
     if (!initialMessages || !Array.isArray(initialMessages)) {
       console.warn('Initial messages is not an array:', typeof initialMessages);
       return [];
     }
-    
-    // Map to ensure consistent format
     return initialMessages.map(msg => ({
       role: msg.role || 'assistant',
       content: msg.content || '',
@@ -113,122 +122,92 @@ export default function ChatInterface({
   const [streamingId, setStreamingId] = useState<string | null>(null);
   const [isSearchMode, setIsSearchMode] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  // Track the last saved state to prevent duplicate saves
   const [lastSavedHash, setLastSavedHash] = useState<string>('');
   const [contextSummary, setContextSummary] = useState<string>('');
-  
-  // Use a ref to keep track of the accumulated message content
-  // This is more reliable than relying only on state for capturing content
   const accumulatedContentRef = useRef('');
-  
   const eventSourceRef = useRef<EventSource | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
-  const router = useRouter();
-
-  // Add a ref to track if a message has been added via the answer event
   const messageAddedViaAnswerEventRef = useRef(false);
 
-  // Use the Chat service hook with the functions it exposes
-  const { 
-    saveConversation,
-    getConversation,
-    sendChatQuery,
-    getStreamUrl,
-    isSaving: hookIsSaving
-  } = useChat();
-
-  // Group messages into exchanges (user + assistant pairs)
-  const messageExchanges = useMemo(() => {
-    const exchanges: ChatMessage[][] = [];
-    let currentExchange: ChatMessage[] = [];
+  // Fetch conversations with pagination
+  const fetchConversations = useCallback(async (pageNum: number, append: boolean = false) => {
+    if (isLoadingConversations || !hasMoreConversations) return;
     
-    messages.forEach(message => {
-      currentExchange.push(message);
-      if (message.role === 'assistant') {
-        exchanges.push([...currentExchange]);
-        currentExchange = [];
-      }
-    });
-    
-    // Add any remaining messages
-    if (currentExchange.length > 0) {
-      exchanges.push(currentExchange);
-    }
-    
-    return exchanges;
-  }, [messages]);
-
-  // Log component initialization
-  useEffect(() => {
-    console.log('ChatInterface mounted/initialized', 
-      { initialMessagesCount: initialMessages.length, sessionId });
-  }, []);
-
-  // Scroll to bottom when new messages are added
-  useEffect(() => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
-    }
-    
-    // Add debug logging to track state changes
-    console.log('State updated - Messages:', messages.length, 'Streaming:', streamingMessage ? 'yes' : 'no');
-  }, [messages, streamingMessage, thinkingSteps]);
-
-  // Clean up event source on unmount
-  useEffect(() => {
-    return () => {
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-      }
-    };
-  }, []);
-  
-  // Save conversation when navigating away
-  useEffect(() => {
-    // Create a function to save the conversation
-    const saveBeforeUnload = async () => {
-      if (messages.length > 0 && conversationId) {
-        console.log('Saving conversation before unmount/navigation');
-        await saveConversation(conversationId, messages, contextSummary);
-      }
-    };
-    
-    // Use the beforeunload event to save when navigating away
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (messages.length > 0 && conversationId && !lastSavedHash) {
-        // This won't actually save in modern browsers due to security,
-        // but it will show a confirmation dialog
-        e.preventDefault();
-        e.returnValue = '';
-      }
-    };
-    
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    
-    // Return cleanup function for component unmount
-    return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
+    setIsLoadingConversations(true);
+    try {
+      const response = await ChatService.listConversations({
+        page: pageNum,
+        limit: 20,
+        sortBy: 'updated_at',
+        sortOrder: 'desc'
+      });
       
-      // Save on unmount
-      if (messages.length > 0 && conversationId) {
-        saveBeforeUnload();
+      if (!response || response.length === 0) {
+        setHasMoreConversations(false);
+      } else {
+        setConversations(prev => 
+          append ? [...prev, ...response] : response
+        );
+        setPage(pageNum);
       }
-    };
-  }, [messages, conversationId, contextSummary, saveConversation, lastSavedHash]);
+    } catch (error) {
+      console.error('Error fetching conversations:', error);
+      setHasMoreConversations(false); // Stop trying to load more on error
+    } finally {
+      setIsLoadingConversations(false);
+    }
+  }, [isLoadingConversations, hasMoreConversations]);
 
-  // Generate a hash of the current messages to track if they've been saved
-  const generateMessageHash = (msgs: ChatMessage[]): string => {
-    return msgs.map(m => `${m.role}:${m.content.substring(0, 50)}`).join('|');
+  // Initial fetch
+  useEffect(() => {
+    if (status === 'authenticated') {
+      fetchConversations(1);
+    }
+  }, [fetchConversations, status]);
+
+  // Handle scroll for infinite loading
+  const handleConversationsScroll = useCallback(() => {
+    if (!conversationsContainerRef.current || isLoadingConversations || !hasMoreConversations) return;
+    
+    const { scrollTop, scrollHeight, clientHeight } = conversationsContainerRef.current;
+    if (scrollHeight - scrollTop <= clientHeight * 1.5) {
+      fetchConversations(page + 1, true);
+      }
+  }, [fetchConversations, page, isLoadingConversations, hasMoreConversations]);
+
+  // Add scroll listener
+  useEffect(() => {
+    const container = conversationsContainerRef.current;
+    if (container) {
+      container.addEventListener('scroll', handleConversationsScroll);
+      return () => container.removeEventListener('scroll', handleConversationsScroll);
+    }
+  }, [handleConversationsScroll]);
+
+  // Filter conversations based on search query
+  const filteredConversations = useMemo(() => {
+    if (!searchQuery) return conversations;
+    return conversations.filter(conv => 
+      conv.title.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }, [conversations, searchQuery]);
+    
+  // Handle navigation to different sections
+  const handleNavigation = (path: string) => {
+    router.push(path);
   };
 
-  // Update context summary when messages change
-  useEffect(() => {
-    if (messages.length > 0) {
-      const summary = generateContextSummary(messages);
-      setContextSummary(summary);
-    }
-  }, [messages]);
+  // Handle conversation click
+  const handleConversationClick = (conversationId: string) => {
+    router.push(`/chat?id=${conversationId}`);
+  };
+
+  // Add a function to toggle search mode
+  const toggleSearchMode = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsSearchMode(!isSearchMode);
+  };
 
   const handleSubmit = async (event?: React.FormEvent<HTMLFormElement> | React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (event) {
@@ -267,7 +246,7 @@ export default function ChatInterface({
     }
     
     // Reset all state for new response
-    setIsThinking(true); // Always set thinking to true when we start a response
+    setIsThinking(true);
     setThinkingSteps([]);
     setStreamingMessage('');
     setIsLoading(true);
@@ -285,165 +264,35 @@ export default function ChatInterface({
         conversation_id: conversationId,
         context_summary: contextSummary,
         stream: true,
-        debug_mode: true // Enable debug mode to get thinking steps
-      };
-      
-      console.log('Sending chat request with debug_mode enabled:', {
-        query: query.length > 50 ? `${query.substring(0, 50)}...` : query,
-        conversation_id: conversationId,
-        context_summary_length: contextSummary?.length || 0,
         debug_mode: true
-      });
-      
-      // Get streaming URL using the ChatService for better error handling and logging
-      const streamUrl = chatService.getStreamUrl(chatRequest);
-      console.log('Stream URL generated successfully');
-      
-      // Create synthetic thinking step immediately
-      const initialStep = {
-        type: 'thinking',
-        description: 'Starting request to DeepSeek r1',
-        time: new Date().toTimeString().split(' ')[0],
-        duration_ms: 0
       };
-      setThinkingSteps([initialStep]);
+      
+      // Get streaming URL using the BackendApiService
+      const streamUrl = backendApiService.getStreamUrl(chatRequest);
       
       // Create new event source
       const eventSource = new EventSource(streamUrl);
       eventSourceRef.current = eventSource;
       
-      // Setup progressive synthetic thinking steps with constant reference for cleanup
-      const syntheticSteps = [
-        'Starting query processing',
-        'Analyzing query context',
-        'Processing with DeepSeek r1',
-        'Reasoning through the question',
-        'Formulating response',
-        'Organizing content',
-        'Finalizing answer'
-      ];
-
-      // Add first synthetic step immediately after connection establishes
-      setTimeout(() => {
-        console.log('Adding first synthetic step');
-        if (isThinking) {
-          const newStep = {
-            type: 'thinking',
-            description: syntheticSteps[0],
-            time: new Date().toTimeString().split(' ')[0],
-            duration_ms: 500
-          };
-          setThinkingSteps(prev => {
-            // Check if we already have this step
-            const hasStep = prev.some(step => step.description === newStep.description);
-            if (hasStep) {
-              console.log('Step already exists, not adding duplicate:', newStep.description);
-              return prev;
-            }
-            console.log('Adding synthetic step:', newStep.description);
-            return [...prev, newStep];
-          });
-        }
-      }, 500);
-      
-      // Add remaining synthetic steps at intervals
-      let stepCount = 1; // Start with the second step (index 1)
-      const syntheticStepsInterval = setInterval(() => {
-        console.log('Synthetic steps interval fired, step:', stepCount);
-        
-        if (stepCount < syntheticSteps.length && isThinking) {
-          const newStep = {
-            type: 'thinking',
-            description: syntheticSteps[stepCount],
-            time: new Date().toTimeString().split(' ')[0],
-            duration_ms: (stepCount + 1) * 500
-          };
-          
-          setThinkingSteps(prev => {
-            // Check if we already have this step
-            const hasStep = prev.some(step => step.description === newStep.description);
-            if (hasStep) {
-              console.log('Step already exists, not adding duplicate:', newStep.description);
-              return prev;
-            }
-            console.log('Adding synthetic step:', newStep.description);
-            return [...prev, newStep];
-          });
-          
-          stepCount++;
-        } else {
-          console.log('Clearing synthetic steps interval');
-          clearInterval(syntheticStepsInterval);
-        }
-      }, 2000); // 2 seconds between steps
-      
-      // Log connection state changes
-      eventSource.onopen = () => {
-        console.log('EventSource connection opened');
-      };
-      
-      // Set up event listeners with better debugging
-      eventSource.addEventListener('thinking_start', (e) => {
-        console.log('Thinking START event received:', e.data);
-        handleThinkingStart(e);
-      });
-      
-      eventSource.addEventListener('thinking_update', (e) => {
-        console.log('Thinking UPDATE event received:', e.data);
-        handleThinkingUpdate(e);
-      });
-      
-      eventSource.addEventListener('thinking_end', (e) => {
-        console.log('Thinking END event received:', e.data);
-        handleThinkingEnd(e);
-      });
-      
-      eventSource.addEventListener('answer_start', (e) => {
-        console.log('Answer START event received');
-        handleAnswerStart();
-      });
-      
-      eventSource.addEventListener('answer_chunk', (e) => {
-        console.log('Answer CHUNK event received');
-        handleAnswerChunk(e as MessageEvent);
-      });
-      
-      // Add handler for the full answer event
-      eventSource.addEventListener('answer', (e) => {
-        console.log('Answer event received');
-        handleAnswer(e as MessageEvent);
-      });
-      
-      eventSource.addEventListener('document', (e) => {
-        console.log('Document event received');
-        handleDocument(e as MessageEvent);
-      });
-      
-      eventSource.addEventListener('done', (e) => {
-        console.log('Done event received');
-        handleDone(e as MessageEvent);
-      });
-      
-      eventSource.addEventListener('error', (e) => {
-        console.log('Error event received');
-        handleError(e as MessageEvent);
-      });
-      
-      // Clean up function for synthetic steps when done
-      const cleanup = () => {
-        console.log('Cleaning up synthetic steps interval');
-        clearInterval(syntheticStepsInterval);
-      };
+      // Set up event listeners
+      eventSource.addEventListener('thinking_start', handleThinkingStart);
+      eventSource.addEventListener('thinking_update', handleThinkingUpdate);
+      eventSource.addEventListener('thinking_end', handleThinkingEnd);
+      eventSource.addEventListener('answer_start', handleAnswerStart);
+      eventSource.addEventListener('answer_chunk', handleAnswerChunk);
+      eventSource.addEventListener('answer', handleAnswer);
+      eventSource.addEventListener('document', handleDocument);
+      eventSource.addEventListener('done', handleDone);
+      eventSource.addEventListener('error', handleError);
       
       // Handle errors
       eventSource.onerror = (error) => {
-        console.log('EventSource connection error occurred:', error);
+        console.error('EventSource connection error:', error);
         eventSource.close();
         setIsLoading(false);
         setIsThinking(false);
-        cleanup();
         
-        // Add user-friendly error message to the chat
+        // Add error message to chat
         const errorMessage: ChatMessage = {
           role: 'assistant',
           content: "I'm sorry, there was an error connecting to the chat service. Please try again later.",
@@ -451,18 +300,8 @@ export default function ChatInterface({
         };
         setMessages(prev => [...prev, errorMessage]);
       };
-      
-      // Return cleanup function
-      return () => {
-        cleanup();
-      };
     } catch (error) {
-      console.error('Error creating stream URL:', error instanceof Error ? error.message : String(error), {
-        timestamp: new Date().toISOString(),
-        query_length: query?.length || 0
-      });
-      
-      // Handle error gracefully in the UI
+      console.error('Error creating stream URL:', error);
       setIsLoading(false);
       setIsThinking(false);
       
@@ -473,199 +312,78 @@ export default function ChatInterface({
         timestamp: new Date()
       };
       setMessages(prev => [...prev, errorMessage]);
-      return;
     }
   };
 
   // Event handlers for streaming
   const handleThinkingStart = (e: MessageEvent) => {
-    console.log('handleThinkingStart called with data:', e.data);
     setIsThinking(true);
     try {
       const data = JSON.parse(e.data);
-      console.log('Thinking started:', data);
-      logThinkingStep('THINKING START', data, e.data);
+      setThinkingSteps([{
+        type: 'thinking',
+        description: 'Starting to process your request',
+        time: new Date().toTimeString().split(' ')[0],
+        duration_ms: 0
+      }]);
     } catch (err) {
       console.error('Error parsing thinking_start event', err);
     }
   };
 
-  // Enhance handleThinkingUpdate to better debug and handle real thinking steps
   const handleThinkingUpdate = (e: MessageEvent) => {
-    console.log('handleThinkingUpdate called with data:', e.data);
     try {
-      const data = JSON.parse(e.data) as ThinkingStep;
-      console.log('Thinking update parsed:', data);
-      logThinkingStep('THINKING UPDATE', data, e.data);
-      
-      // Only add real steps that have unique descriptions
+      const data = JSON.parse(e.data);
       if (data && data.description) {
-        // Check if we already have this step (avoid duplicates)
-        setThinkingSteps(prev => {
-          const isDuplicate = prev.some(
-            step => step.description === data.description
-          );
-          
-          if (!isDuplicate) {
-            console.log('Adding real thinking step:', data.description);
-            return [...prev, data];
-          } else {
-            console.log('Skipping duplicate thinking step:', data.description);
-            return prev;
-          }
-        });
+        setThinkingSteps(prev => [...prev, data]);
       }
     } catch (err) {
-      console.error('Error parsing thinking_update event', err, 'Raw data:', e.data);
+      console.error('Error parsing thinking_update event', err);
     }
   };
 
   const handleThinkingEnd = (e: MessageEvent) => {
-    console.log('handleThinkingEnd called with data:', e.data);
-    // We don't set isThinking to false here anymore so steps remain visible
-    // The state will be cleared after everything is complete in handleDone
     try {
       const data = JSON.parse(e.data);
-      console.log('Thinking ended with data:', data);
-      logThinkingStep('THINKING END', data, e.data);
-      
-      // Add a final thinking step when thinking ends
-      const finalStep = {
+      setThinkingSteps(prev => [...prev, {
         type: 'thinking',
-        description: 'Thinking complete, generating response',
+        description: 'Processing complete',
         time: new Date().toTimeString().split(' ')[0],
         duration_ms: 0
-      };
-      
-      setThinkingSteps(prev => {
-        // Check for duplicate
-        const isDuplicate = prev.some(step => step.description === finalStep.description);
-        if (!isDuplicate) {
-          return [...prev, finalStep];
-        }
-        return prev;
-      });
+      }]);
     } catch (err) {
-      console.error('Error in thinking_end handler:', err);
+      console.error('Error parsing thinking_end event', err);
     }
   };
 
   const handleAnswerStart = () => {
-    console.log('handleAnswerStart called');
-    // Generate a unique ID for this streaming session
     const newStreamingId = Date.now().toString();
     setStreamingId(newStreamingId);
-    
-    // Reset both the state and the ref
     setStreamingMessage('');
     accumulatedContentRef.current = '';
-    
-    // Add a thinking step for answer start
-    const answerStartStep = {
-      type: 'thinking',
-      description: 'Starting to generate response',
-      time: new Date().toTimeString().split(' ')[0],
-      duration_ms: 0
-    };
-    
-    setThinkingSteps(prev => {
-      // Check for duplicate
-      const isDuplicate = prev.some(step => step.description === answerStartStep.description);
-      if (!isDuplicate) {
-        return [...prev, answerStartStep];
-      }
-      return prev;
-    });
   };
 
   const handleAnswerChunk = (e: MessageEvent) => {
     try {
       const data = JSON.parse(e.data);
       const chunk = data.chunk || '';
-      
-      // Add logging for answer chunks (but limit to avoid flooding)
-      if (chunk && chunk.length < 50) {
-        console.log('Answer chunk received:', chunk);
-      } else {
-        console.log('Answer chunk received, length:', chunk?.length || 0);
-      }
-      
-      // Update both the state (for display) and the ref (for storage)
       accumulatedContentRef.current += chunk;
       setStreamingMessage(prev => prev + chunk);
-      
-      // Periodically add thinking steps during long responses
-      if (accumulatedContentRef.current.length % 500 === 0) {
-        const progressStep = {
-          type: 'thinking',
-          description: `Generated ${accumulatedContentRef.current.length} characters so far`,
-          time: new Date().toTimeString().split(' ')[0],
-          duration_ms: 0
-        };
-        
-        setThinkingSteps(prev => {
-          // Avoid too many progress updates by checking if we already have a similar one
-          const hasProgressStep = prev.some(step => 
-            step.description.includes('Generated') && 
-            step.description.includes('characters so far')
-          );
-          
-          if (!hasProgressStep) {
-            return [...prev, progressStep];
-          }
-          return prev;
-        });
-      }
     } catch (err) {
       console.error('Error parsing answer_chunk event', err);
     }
   };
 
-  // Handler for the full answer event
   const handleAnswer = (e: MessageEvent) => {
     try {
-      // Use a more specific type that only includes the properties we need
-      const data = JSON.parse(e.data) as { answer?: string; conversation_id?: string };
-      
-      console.log('Full answer event received');
-      
-      // Get the answer from the event data
+      const data = JSON.parse(e.data);
       const fullAnswer = data.answer || '';
-      
-      if (fullAnswer && fullAnswer.trim().length > 0) {
-        console.log('Using full answer from answer event, length:', fullAnswer.length);
-        
-        // Always update both the reference and the displayed message
-        // Even if we have existing content from chunks, the full answer is more reliable
+      if (fullAnswer) {
         accumulatedContentRef.current = fullAnswer;
         setStreamingMessage(fullAnswer);
-        
-        // Add a thinking step to show we received the full answer
-        const answerStep = {
-          type: 'thinking',
-          description: 'Received complete answer from server',
-          time: new Date().toTimeString().split(' ')[0],
-          duration_ms: 0
-        };
-        
-        setThinkingSteps(prev => {
-          const isDuplicate = prev.some(step => step.description === answerStep.description);
-          if (!isDuplicate) {
-            return [...prev, answerStep];
-          }
-          return prev;
-        });
-        
-        // Set the flag to indicate we've added a message via the answer event
-        // But don't add it to messages array yet - let handleDone do that
-        messageAddedViaAnswerEventRef.current = true;
-        
-        // Store the conversation_id if we have it
         if (data.conversation_id) {
           setConversationId(data.conversation_id);
         }
-      } else {
-        console.warn('Received empty answer in answer event');
       }
     } catch (err) {
       console.error('Error parsing answer event', err);
@@ -675,7 +393,6 @@ export default function ChatInterface({
   const handleDocument = (e: MessageEvent) => {
     try {
       const data = JSON.parse(e.data);
-      console.log('Document:', data);
       // Handle documents as needed
     } catch (err) {
       console.error('Error parsing document event', err);
@@ -684,102 +401,39 @@ export default function ChatInterface({
 
   const handleDone = (e: MessageEvent) => {
     try {
-      console.log('handleDone called - Starting message processing');
       const data = JSON.parse(e.data);
-      
-      // Update conversation ID
       if (data.conversation_id) {
         setConversationId(data.conversation_id);
-        
-        // Notify parent about new session if needed
         if (!sessionId && onNewSession) {
           onNewSession(data.conversation_id);
         }
       }
       
-      // Get the content from our ref instead of the state
       const finalContent = accumulatedContentRef.current;
-      console.log('Final content from ref length:', finalContent.length);
+      if (finalContent && finalContent.trim().length > 0) {
+      const assistantMessage: ChatMessage = {
+        role: 'assistant',
+        content: finalContent,
+        timestamp: new Date(),
+          thinkingSteps: [...thinkingSteps]
+        };
+        
+        setMessages(prev => [...prev, assistantMessage]);
+      }
       
-      // Close the event source first
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
         eventSourceRef.current = null;
       }
       
-      if (!finalContent || finalContent.trim().length === 0) {
-        console.error('Empty message content detected, not adding to chat. Ref content:', 
-          finalContent ? 'empty string' : 'null/undefined');
-        setIsLoading(false);
-        setIsThinking(false);
-        return;
-      }
-      
-      // Add a final synthetic thinking step if needed
-      const finalStep = {
-        type: 'thinking',
-        description: 'Response completed',
-        time: new Date().toTimeString().split(' ')[0],
-        duration_ms: 0
-      };
-      
-      setThinkingSteps(prev => {
-        // Check for duplicate
-        const isDuplicate = prev.some(step => step.description === finalStep.description);
-        if (!isDuplicate) {
-          return [...prev, finalStep];
-        }
-        return prev;
-      });
-      
-      // Create the assistant message
-      const assistantMessage: ChatMessage = {
-        role: 'assistant',
-        content: finalContent,
-        timestamp: new Date(),
-        thinkingSteps: [...thinkingSteps],
-      };
-      
-      // Add message to chat history
-      console.log('Adding message to chat history with content length:', finalContent.length);
-      
-      // Add the message to the chat history and save the conversation
-      setMessages(prevMessages => {
-        const updatedMessages = [...prevMessages, assistantMessage];
-        
-        // Auto-save conversation after each message exchange
-        if (data.conversation_id && updatedMessages.length > 0) {
-          console.log('Auto-saving conversation after message exchange');
-          // Use a setTimeout to ensure we don't block the UI
-          setTimeout(() => {
-            saveConversation(data.conversation_id, updatedMessages, contextSummary)
-              .then(success => {
-                if (success) {
-                  console.log('Conversation auto-saved successfully');
-                } else {
-                  console.warn('Failed to auto-save conversation');
-                }
-              })
-              .catch(error => {
-                console.error('Error during auto-save:', error);
-              });
-          }, 500);
-        }
-        
-        return updatedMessages;
-      });
-      
-      // Then clear the streaming message state after a delay
       setTimeout(() => {
-        console.log('Timeout executed - clearing streaming state');
         setStreamingMessage('');
         setStreamingId(null);
         setThinkingSteps([]);
         setIsLoading(false);
-        setIsThinking(false); // Finally clear the thinking state
-        messageAddedViaAnswerEventRef.current = false; // Reset the answer event flag
+        setIsThinking(false);
+        messageAddedViaAnswerEventRef.current = false;
       }, 500);
-      
     } catch (err) {
       console.error('Error parsing done event', err);
       setIsLoading(false);
@@ -788,177 +442,180 @@ export default function ChatInterface({
   };
 
   const handleError = (e: MessageEvent) => {
-    // Simple logging without trying to access detailed properties
-    console.log('Stream error event received');
-    
+    console.error('Stream error:', e);
     setIsLoading(false);
-    
-    // Reset the answer event flag
     messageAddedViaAnswerEventRef.current = false;
-    
-    // Close the event source
     if (eventSourceRef.current) {
       eventSourceRef.current.close();
       eventSourceRef.current = null;
     }
   };
 
-  // Non-streaming fallback
-  const sendMessageWithoutStreaming = async (query: string) => {
-    try {
-      const chatRequest: ChatRequest = {
-        query,
-        conversation_id: conversationId,
-        context_summary: contextSummary,
-        stream: false
-      };
-      
-      console.log('Sending non-streaming request', {
-        timestamp: new Date().toISOString(),
-        query_length: query?.length || 0,
-        conversation_id: conversationId
-      });
-      
-      // Use chatService for query instead of chatApi for better error handling and retries
-      const response = await chatService.query(chatRequest);
-      
-      // Update conversation ID
-      if (response.conversation_id) {
-        setConversationId(response.conversation_id);
-        
-        // Notify parent about new session if needed
-        if (!sessionId && onNewSession) {
-          onNewSession(response.conversation_id);
-        }
-      }
-      
-      // Add assistant message
-      const assistantMessage: ChatMessage = {
-        role: 'assistant',
-        content: response.response || response.answer || '',  // Check both response and answer fields
-        timestamp: new Date(),
-        thinkingSteps: [], // No thinking steps in non-streaming response
-        documents: response.documents || [] // Include documents if available
-      };
-      
-      setMessages(prev => {
-        const updatedMessages = [...prev, assistantMessage];
-        
-        // Auto-save conversation after each message exchange
-        if (response.conversation_id && updatedMessages.length > 0) {
-          console.log('Auto-saving non-streaming conversation');
-          // Use a setTimeout to ensure we don't block the UI
-          setTimeout(() => {
-            saveConversation(response.conversation_id, updatedMessages, contextSummary)
-              .then(success => {
-                if (success) {
-                  console.log('Non-streaming conversation auto-saved successfully');
-                } else {
-                  console.warn('Failed to auto-save non-streaming conversation');
-                }
-              })
-              .catch(error => {
-                console.error('Error during non-streaming auto-save:', error);
-              });
-          }, 500);
-        }
-        
-        return updatedMessages;
-      });
-      
-      console.log('Non-streaming response processed successfully', {
-        timestamp: new Date().toISOString(),
-        conversation_id: response.conversation_id,
-        response_length: (response.response || response.answer || '').length
-      });
-    } catch (error) {
-      console.error('Error in non-streaming message:', error instanceof Error ? error.message : String(error), {
-        timestamp: new Date().toISOString()
-      });
-      
-      // Add error message to chat
-      const errorMessage: ChatMessage = {
-        role: 'assistant',
-        content: "I'm sorry, there was an error processing your request. Please try again later.",
-        timestamp: new Date()
-      };
-      setMessages(prev => [...prev, errorMessage]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Add a function to copy message content to clipboard
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text)
-      .then(() => {
-        console.log('Text copied to clipboard');
-      })
-      .catch(err => {
-        console.error('Failed to copy text: ', err);
-      });
-  };
-
-  // Add a function to toggle search mode
-  const toggleSearchMode = (e: React.MouseEvent) => {
-    e.preventDefault();
-    setIsSearchMode(!isSearchMode);
-  };
-
-  // Function to start a new chat
-  const startNewChat = async () => {
-    // Don't allow starting a new chat while loading or saving
-    if (isLoading || isSaving) return;
-    
-    try {
-      // If we have messages and a conversation ID, save the current session
-      if (messages.length > 0 && conversationId) {
-        setIsSaving(true);
-        
-        console.log('Saving session before starting new chat, conversationId:', conversationId);
-        
-        // Using ChatService's saveConversation method which handles:
-        // - Duplicate detection (only saves if messages have changed)
-        // - Retries on network failures
-        // - Proper error handling and logging
-        const success = await saveConversation(conversationId, messages, contextSummary);
-        if (success) {
-          console.log('Session saved successfully before starting new chat');
-        } else {
-          console.warn('Failed to save session before starting new chat');
-        }
-      } else {
-        console.log('No messages to save or no conversation ID before starting new chat');
-      }
-    } catch (error) {
-      console.error('Error saving session before new chat:', error);
-    } finally {
-      setIsSaving(false);
-    }
-    
-    // Clear current conversation state and reset hash tracking
-    setMessages([]);
-    setConversationId(undefined);
-    setInput('');
-    setStreamingMessage('');
-    setStreamingId(null);
-    setThinkingSteps([]);
-    setLastSavedHash(''); // Reset the hash for the new conversation
-    accumulatedContentRef.current = '';
-    messageAddedViaAnswerEventRef.current = false; // Reset the answer event flag
-    
-    // Reset search mode
-    setIsSearchMode(false);
-    
-    // If there's a handler to notify the parent component
-    if (onNewSession) {
-      onNewSession('new'); // Signal to parent that we want a new chat
-    }
-  };
-
   return (
-    <div className="flex flex-col h-full w-full overflow-hidden">
-      <div ref={chatContainerRef} className="flex-1 overflow-y-auto p-4 space-y-6 relative bg-gray-50 w-full">
+    <div className="flex h-full w-full overflow-hidden">
+      {/* Left Panel */}
+      <div 
+        className={`bg-white border-r border-gray-200 transition-all duration-300 ${
+          isPanelCollapsed ? 'w-16' : 'w-64'
+        }`}
+      >
+        <div className="flex flex-col h-full">
+          {/* Collapse Toggle Button */}
+          <button
+            onClick={() => setIsPanelCollapsed(!isPanelCollapsed)}
+            className="p-4 hover:bg-gray-50 flex items-center justify-center"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className={`h-6 w-6 text-gray-500 transform transition-transform ${
+                isPanelCollapsed ? 'rotate-180' : ''
+              }`}
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+            </svg>
+          </button>
+
+          {!isPanelCollapsed && (
+            <>
+              {/* Search Bar */}
+              <div className="px-4 py-2">
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="Search conversations..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full px-4 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                  <svg
+                    className="absolute right-3 top-2.5 h-4 w-4 text-gray-400"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                </div>
+              </div>
+
+              {/* KAI Agents Section */}
+              <div className="px-4 py-2">
+                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                  KAI Agents
+                </h3>
+                <div className="space-y-1">
+                  <button
+                    onClick={() => handleNavigation('/chat')}
+                    className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 rounded-lg flex items-center"
+                  >
+                    <svg className="h-5 w-5 mr-2 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                    </svg>
+                    Ask KAI about universities
+                  </button>
+                  <button
+                    onClick={() => handleNavigation('/profile/build')}
+                    className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 rounded-lg flex items-center"
+                  >
+                    <svg className="h-5 w-5 mr-2 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                    Build your application profile
+                  </button>
+                  <button
+                    onClick={() => handleNavigation('/essay')}
+                    className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 rounded-lg flex items-center"
+                  >
+                    <svg className="h-5 w-5 mr-2 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                    Write your essay
+                  </button>
+                </div>
+              </div>
+
+              {/* KAI Conversations Section */}
+              <div className="px-4 py-2 flex-1 overflow-hidden">
+                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                  KAI Conversations
+                </h3>
+                <div 
+                  ref={conversationsContainerRef}
+                  className="space-y-1 overflow-y-auto h-[calc(100vh-400px)]"
+                >
+                  {filteredConversations.map((convo) => (
+                    <button
+                      key={convo.id}
+                      onClick={() => handleConversationClick(convo.conversation_id)}
+                      className={`w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 rounded-lg flex items-center ${
+                        searchParams?.get('id') === convo.conversation_id ? 'bg-indigo-50' : ''
+                      }`}
+                    >
+                      <svg className="h-5 w-5 mr-2 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                      </svg>
+                      <div className="flex-1 min-w-0">
+                        <p className="truncate">{convo.title}</p>
+                        <p className="text-xs text-gray-500">
+                          {new Date(convo.updated_at).toLocaleDateString()}
+                        </p>
+                      </div>
+                    </button>
+                  ))}
+                  
+                  {/* Loading indicator */}
+                  {isLoadingConversations && (
+                    <div className="flex justify-center py-2">
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-indigo-500"></div>
+                    </div>
+                  )}
+                  
+                  {/* End of list marker */}
+                  <div ref={conversationsEndRef} />
+                </div>
+              </div>
+
+              {/* Profile Section */}
+              <div className="px-4 py-2 border-t border-gray-200">
+                <button
+                  onClick={() => handleNavigation('/profile')}
+                  className="w-full flex items-center space-x-3 px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 rounded-lg"
+                >
+                  <div className="relative h-8 w-8 rounded-full overflow-hidden">
+                    {session?.user?.image ? (
+                      <Image
+                        src={session.user.image}
+                        alt="Profile"
+                        fill
+                        className="object-cover"
+                      />
+                    ) : (
+                      <div className="h-full w-full bg-indigo-500 flex items-center justify-center text-white">
+                        {session?.user?.name?.[0] || 'U'}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">
+                      {session?.user?.name || 'User'}
+                    </p>
+                    <p className="text-xs text-gray-500 truncate">
+                      {session?.user?.email || 'user@example.com'}
+                    </p>
+                  </div>
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Main Chat Area */}
+      <div className="flex-1 flex flex-col h-full overflow-hidden">
+        <div ref={chatContainerRef} className="flex-1 overflow-y-auto p-4 space-y-6 relative bg-gray-50">
         {/* Debug output */}
         {process.env.NODE_ENV === 'development' && (
           <div className="text-xs text-gray-400 mb-2">
@@ -1007,12 +664,10 @@ export default function ChatInterface({
           </div>
         )}
         
-        {/* Show all message exchanges instead of just the most recent one */}
-        {messageExchanges.map((exchange, exchangeIndex) => (
-          <div key={`exchange-${exchangeIndex}`} className="space-y-6 mb-6">
-            {exchange.map((message, messageIndex) => (
+          {/* Show all message exchanges */}
+          {messages.map((message, index) => (
               <div 
-                key={`message-${exchangeIndex}-${messageIndex}-${message.timestamp.getTime()}`} 
+              key={`message-${index}-${message.timestamp.getTime()}`} 
                 className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
               >
                 {/* Role indicator for assistant */}
@@ -1029,22 +684,6 @@ export default function ChatInterface({
                       : 'bg-white text-gray-800 border border-gray-100 shadow-md hover:shadow-lg transition-shadow'
                   }`}
                 >
-                  {/* Copy button - only visible on hover */}
-                  <button
-                    onClick={() => copyToClipboard(message.content)}
-                    className={`absolute top-3 right-3 p-1.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity text-xs ${
-                      message.role === 'user' 
-                        ? 'bg-indigo-400/50 hover:bg-indigo-400 text-white backdrop-blur-sm' 
-                        : 'bg-gray-100 hover:bg-gray-200 text-gray-600'
-                    }`}
-                    title="Copy message"
-                    aria-label="Copy message"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
-                    </svg>
-                  </button>
-                  
                   <div className={`whitespace-pre-wrap markdown-content text-base leading-relaxed ${
                     message.role === 'user' 
                       ? 'text-white !important font-medium' 
@@ -1100,12 +739,10 @@ export default function ChatInterface({
                     </svg>
                   </div>
                 )}
-              </div>
-            ))}
           </div>
         ))}
         
-        {/* Simple loading indicator when waiting for response */}
+          {/* Loading indicator */}
         {isLoading && !streamingMessage && (
           <div className="flex justify-center my-6">
             <div className="flex items-center space-x-2 bg-white px-5 py-3 rounded-full shadow-md border border-gray-100">
@@ -1119,25 +756,13 @@ export default function ChatInterface({
           </div>
         )}
         
-        {/* Streaming message - only show if not already in messages array and we're loading */}
+          {/* Streaming message */}
         {streamingMessage && isLoading && (
           <div className="flex justify-start" id={`streaming-${streamingId}`}>
             <div className="w-8 h-8 rounded-full bg-gradient-to-br from-teal-500 to-emerald-600 text-white flex items-center justify-center mr-2 flex-shrink-0 mt-1 shadow-md">
               <span className="text-lg font-bold" style={{ textShadow: '0px 1px 2px rgba(0, 0, 0, 0.2)' }}>K</span>
             </div>
             <div className="p-5 rounded-2xl max-w-[85%] md:max-w-[75%] bg-white text-gray-700 border border-gray-100 relative group shadow-md hover:shadow-lg transition-shadow">
-              {/* Copy button for streaming message */}
-              <button
-                onClick={() => copyToClipboard(streamingMessage)}
-                className="absolute top-3 right-3 p-1.5 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity text-xs"
-                title="Copy message"
-                aria-label="Copy message"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
-                </svg>
-              </button>
-              
               <div className="whitespace-pre-wrap markdown-content text-base leading-relaxed">
                 <ReactMarkdown 
                   remarkPlugins={[remarkGfm]}
@@ -1156,41 +781,18 @@ export default function ChatInterface({
                 </ReactMarkdown>
                 <span className="animate-pulse text-indigo-500 font-medium">▋</span>
               </div>
-              {/* Add length info for debugging */}
-              {process.env.NODE_ENV === 'development' && (
-                <div className="text-xs text-gray-500 opacity-50 mt-3">
-                  Streaming length: {streamingMessage.length}
                 </div>
-              )}
-            </div>
-          </div>
-        )}
-        
-        {/* New Chat Button - Now at the bottom of the chat area */}
-        {messages.length > 0 && (
-          <div className="flex justify-center my-8 sticky bottom-4">
-            <button
-              onClick={startNewChat}
-              disabled={isLoading || isSaving}
-              className="flex items-center px-5 py-3 bg-gradient-to-r from-indigo-500 to-purple-600 border border-transparent rounded-full hover:shadow-lg transition-all text-white font-medium shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-              </svg>
-              {isSaving ? 'Saving conversation...' : 'Start New Chat'}
-            </button>
           </div>
         )}
         
         <div ref={messagesEndRef} />
       </div>
       
-      {/* Input form - Updated for a more modern look */}
+        {/* Input form */}
       <div className="bg-gray-50 p-4 border-t border-gray-100">
         <div className="max-w-4xl mx-auto relative">
           <form onSubmit={handleSubmit} className="flex space-x-3">
             <div className="relative flex-1 flex items-start">
-              {/* Styled textarea for multi-line support */}
               <textarea
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
@@ -1224,7 +826,7 @@ export default function ChatInterface({
                 disabled={isLoading}
               />
               
-              {/* Search toggle button with improved styling */}
+                {/* Search toggle button */}
               <div className="absolute right-3 top-3">
                 <button
                   onClick={toggleSearchMode}
@@ -1270,6 +872,7 @@ export default function ChatInterface({
           
           <div className="text-xs text-gray-500 mt-3 text-center">
             AI responses may not always be accurate. Verify important information.
+            </div>
           </div>
         </div>
       </div>

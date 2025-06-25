@@ -1,94 +1,85 @@
 'use client';
 
 import React from 'react';
-import { useUserProfile } from '@/hooks/useUserProfile';
+import { useUserContext } from '@/features/user/context/UserContext';
 
 export function ProfileCompleteness() {
-  const { completeness, user } = useUserProfile();
-  
-  // Color based on completeness level
-  const getColor = () => {
-    if (completeness < 30) return 'bg-red-500';
-    if (completeness < 70) return 'bg-yellow-500';
-    return 'bg-green-500';
+  const { profile } = useUserContext();
+
+  const calculateCompleteness = () => {
+    if (!profile) return 0;
+
+    const requiredFields = ['name', 'email', 'image'];
+    const filledFields = requiredFields.filter(field => {
+      const value = profile[field as keyof typeof profile];
+      return value !== undefined && value !== null && value !== '';
+    });
+
+    return Math.round((filledFields.length / requiredFields.length) * 100);
   };
-  
-  // Suggestions for profile completion
-  const getSuggestions = (): string[] => {
-    const suggestions: string[] = [];
-    
-    if (!user) return suggestions;
-    
-    if (!user.bio) {
-      suggestions.push('Add a bio to tell others about yourself');
-    }
-    
-    if (!user.phone) {
-      suggestions.push('Add your phone number for better communication');
-    }
-    
-    if (!user.address) {
-      suggestions.push('Add your address for location-based services');
-    }
-    
-    if (!user.profilePicture) {
-      suggestions.push('Upload a profile picture to personalize your account');
-    }
-    
-    return suggestions;
+
+  const completeness = calculateCompleteness();
+
+  const getSuggestions = () => {
+    if (!profile) return ['Complete your profile to get started'];
+
+    const suggestions = [];
+    if (!profile.name) suggestions.push('Add your name');
+    if (!profile.email) suggestions.push('Add your email');
+    if (!profile.image) suggestions.push('Add a profile picture');
+
+    return suggestions.length > 0 ? suggestions : ['Your profile is complete!'];
   };
-  
+
   return (
-    <div className="p-4 max-w-lg mx-auto">
-      <h2 className="text-2xl font-bold mb-4">Profile Completeness</h2>
+    <div className="bg-white rounded-lg shadow p-6">
+      <h3 className="text-lg font-semibold mb-4">Profile Completeness</h3>
       
-      <div className="mb-6">
+      <div className="mb-4">
         <div className="flex justify-between items-center mb-2">
-          <span className="text-sm font-medium text-gray-700">
-            {completeness}% Complete
-          </span>
-          <span className="text-sm font-medium text-gray-500">
-            {completeness < 100 ? 'In Progress' : 'Complete!'}
-          </span>
+          <span className="text-sm text-gray-600">Progress</span>
+          <span className="text-sm font-medium text-gray-900">{completeness}%</span>
         </div>
-        
-        <div className="w-full bg-gray-200 rounded-full h-2.5">
-          <div 
-            className={`h-2.5 rounded-full ${getColor()}`} 
+        <div className="w-full bg-gray-200 rounded-full h-2">
+          <div
+            className="bg-blue-600 h-2 rounded-full transition-all duration-300"
             style={{ width: `${completeness}%` }}
-          ></div>
+          />
         </div>
       </div>
-      
-      {completeness < 100 && (
-        <div className="bg-blue-50 border border-blue-200 rounded-md p-4">
-          <h3 className="text-lg font-medium text-blue-800 mb-2">
-            Complete your profile
-          </h3>
-          <p className="text-sm text-blue-700 mb-4">
-            Complete your profile to get the most out of the platform and help others know you better.
-          </p>
-          
-          {getSuggestions().length > 0 && (
-            <ul className="list-disc pl-5 text-sm text-blue-700 space-y-1">
-              {getSuggestions().map((suggestion, i) => (
-                <li key={i}>{suggestion}</li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
-      
-      {completeness === 100 && (
-        <div className="bg-green-50 border border-green-200 rounded-md p-4">
-          <h3 className="text-lg font-medium text-green-800 mb-2">
-            Profile complete!
-          </h3>
-          <p className="text-sm text-green-700">
-            Your profile is fully completed. Thank you for providing all your information.
-          </p>
-        </div>
-      )}
+
+      <div>
+        <h4 className="text-sm font-medium text-gray-900 mb-2">Suggestions</h4>
+        <ul className="space-y-2">
+          {getSuggestions().map((suggestion, index) => (
+            <li key={index} className="flex items-center text-sm text-gray-600">
+              <svg
+                className={`w-4 h-4 mr-2 ${
+                  suggestion === 'Your profile is complete!'
+                    ? 'text-green-500'
+                    : 'text-blue-500'
+                }`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d={
+                    suggestion === 'Your profile is complete!'
+                      ? 'M5 13l4 4L19 7'
+                      : 'M12 6v6m0 0v6m0-6h6m-6 0H6'
+                  }
+                />
+              </svg>
+              {suggestion}
+            </li>
+          ))}
+        </ul>
+      </div>
     </div>
   );
 } 

@@ -66,7 +66,7 @@ SessionSchema.index({ token: 1, isValid: 1 });
 /**
  * Interface for the Session model with static methods
  */
-export interface SessionModel extends Model<SessionDocument> {
+export interface SessionModel extends Model<SessionDocument, {}, {}, {}, SessionDocument, Schema<SessionDocument, {}, {}, {}, SessionDocument>, {}> {
   findActiveSessionsByUser(userId: string): Promise<SessionDocument[]>;
   findByToken(token: string): Promise<SessionDocument | null>;
   invalidateSession(sessionId: string): Promise<boolean>;

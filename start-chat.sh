@@ -149,6 +149,23 @@ fi
 # Wait for FastAPI to be ready
 wait_for_service localhost 8000 30 || exit 1
 
+# Start User Management service if not running
+if ! ps aux | grep -v grep | grep -q "node server/auth-server.js"; then
+    echo -e "${YELLOW}Starting User Management service...${NC}"
+    
+    # Check if we should use start-kevin.sh or start directly
+    if [ -f "$ROOT_DIR/start-kevin.sh" ]; then
+        ./start-kevin.sh -a start -s userman
+    else
+        # Fallback to direct launch
+        cd "$ROOT_DIR/ui" && node server/auth-server.js &
+        cd "$ROOT_DIR"
+    fi
+fi
+
+# Wait for User Management service to be ready
+wait_for_service localhost 8001 30 || exit 1
+
 # Start Next.js frontend
 echo -e "${GREEN}Starting Next.js frontend...${NC}"
 
@@ -166,6 +183,9 @@ wait_for_service localhost 3000 30 || exit 1
 cleanup() {
     echo -e "${YELLOW}Shutting down services...${NC}"
     pkill -f "npm run dev"
+    pkill -f "node server/auth-server.js"
+    ./start-kevin.sh -a stop -s api
+    ./start-kevin.sh -a stop -s db
     exit 0
 }
 
@@ -176,6 +196,7 @@ echo -e "${GREEN}All services are running!${NC}"
 echo -e "${GREEN}Access the application at:${NC}"
 echo -e "${GREEN}Frontend: http://localhost:3000${NC}"
 echo -e "${GREEN}Backend: http://localhost:8000${NC}"
+echo -e "${GREEN}User Management: http://localhost:8001${NC}"
 
 # Keep the script running
 while true; do

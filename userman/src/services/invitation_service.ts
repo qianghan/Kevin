@@ -26,7 +26,7 @@ export class InvitationService implements IInvitationService {
     const existingInvitation = await InvitationModel.findOne({
       email,
       inviterId,
-      status: InvitationStatus.Pending
+      status: InvitationStatus.PENDING
     });
     
     if (existingInvitation) {
@@ -48,7 +48,7 @@ export class InvitationService implements IInvitationService {
       inviterEmail: inviter.email,
       inviterRole: inviter.role,
       relationship,
-      status: InvitationStatus.Pending,
+      status: InvitationStatus.PENDING,
       token,
       message,
       expiresAt,
@@ -76,7 +76,7 @@ export class InvitationService implements IInvitationService {
   async getPendingInvitationsByEmail(email: string): Promise<InvitationDTO[]> {
     const invitations = await InvitationModel.find({
       email,
-      status: InvitationStatus.Pending
+      status: InvitationStatus.PENDING
     });
     return invitations.map((invitation: any) => this.mapToDTO(invitation));
   }
@@ -87,18 +87,18 @@ export class InvitationService implements IInvitationService {
       throw new NotFoundError('Invitation not found');
     }
 
-    if (invitation.status !== InvitationStatus.Pending) {
+    if (invitation.status !== InvitationStatus.PENDING) {
       throw new ValidationError(`Invitation is ${invitation.status}, not pending`);
     }
 
     if (invitation.expiresAt < new Date()) {
-      invitation.status = InvitationStatus.Expired;
+      invitation.status = InvitationStatus.EXPIRED;
       await invitation.save();
       throw new ValidationError('Invitation has expired');
     }
 
     // Update invitation
-    invitation.status = InvitationStatus.Accepted;
+    invitation.status = InvitationStatus.ACCEPTED;
     invitation.acceptedById = new mongoose.Types.ObjectId(userId);
     invitation.acceptedAt = new Date();
     await invitation.save();
@@ -125,11 +125,11 @@ export class InvitationService implements IInvitationService {
       throw new NotFoundError('Invitation not found');
     }
 
-    if (invitation.status !== InvitationStatus.Pending) {
+    if (invitation.status !== InvitationStatus.PENDING) {
       throw new ValidationError(`Invitation is ${invitation.status}, not pending`);
     }
 
-    invitation.status = InvitationStatus.Rejected;
+    invitation.status = InvitationStatus.REJECTED;
     invitation.rejectedAt = new Date();
     await invitation.save();
 
@@ -147,11 +147,11 @@ export class InvitationService implements IInvitationService {
       throw new AuthorizationError('Only the inviter can cancel this invitation');
     }
 
-    if (invitation.status !== InvitationStatus.Pending) {
+    if (invitation.status !== InvitationStatus.PENDING) {
       throw new ValidationError(`Cannot cancel invitation with status: ${invitation.status}`);
     }
 
-    invitation.status = InvitationStatus.Cancelled;
+    invitation.status = InvitationStatus.CANCELLED;
     await invitation.save();
 
     return true;
@@ -161,11 +161,11 @@ export class InvitationService implements IInvitationService {
     const now = new Date();
     const result = await InvitationModel.updateMany(
       {
-        status: InvitationStatus.Pending,
+        status: InvitationStatus.PENDING,
         expiresAt: { $lt: now }
       },
       {
-        $set: { status: InvitationStatus.Expired }
+        $set: { status: InvitationStatus.EXPIRED }
       }
     );
 

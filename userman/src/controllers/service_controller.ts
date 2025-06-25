@@ -3,7 +3,7 @@ import { ServiceManagementService } from '../services/service_management_service
 import { ServiceStatus, ServiceAccessLevel } from '../models/service_model';
 import { SubscriptionType } from '../models/service_entitlement_model';
 import { NotFoundError, ValidationError, AuthorizationError } from '../utils/errors';
-import { UserDocument } from '../models/user_model';
+import { UserDocument, UserRole } from '../models/user_model';
 
 // Create service management service instance
 const serviceManager = new ServiceManagementService();
@@ -44,7 +44,7 @@ export class ServiceController {
         callbackUrl,
         status: ServiceStatus.Active,
         accessLevel: accessLevel || ServiceAccessLevel.RoleBased,
-        allowedRoles: allowedRoles || ['admin'],
+        allowedRoles: allowedRoles || [UserRole.ADMIN],
         features: features || [],
         isSystem: isSystem || false,
         icon
@@ -287,20 +287,23 @@ export class ServiceController {
    */
   async checkParentStudentServiceAccess(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
+      const { studentId, serviceId } = req.params;
       const user = req.user as UserDocument;
-      const { studentId, serviceName } = req.params;
-      
-      if (!studentId || !serviceName) {
+
+      if (!user) {
+        throw new AuthorizationError('User not authenticated');
+      }
+
+      if (user.role !== UserRole.PARENT) {
+        throw new AuthorizationError('Only parents can check student service access');
+      }
+
+      if (!studentId || !serviceId) {
         res.status(400).json({ 
           success: false, 
-          message: 'Student ID and service name are required' 
+          message: 'Student ID and service ID are required' 
         });
         return;
-      }
-      
-      // If user is not a parent, they can't access student services
-      if (user.role !== 'parent') {
-        throw new AuthorizationError('Only parents can access student services');
       }
       
       // Check if the user is linked to the student
@@ -310,7 +313,7 @@ export class ServiceController {
       }
       
       // Check if the student has access to the service
-      const result = await serviceManager.checkServiceAccess(studentId, serviceName);
+      const result = await serviceManager.checkServiceAccess(studentId, serviceId);
       
       res.status(200).json({
         success: true,
@@ -329,10 +332,13 @@ export class ServiceController {
   async getAllServices(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const user = req.user as UserDocument;
-      
-      // Only admins can see all services
-      if (user.role !== 'admin') {
-        throw new AuthorizationError('Only administrators can view all services');
+
+      if (!user) {
+        throw new AuthorizationError('User not authenticated');
+      }
+
+      if (user.role !== UserRole.ADMIN) {
+        throw new AuthorizationError('Only admins can view all services');
       }
       
       const services = await serviceManager.getServices();

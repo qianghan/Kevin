@@ -1,22 +1,28 @@
-import { UserDocument, UserPreferences } from '../models/user_model';
+import { UserDocument, UserPreferences, UserRole } from '../models/user_model';
 import { RelationshipType, InvitationStatus } from '../models/invitation_model';
 
 /**
  * User profile data transfer object
  */
 export interface UserProfileDTO {
-  id?: string;
-  name?: string;
-  email?: string;
-  image?: string;
-  role?: string;
-  testMode?: boolean;
-  studentIds?: string[];
-  parentIds?: string[];
-  partnerIds?: string[];
-  preferences?: UserPreferences;
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  role: UserRole;
+  emailVerified?: boolean;
   createdAt?: Date;
   updatedAt?: Date;
+}
+
+/**
+ * User profile update data transfer object
+ */
+export interface UserProfileUpdateDTO {
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  password?: string;
 }
 
 /**
@@ -25,12 +31,11 @@ export interface UserProfileDTO {
 export interface UserSession {
   id: string;
   userId: string;
-  token: string;
+  createdAt: Date;
+  expiresAt: Date;
   device?: string;
   ipAddress?: string;
-  lastActive: Date;
-  expiresAt: Date;
-  isValid: boolean;
+  userAgent?: string;
 }
 
 /**
@@ -41,12 +46,12 @@ export interface IAuthenticationService {
   /**
    * Authenticate a user with email and password
    */
-  authenticate(email: string, password: string, metadata?: { device?: string, ipAddress?: string }): Promise<{ user: UserProfileDTO, token: string }>;
+  authenticate(email: string, password: string, metadata?: { device?: string; ipAddress?: string; userAgent?: string }): Promise<{ user: UserProfileDTO; token: string }>;
   
   /**
    * Register a new user
    */
-  register(userData: Partial<UserProfileDTO>, password: string): Promise<UserProfileDTO>;
+  register(userData: Partial<UserProfileDTO>, password: string, metadata?: { ipAddress?: string; userAgent?: string }): Promise<UserProfileDTO>;
   
   /**
    * Verify a user's email address
@@ -61,12 +66,12 @@ export interface IAuthenticationService {
   /**
    * Reset a user's password with a token
    */
-  resetPassword(token: string, newPassword: string): Promise<boolean>;
+  resetPassword(token: string, newPassword: string, metadata?: { ipAddress?: string; userAgent?: string }): Promise<boolean>;
   
   /**
    * Change a user's password (requires current password)
    */
-  changePassword(userId: string, currentPassword: string, newPassword: string): Promise<boolean>;
+  changePassword(userId: string, currentPassword: string, newPassword: string, metadata?: { ipAddress?: string; userAgent?: string }): Promise<boolean>;
 
   /**
    * Create a new session for a user
@@ -91,7 +96,7 @@ export interface IAuthenticationService {
   /**
    * Validate a token against active sessions
    */
-  validateToken(token: string): Promise<{ isValid: boolean, userId?: string }>;
+  validateToken(token: string): Promise<{ isValid: boolean; userId?: string }>;
 }
 
 /**
@@ -218,17 +223,12 @@ export interface IUserRepository {
   /**
    * Create a new user
    */
-  create(userData: Partial<UserDocument>): Promise<UserDocument>;
+  create(user: Partial<UserDocument>): Promise<UserDocument>;
   
   /**
    * Update a user
    */
-  update(id: string, userData: Partial<UserDocument>): Promise<UserDocument | null>;
-  
-  /**
-   * Update a user by ID (alias for update)
-   */
-  updateById(id: string, userData: Partial<UserDocument>): Promise<UserDocument | null>;
+  update(id: string, data: Partial<UserDocument>): Promise<UserDocument>;
   
   /**
    * Delete a user
@@ -236,24 +236,19 @@ export interface IUserRepository {
   delete(id: string): Promise<boolean>;
   
   /**
-   * Find linked users
-   */
-  findLinkedUsers(userId: string, relationship: string): Promise<UserDocument[]>;
-  
-  /**
-   * Search users by query
-   */
-  search(query: string, excludeId?: string, limit?: number): Promise<UserDocument[]>;
-  
-  /**
-   * Find all users
-   */
-  findAll(filter?: Partial<UserDocument>): Promise<UserDocument[]>;
-  
-  /**
    * Get the user model
    */
   getUserModel(): any;
+
+  /**
+   * Update a user's password
+   */
+  updatePassword(id: string, hashedPassword: string): Promise<UserDocument>;
+
+  /**
+   * Update user preferences
+   */
+  updatePreferences(id: string, preferences: Partial<UserPreferences>): Promise<UserPreferences>;
 }
 
 /**
@@ -263,17 +258,17 @@ export interface ISessionRepository {
   /**
    * Create a new session
    */
-  createSession(sessionData: Partial<UserSession>): Promise<any>;
+  createSession(sessionData: Partial<UserSession>): Promise<UserSession>;
   
   /**
    * Find a session by token
    */
-  findSessionByToken(token: string): Promise<any>;
+  findSessionByToken(token: string): Promise<UserSession | null>;
   
   /**
    * Find all sessions for a user
    */
-  findSessionsByUser(userId: string): Promise<any[]>;
+  findSessionsByUser(userId: string): Promise<UserSession[]>;
   
   /**
    * Invalidate a session by ID
@@ -288,12 +283,12 @@ export interface ISessionRepository {
   /**
    * Update a session
    */
-  updateSession(sessionId: string, data: Partial<UserSession>): Promise<any>;
+  updateSession(sessionId: string, data: Partial<UserSession>): Promise<UserSession | null>;
   
   /**
    * Map a session document to DTO
    */
-  mapSessionToDTO(session: any): UserSession;
+  mapSessionToDTO(session: UserSession): UserSession;
 }
 
 /**
@@ -400,7 +395,7 @@ export enum AuditEventType {
   PASSWORD_RESET_REQUESTED = 'password_reset_requested',
   PASSWORD_RESET = 'password_reset',
   PASSWORD_CHANGED = 'password_changed',
-  EMAIL_VERIFICATION = 'email_verification',
+  EMAIL_VERIFIED = 'email_verified',
   EMAIL_CHANGED = 'email_changed',
   ACCOUNT_LOCKED = 'account_locked',
   ACCOUNT_UNLOCKED = 'account_unlocked',
@@ -410,7 +405,10 @@ export enum AuditEventType {
   INVITATION_ACCEPTED = 'invitation_accepted',
   INVITATION_REJECTED = 'invitation_rejected',
   INVITATION_CANCELLED = 'invitation_cancelled',
-  ADMIN_ACTION = 'admin_action'
+  ADMIN_ACTION = 'admin_action',
+  SESSION_CREATED = 'session_created',
+  SESSION_INVALIDATED = 'session_invalidated',
+  ALL_SESSIONS_INVALIDATED = 'all_sessions_invalidated'
 }
 
 /**

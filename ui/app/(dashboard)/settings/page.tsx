@@ -8,6 +8,7 @@ import { SecurityForm } from '@/features/user/components/SecurityForm';
 import { ErrorDisplay } from '@/features/user/components/ErrorDisplay';
 import { useSession } from 'next-auth/react';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
+import { UserProvider } from '@/features/user/context/UserContext';
 
 // Loading component for Suspense
 function SettingsLoading() {
@@ -50,39 +51,41 @@ export default function SettingsPage() {
   }
   
   return (
-    <div className="container mx-auto px-4 py-6">
-      <header className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">Account Settings</h1>
-        <p className="text-gray-800 mt-2">
-          Manage your profile and preferences.
-        </p>
-      </header>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="md:col-span-2 space-y-6">
-          <Suspense fallback={<SettingsLoading />}>
-            <UserInterface 
-              accountForm={AccountForm}
-              preferenceForm={PreferenceForm}
-              securityForm={SecurityForm}
-              errorDisplay={ErrorDisplay}
-            />
-          </Suspense>
-        </div>
-        
-        <div className="bg-white shadow-md rounded-lg p-6">
-          <h2 className="text-xl font-bold text-gray-900 mb-4">Help & Support</h2>
-          <p className="text-gray-600 mb-4">
-            Having trouble with your account settings? Contact our support team for assistance.
+    <UserProvider>
+      <div className="container mx-auto px-4 py-6">
+        <header className="mb-8">
+          <h1 className="text-2xl font-bold text-gray-900">Account Settings</h1>
+          <p className="text-gray-800 mt-2">
+            Manage your profile and preferences.
           </p>
-          <a 
-            href="mailto:support@kevin.ai" 
-            className="text-blue-600 hover:text-blue-800 font-medium"
-          >
-            Contact Support
-          </a>
+        </header>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="md:col-span-2 space-y-6">
+            <Suspense fallback={<SettingsLoading />}>
+              <UserInterface 
+                accountForm={AccountForm}
+                preferenceForm={PreferenceForm}
+                securityForm={SecurityForm}
+                errorDisplay={ErrorDisplay}
+              />
+            </Suspense>
+          </div>
+          
+          <div className="bg-white shadow-md rounded-lg p-6">
+            <h2 className="text-xl font-bold text-gray-900 mb-4">Help & Support</h2>
+            <p className="text-gray-600 mb-4">
+              Having trouble with your account settings? Contact our support team for assistance.
+            </p>
+            <a 
+              href="mailto:support@kevin.ai" 
+              className="text-blue-600 hover:text-blue-800 font-medium"
+            >
+              Contact Support
+            </a>
+          </div>
         </div>
       </div>
-    </div>
+    </UserProvider>
   );
 } 

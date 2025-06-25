@@ -74,13 +74,10 @@ export function I18nProvider({ children }: I18nProviderProps) {
         console.log(`Setting language to ${lang} from path ${path}`);
         
         // Pre-load the translations directly from public path
-        // This avoids the 404 error when i18next tries to load them
         try {
-          // Ensure we're using the correct public path to the locales
           const loadPath = `/locales/${lang}/translation.json`;
           console.log(`Loading translations from: ${loadPath}`);
           
-          // Add a cache-busting query parameter
           const response = await fetch(`${loadPath}?t=${Date.now()}`, {
             cache: 'no-store',
             headers: {

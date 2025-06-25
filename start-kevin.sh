@@ -11,6 +11,7 @@ NC='\033[0m' # No Color
 # Default options
 ACTION="start"
 SERVICE="all"
+VALID_SERVICES=("db" "api" "ui" "userman" "all")
 LOG_DIR="./logs"
 DEBUG=false
 
@@ -26,7 +27,7 @@ show_help() {
     echo -e "Options:"
     echo -e "  -h, --help                 Show this help message"
     echo -e "  -a, --action ACTION        Action to perform: ${GREEN}start${NC}, ${RED}stop${NC}, ${YELLOW}restart${NC}, ${RED}stopall${NC} (default: start)"
-    echo -e "  -s, --service SERVICE      Service to manage: ${BLUE}ui${NC}, ${BLUE}api${NC}, ${BLUE}db${NC}, ${BLUE}all${NC} (default: all)"
+    echo -e "  -s, --service SERVICE      Service to manage: ${BLUE}ui${NC}, ${BLUE}api${NC}, ${BLUE}db${NC}, ${BLUE}userman${NC}, ${BLUE}all${NC} (default: all)"
     echo -e "  -l, --logs                 Show logs for running services"
     echo -e "  -d, --debug                Enable debug output"
     echo ""
@@ -35,6 +36,7 @@ show_help() {
     echo -e "  $0 -a stop -s db           Stop the MongoDB database"
     echo -e "  $0 -a restart -s api       Restart the FastAPI backend"
     echo -e "  $0 -a start -s ui          Start only the Next.js UI"
+    echo -e "  $0 -a start -s userman     Start only the User Management service"
     echo -e "  $0 -a stopall              Stop all services"
     echo -e "  $0 -l                      Show logs for running services"
     echo ""
@@ -79,7 +81,7 @@ if [[ ! "$ACTION" =~ ^(start|stop|restart|logs|stopall)$ ]]; then
 fi
 
 # Validate service
-if [[ ! "$SERVICE" =~ ^(ui|api|db|all)$ ]]; then
+if [[ ! "$SERVICE" =~ ^(ui|api|db|userman|all)$ ]]; then
     echo -e "${RED}Invalid service: $SERVICE${NC}"
     show_help
     exit 1
@@ -92,6 +94,98 @@ if [ "$DEBUG" = true ]; then
     echo -e "Service: $SERVICE"
     echo -e "Log directory: $LOG_DIR"
 fi
+
+# Function to check if a service is running
+is_service_running() {
+  local service=$1
+  case $service in
+    db)
+      check_db_running
+      ;;
+    api)
+      check_api_running
+      ;;
+    ui)
+      check_ui_running
+      ;;
+    userman)
+      check_userman_running
+      ;;
+    all)
+      check_db_running && check_api_running && check_ui_running && check_userman_running
+      ;;
+    *)
+      echo -e "${RED}Invalid service: $service${NC}"
+      show_help
+      exit 1
+      ;;
+  esac
+}
+
+# Function to check if userman is running
+check_userman_running() {
+  # Try to get the PID of the userman service
+  USERMAN_PID=$(pgrep -f "ts-node userman/server.ts" | head -n 1)
+  
+  if [[ -z "$USERMAN_PID" ]]; then
+    return 1  # Not running
+  else
+    return 0  # Running
+  fi
+}
+
+# Function to start userman
+start_userman() {
+  if check_userman_running; then
+    echo -e "User Management service is already running with PID ${USERMAN_PID}"
+  else
+    echo -e "${YELLOW}Starting User Management service...${NC}"
+    npx ts-node userman/server.ts > "$LOG_DIR/userman.log" 2>&1 &
+    sleep 2  # Give it a moment to start
+    
+    if check_userman_running; then
+      echo -e "${GREEN}✓ User Management service started on port 8001${NC}"
+    else
+      echo -e "${RED}✗ Failed to start User Management service${NC}"
+      exit 1
+    fi
+  fi
+}
+
+# Function to start all services
+start_all() {
+  start_db
+  start_api
+  start_ui
+  start_userman
+  echo -e "${GREEN}Done!${NC}"
+}
+
+# Function to start services
+start_services() {
+  case $SERVICE in
+    db)
+      start_db
+      ;;
+    api)
+      start_api
+      ;;
+    ui)
+      start_ui
+      ;;
+    userman)
+      start_userman
+      ;;
+    all)
+      start_all
+      ;;
+    *)
+      echo -e "${RED}Invalid service: $SERVICE${NC}"
+      show_help
+      exit 1
+      ;;
+  esac
+}
 
 # Function to start MongoDB
 start_db() {
@@ -313,16 +407,107 @@ logs_ui() {
     tail -f "$UI_LOG_FILE"
 }
 
+# Function to stop userman
+stop_userman() {
+  if check_userman_running; then
+    echo -e "${YELLOW}Stopping User Management service...${NC}"
+    kill -15 $USERMAN_PID
+    sleep 1
+    
+    if check_userman_running; then
+      echo -e "${RED}Failed to stop User Management service, attempting force kill...${NC}"
+      kill -9 $USERMAN_PID
+      sleep 1
+    fi
+    
+    if check_userman_running; then
+      echo -e "${RED}✗ Failed to stop User Management service${NC}"
+      exit 1
+    else
+      echo -e "${GREEN}✓ User Management service stopped${NC}"
+    fi
+  else
+    echo -e "User Management service is not running"
+  fi
+}
+
+# Function to restart userman
+restart_userman() {
+  echo -e "${YELLOW}Restarting User Management service...${NC}"
+  if check_userman_running; then
+    stop_userman
+  fi
+  start_userman
+}
+
 # Function to stop all services
-stop_all_services() {
-    echo -e "${RED}Stopping all Kevin Application services...${NC}"
-    
-    # Stop in reverse order of dependencies
-    stop_ui
-    stop_api
-    stop_db
-    
-    echo -e "${GREEN}✅ All services stopped${NC}"
+stop_all() {
+  stop_ui
+  stop_api
+  stop_userman
+  stop_db
+  echo -e "${GREEN}All services stopped!${NC}"
+}
+
+# Function to restart all services
+restart_all() {
+  restart_ui
+  restart_api
+  restart_userman
+  restart_db
+  echo -e "${GREEN}All services restarted!${NC}"
+}
+
+# Function to stop services
+stop_services() {
+  case $SERVICE in
+    db)
+      stop_db
+      ;;
+    api)
+      stop_api
+      ;;
+    ui)
+      stop_ui
+      ;;
+    userman)
+      stop_userman
+      ;;
+    all)
+      stop_all
+      ;;
+    *)
+      echo -e "${RED}Invalid service: $SERVICE${NC}"
+      show_help
+      exit 1
+      ;;
+  esac
+}
+
+# Function to restart services
+restart_services() {
+  case $SERVICE in
+    db)
+      restart_db
+      ;;
+    api)
+      restart_api
+      ;;
+    ui)
+      restart_ui
+      ;;
+    userman)
+      restart_userman
+      ;;
+    all)
+      restart_all
+      ;;
+    *)
+      echo -e "${RED}Invalid service: $SERVICE${NC}"
+      show_help
+      exit 1
+      ;;
+  esac
 }
 
 # Main logic based on action and service
@@ -330,17 +515,7 @@ case "$ACTION" in
     start)
         echo -e "${GREEN}Starting Kevin Application...${NC}"
         
-        if [[ "$SERVICE" == "all" || "$SERVICE" == "db" ]]; then
-            start_db
-        fi
-        
-        if [[ "$SERVICE" == "all" || "$SERVICE" == "api" ]]; then
-            start_api
-        fi
-        
-        if [[ "$SERVICE" == "all" || "$SERVICE" == "ui" ]]; then
-            start_ui
-        fi
+        start_services
         
         if [[ "$SERVICE" == "all" ]]; then
             echo -e "${GREEN}✅ All services started${NC}"
@@ -354,17 +529,7 @@ case "$ACTION" in
     stop)
         echo -e "${RED}Stopping Kevin Application...${NC}"
         
-        if [[ "$SERVICE" == "all" || "$SERVICE" == "ui" ]]; then
-            stop_ui
-        fi
-        
-        if [[ "$SERVICE" == "all" || "$SERVICE" == "api" ]]; then
-            stop_api
-        fi
-        
-        if [[ "$SERVICE" == "all" || "$SERVICE" == "db" ]]; then
-            stop_db
-        fi
+        stop_services
         
         if [[ "$SERVICE" == "all" ]]; then
             echo -e "${GREEN}✅ All services stopped${NC}"
@@ -372,24 +537,16 @@ case "$ACTION" in
         ;;
     
     stopall)
-        # New dedicated action to stop all services
-        stop_all_services
+        echo -e "${RED}Stopping all Kevin Application services...${NC}"
+        SERVICE="all"
+        stop_all
+        exit 0
         ;;
         
     restart)
         echo -e "${YELLOW}Restarting Kevin Application...${NC}"
         
-        if [[ "$SERVICE" == "all" || "$SERVICE" == "ui" ]]; then
-            restart_ui
-        fi
-        
-        if [[ "$SERVICE" == "all" || "$SERVICE" == "api" ]]; then
-            restart_api
-        fi
-        
-        if [[ "$SERVICE" == "all" || "$SERVICE" == "db" ]]; then
-            restart_db
-        fi
+        restart_services
         
         if [[ "$SERVICE" == "all" ]]; then
             echo -e "${GREEN}✅ All services restarted${NC}"

@@ -66,10 +66,18 @@ VerificationTokenSchema.index({ userId: 1, type: 1 });
 /**
  * Interface for the VerificationToken model with static methods
  */
-export interface VerificationTokenModel extends Model<VerificationTokenDocument> {
+export interface VerificationTokenModel extends Model<VerificationTokenDocument, {}, {}, {}, any> {
   createToken(userId: string, type: TokenType, email?: string, expiresInHours?: number): Promise<VerificationTokenDocument>;
   findValidToken(token: string, type: TokenType): Promise<VerificationTokenDocument | null>;
   invalidateUserTokens(userId: string, type: TokenType): Promise<boolean>;
+  findByToken(token: string): Promise<VerificationTokenDocument | null>;
+  findByUserId(userId: string): Promise<VerificationTokenDocument[]>;
+  findByType(type: TokenType): Promise<VerificationTokenDocument[]>;
+  findActiveByUserId(userId: string): Promise<VerificationTokenDocument[]>;
+  findActiveByType(type: TokenType): Promise<VerificationTokenDocument[]>;
+  invalidateToken(token: string): Promise<boolean>;
+  invalidateUserTokens(userId: string): Promise<boolean>;
+  invalidateUserTokensByType(userId: string, type: TokenType): Promise<boolean>;
 }
 
 // Static methods implementation

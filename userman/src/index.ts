@@ -6,14 +6,14 @@
  */
 
 // Export models
-export * from './models/user_model';
+import User from './models/user_model';
 
 // Export interfaces
 export * from './services/interfaces';
 
 // Export implementations
 export { UserService } from './services/user_service';
-export { MongoUserRepository } from './services/user_repository';
+export { MongoUserRepository } from './repositories/mongo_user_repository';
 
 // Export routers
 export { createUserRouter } from './api/user_router';
@@ -22,9 +22,33 @@ export { default as serviceRouter } from './routes/service_routes';
 
 // Factory function to create a complete user management system
 import { UserService } from './services/user_service';
-import { MongoUserRepository } from './services/user_repository';
+import { MongoUserRepository } from './repositories/mongo_user_repository';
 import { createUserRouter } from './api/user_router';
 import { createAuthRouter } from './api/auth_router';
+import { Router } from 'express';
+import { UserRole } from './models/user_model';
+
+const createDefaultAdminUser = async (userService: UserService) => {
+  try {
+    const defaultEmail = 'admin@example.com';
+    const defaultPassword = 'admin123';
+    
+    // Check if admin user exists
+    const existingUser = await userService.getUserByEmail(defaultEmail);
+    if (!existingUser) {
+      // Create default admin user
+      await userService.register({
+        firstName: 'Admin',
+        lastName: 'User',
+        email: defaultEmail,
+        role: UserRole.ADMIN
+      }, defaultPassword);
+      console.log('Default admin user created successfully');
+    }
+  } catch (error) {
+    console.error('Error creating default admin user:', error);
+  }
+};
 
 /**
  * Create a user management system with all components
@@ -37,6 +61,9 @@ export function createUserManagementSystem() {
   
   // Create service
   const userService = new UserService(userRepository);
+  
+  // Create default admin user
+  createDefaultAdminUser(userService);
   
   // Create routers
   const userRouter = createUserRouter(userService);

@@ -1,17 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { ServiceManagementService } from '../services/service_management_service';
 import { AuthenticationError, AuthorizationError } from '../utils/errors';
-import { UserDocument } from '../models/user_model';
-
-// Extend the Express Request interface to include user and serviceEntitlement
-declare global {
-  namespace Express {
-    interface Request {
-      user?: UserDocument;
-      serviceEntitlement?: any;
-    }
-  }
-}
+import { UserDocument, UserRole } from '../models/user_model';
 
 // Service management instance
 const serviceManager = new ServiceManagementService();
@@ -168,12 +158,12 @@ export const validateParentStudentAccess = (studentIdParam: string = 'studentId'
       }
       
       // If user is admin, allow access
-      if (user.role === 'admin') {
+      if (user.role === UserRole.ADMIN) {
         return next();
       }
       
       // If user is parent, check if student is linked
-      if (user.role === 'parent') {
+      if (user.role === UserRole.PARENT) {
         const studentIds = user.studentIds?.map(id => id.toString()) || [];
         
         if (!studentIds.includes(studentId)) {

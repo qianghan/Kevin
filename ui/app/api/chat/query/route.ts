@@ -1,6 +1,5 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { backendApiService } from '@/lib/services/BackendApiService';
-import { createSuccessResponse, createErrorResponse } from '@/lib/api/middleware';
 
 /**
  * Handle POST request to chat query endpoint
@@ -18,16 +17,15 @@ export async function POST(request: NextRequest) {
     // Forward the request to the backend using the BackendApiService
     const result = await backendApiService.query(body);
     
-    // Return the response
-    return createSuccessResponse(result);
+    // Return the response directly to match frontend expectations
+    return NextResponse.json(result);
   } catch (error) {
     console.error('Error in /api/chat/query:', error instanceof Error ? error.message : String(error));
     
     // Return an error response
-    return createErrorResponse(
-      'Error processing chat query', 
-      500, 
-      { details: error instanceof Error ? error.message : String(error) }
+    return NextResponse.json(
+      { error: 'Error processing chat query', details: error instanceof Error ? error.message : String(error) },
+      { status: 500 }
     );
   }
 } 

@@ -6,6 +6,8 @@ import { TokenType } from '../models/verification_token_model';
 import * as jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { isPasswordValid, validatePassword, PasswordValidationResult } from '../utils/password_validator';
+import { sign, verify } from 'jsonwebtoken';
+import { v4 as uuidv4 } from 'uuid';
 
 /**
  * Configuration for authentication service
@@ -29,6 +31,9 @@ const DEFAULT_CONFIG: AuthServiceConfig = {
   maxLoginAttempts: 5,
   lockoutDuration: 30
 };
+
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
+const TOKEN_EXPIRY = '24h';
 
 /**
  * Implementation of the authentication service
@@ -317,23 +322,20 @@ export class AuthService implements IAuthenticationService {
    */
   async verifyEmail(token: string): Promise<boolean> {
     try {
-      // Verify the token
-      const tokenData = await this.verifyToken(token, TokenType.EMAIL_VERIFICATION);
-      
-      if (!tokenData) {
+      const decoded = verify(token, JWT_SECRET) as { userId: string };
+      const user = await this.userRepository.findById(decoded.userId);
+
+      if (!user) {
         return false;
       }
-      
-      const { userId } = tokenData;
-      
-      // Update user email verified status
-      const updated = await this.userRepository.update(userId, {
-        emailVerified: new Date()
+
+      await this.userRepository.update(user.id, {
+        emailVerified: true,
+        updatedAt: new Date()
       });
-      
-      return !!updated;
+
+      return true;
     } catch (error) {
-      console.error('Email verification error:', error);
       return false;
     }
   }
@@ -351,7 +353,7 @@ export class AuthService implements IAuthenticationService {
       }
       
       // Create password reset token
-      const token = await this.createToken(user.id, TokenType.PASSWORD_RESET);
+      const token = this.generateToken(user, '1h');
       
       // Send password reset email
       if (this.config.emailService) {
@@ -374,10 +376,10 @@ export class AuthService implements IAuthenticationService {
     metadata?: { ipAddress?: string; userAgent?: string }
   ): Promise<boolean> {
     try {
-      // Verify the token
-      const tokenData = await this.verifyToken(token, TokenType.PASSWORD_RESET);
+      const decoded = verify(token, JWT_SECRET) as { userId: string };
+      const user = await this.userRepository.findById(decoded.userId);
       
-      if (!tokenData) {
+      if (!user) {
         await this.logAuditEvent(
           AuditEventType.PASSWORD_RESET,
           undefined,
@@ -397,7 +399,7 @@ export class AuthService implements IAuthenticationService {
       if (!validationResult.isValid) {
         await this.logAuditEvent(
           AuditEventType.PASSWORD_RESET,
-          tokenData.userId,
+          decoded.userId,
           false,
           { 
             ipAddress: metadata?.ipAddress,
@@ -409,7 +411,7 @@ export class AuthService implements IAuthenticationService {
         throw new Error(`Password is not strong enough: ${validationResult.errors.join(', ')}`);
       }
       
-      const { userId } = tokenData;
+      const { userId } = decoded;
       
       // Hash new password
       const hashedPassword = await hash(newPassword, this.BCRYPT_ROUNDS);
@@ -536,7 +538,7 @@ export class AuthService implements IAuthenticationService {
   async createSession(userId: string, metadata?: { device?: string; ipAddress?: string }): Promise<UserSession> {
     try {
       // Generate JWT token
-      const token = this.generateJWT(userId);
+      const token = this.generateToken(userId);
       
       // Calculate expiration date
       const expiresAt = new Date();
@@ -629,23 +631,18 @@ export class AuthService implements IAuthenticationService {
    */
   async validateToken(token: string): Promise<{ isValid: boolean; userId?: string }> {
     try {
-      const session = await this.sessionRepository.findSessionByToken(token);
-      
-      if (!session || !session.isValid || session.expiresAt < new Date()) {
+      const decoded = verify(token, JWT_SECRET) as { userId: string };
+      const user = await this.userRepository.findById(decoded.userId);
+
+      if (!user) {
         return { isValid: false };
       }
-      
-      // Update last active timestamp
-      await this.sessionRepository.updateSession(session.id, {
-        lastActive: new Date()
-      });
-      
+
       return {
         isValid: true,
-        userId: session.userId.toString()
+        userId: user.id
       };
     } catch (error) {
-      console.error('Validate token error:', error);
       return { isValid: false };
     }
   }
@@ -653,30 +650,14 @@ export class AuthService implements IAuthenticationService {
   /**
    * Generate a JWT token
    */
-  private generateJWT(userId: string): string {
-    const payload = { userId };
-    const secret = this.config.jwtSecret;
-    const options = { expiresIn: this.config.tokenExpiresIn };
-    
-    return jwt.sign(payload, secret, options);
-  }
-  
-  /**
-   * Create a verification token
-   */
-  private async createToken(userId: string, type: TokenType, email?: string): Promise<string> {
-    // This would be implemented with a TokenRepository
-    // For now, just generate a token
-    return crypto.randomBytes(32).toString('hex');
-  }
-  
-  /**
-   * Verify a token
-   */
-  private async verifyToken(token: string, type: TokenType): Promise<{ userId: string; email?: string } | null> {
-    // This would be implemented with a TokenRepository
-    // For now, return null (token invalid)
-    return null;
+  private generateToken(userId: string, expiresIn: string = TOKEN_EXPIRY): string {
+    const payload = {
+      userId: userId,
+      email: '',
+      role: ''
+    };
+
+    return sign(payload, JWT_SECRET, { expiresIn });
   }
   
   /**
@@ -688,7 +669,7 @@ export class AuthService implements IAuthenticationService {
     }
     
     // Create token
-    const token = await this.createToken(user.id, TokenType.EMAIL_VERIFICATION);
+    const token = this.generateToken(user.id, '1h');
     
     // Send email (implementation depends on email service)
     // this.config.emailService.sendVerificationEmail(user.email, token);
@@ -711,7 +692,7 @@ export class AuthService implements IAuthenticationService {
    */
   private mapUserToProfile(user: UserDocument): UserProfileDTO {
     return {
-      id: user.id,
+      id: user._id.toString(),
       name: user.name,
       email: user.email,
       image: user.image,

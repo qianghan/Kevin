@@ -7,7 +7,7 @@ const locales = ['en', 'zh', 'fr', 'es'];
 const authRoutes = ['/login', '/register', '/verify', '/signin', '/signup', '/auth'];
 const dashboardRoutes = ['/chat', '/profile', '/settings', '/family', '/sessions'];
 
-// Get the preferred locale, similar to the above or using a different detection strategy
+// Get the preferred locale
 function getLocale(request: NextRequest) {
   // Check if the path includes a locale
   const pathname = request.nextUrl.pathname;
@@ -16,11 +16,16 @@ function getLocale(request: NextRequest) {
   );
 
   if (pathnameHasLocale) {
-    // Return the detected locale from URL
     return pathname.split('/')[1];
   }
 
-  // Check for locale in cookies or Accept-Language header
+  // Check for locale in cookies
+  const cookieLocale = request.cookies.get('NEXT_LOCALE')?.value;
+  if (cookieLocale && locales.includes(cookieLocale)) {
+    return cookieLocale;
+  }
+
+  // Check Accept-Language header
   const acceptLanguage = request.headers.get('accept-language') || '';
   const localeFromHeader = acceptLanguage.split(',')[0].split('-')[0];
 
@@ -34,46 +39,37 @@ function getLocale(request: NextRequest) {
 export function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   
-  // Always skip processing for static files including locales
+  // Skip processing for static files and API routes
   if (
-    pathname.startsWith('/locales/') || 
-    pathname.includes('.') ||
     pathname.startsWith('/_next/') ||
-    pathname.startsWith('/api/')
+    pathname.startsWith('/api/') ||
+    pathname.startsWith('/static/') ||
+    pathname.includes('.')
   ) {
-    console.log(`Skipping middleware for static path: ${pathname}`);
     return NextResponse.next();
   }
 
-  // Check if the path is an auth route that should be specially handled
+  // Handle auth routes
   const isAuthRoute = authRoutes.some(route => pathname === route || pathname.startsWith(`${route}/`));
   if (isAuthRoute) {
-    // For auth routes, we don't add the locale prefix, we handle it differently via redirects
-    console.log(`Auth route detected: ${pathname}`);
-    
-    // If it's already a locale prefixed auth route, like /en/login, redirect to /login?lang=en
-    if (locales.some(locale => pathname.startsWith(`/${locale}/login`))) {
-      const locale = pathname.split('/')[1];
-      const url = new URL(`/login?lang=${locale}`, request.url);
-      return NextResponse.redirect(url);
-    }
-    
-    return NextResponse.next();
+    // For auth routes, preserve the original path but add locale as a query parameter
+    const locale = getLocale(request);
+    const url = new URL(pathname, request.url);
+    url.searchParams.set('lang', locale);
+    return NextResponse.rewrite(url);
   }
-  
-  // Similarly handle dashboard routes specially
+
+  // Handle dashboard routes
   const isDashboardRoute = dashboardRoutes.some(route => pathname === route || pathname.startsWith(`${route}/`));
   if (isDashboardRoute) {
-    // For dashboard routes, ensure they have a locale prefix
     const locale = getLocale(request);
     
-    // If route doesn't already have locale, add it
+    // If route doesn't have locale, add it
     const pathnameHasLocale = locales.some(
       locale => pathname.startsWith(`/${locale}/`) || pathname === `/${locale}`
     );
     
     if (!pathnameHasLocale) {
-      // For a path like /chat, redirect to /en/chat
       const url = new URL(`/${locale}${pathname}`, request.url);
       url.search = request.nextUrl.search;
       return NextResponse.redirect(url);
@@ -81,28 +77,31 @@ export function middleware(request: NextRequest) {
     
     return NextResponse.next();
   }
-  
-  // Check if the path already has a locale
+
+  // Handle root path
+  if (pathname === '/') {
+    const locale = getLocale(request);
+    return NextResponse.redirect(new URL(`/${locale}`, request.url));
+  }
+
+  // For all other routes, ensure they have a locale prefix
   const pathnameHasLocale = locales.some(
     locale => pathname.startsWith(`/${locale}/`) || pathname === `/${locale}`
   );
 
-  if (pathnameHasLocale) {
-    // If URL already has locale, just forward the request
-    return NextResponse.next();
+  if (!pathnameHasLocale) {
+    const locale = getLocale(request);
+    const url = new URL(`/${locale}${pathname}`, request.url);
+    url.search = request.nextUrl.search;
+    return NextResponse.redirect(url);
   }
 
-  // Redirect to the locale version
-  const locale = getLocale(request);
-  const url = new URL(`/${locale}${pathname === '/' ? '' : pathname}`, request.url);
-  url.search = request.nextUrl.search;
-  
-  return NextResponse.redirect(url);
+  return NextResponse.next();
 }
 
 export const config = {
   matcher: [
-    // Skip all internal paths (_next, assets, etc)
-    '/((?!_next|api|locales|images|favicon.ico).*)',
+    // Skip all internal paths (_next, api, etc)
+    '/((?!_next|api|static|favicon.ico).*)',
   ],
 }; 

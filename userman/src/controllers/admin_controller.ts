@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import { PermissionService } from '../services/permission_service';
 import { ResourceType, ActionType } from '../models/permission_model';
 import { NotFoundError, ValidationError, AuthorizationError } from '../utils/errors';
+import { UserRole, UserDocument } from '../models/user_model';
 
 // Get User model
 const UserModel = mongoose.model('User');
@@ -53,10 +54,10 @@ export class AdminController {
       ]);
       
       // Map users to DTOs
-      const userDTOs = users.map(user => ({
+      const userDTOs = users.map((user: UserDocument) => ({
         id: user._id.toString(),
         email: user.email,
-        name: user.fullName || `${user.firstName} ${user.lastName}`,
+        name: `${user.firstName} ${user.lastName}`,
         role: user.role,
         testMode: user.testMode,
         createdAt: user.createdAt,
@@ -64,7 +65,8 @@ export class AdminController {
         // Only include IDs, not the full relationship details
         studentIds: user.studentIds || [],
         parentIds: user.parentIds || [],
-        partnerIds: user.partnerIds || []
+        partnerIds: user.partnerIds || [],
+        services: user.services || []
       }));
       
       // Return paginated results
@@ -104,7 +106,7 @@ export class AdminController {
         email: user.email,
         firstName: user.firstName,
         lastName: user.lastName,
-        fullName: user.fullName,
+        name: `${user.firstName} ${user.lastName}`,
         role: user.role,
         testMode: user.testMode,
         createdAt: user.createdAt,
@@ -133,7 +135,7 @@ export class AdminController {
       }
       
       // Validate the role
-      const validRoles = ['admin', 'support', 'parent', 'student'];
+      const validRoles = Object.values(UserRole);
       if (!validRoles.includes(role)) {
         throw new ValidationError(`Invalid role. Must be one of: ${validRoles.join(', ')}`);
       }
@@ -145,7 +147,7 @@ export class AdminController {
       }
       
       // Prevent changing own role for admins
-      if (req.user?.id === id && req.user?.role === 'admin' && role !== 'admin') {
+      if (req.user?.id === id && req.user?.role === UserRole.ADMIN && role !== UserRole.ADMIN) {
         throw new ValidationError('Admins cannot change their own role');
       }
       
@@ -204,12 +206,15 @@ export class AdminController {
     try {
       const users = await UserModel.find({ testMode: true });
       
-      const userDTOs = users.map(user => ({
+      const userDTOs = users.map((user: UserDocument) => ({
         id: user._id.toString(),
         email: user.email,
-        name: user.fullName || `${user.firstName} ${user.lastName}`,
+        name: `${user.firstName} ${user.lastName}`,
         role: user.role,
-        createdAt: user.createdAt
+        testMode: user.testMode,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt,
+        services: user.services || []
       }));
       
       res.status(200).json({ users: userDTOs });
@@ -247,7 +252,7 @@ export class AdminController {
         }
       } else {
         // Remove access if user has it
-        user.services = user.services.filter(service => service !== serviceName);
+        user.services = user.services.filter((service: string) => service !== serviceName);
       }
       
       await user.save();

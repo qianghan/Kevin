@@ -1,4 +1,4 @@
-import mongoose, { Document, Schema, Model } from 'mongoose';
+import mongoose, { Document, Schema, Model, HydratedDocument } from 'mongoose';
 
 /**
  * User preferences interface with customizable settings
@@ -38,212 +38,155 @@ export interface BaseUser {
   updatedAt: Date;
 }
 
-/**
- * Available user roles in the system
- */
-export type UserRole = 'student' | 'parent' | 'admin' | 'support';
-
-/**
- * Mongoose document interface for User
- */
-export interface UserDocument extends Document, BaseUser {
-  role: UserRole;
-  studentIds?: mongoose.Types.ObjectId[]; // For parent accounts
-  parentIds?: mongoose.Types.ObjectId[]; // For student accounts
-  partnerIds?: mongoose.Types.ObjectId[]; // For parent accounts (co-parents)
+export enum UserRole {
+  ADMIN = 'admin',
+  STUDENT = 'student',
+  PARENT = 'parent',
+  SUPPORT = 'support'
 }
 
 /**
- * User schema for MongoDB storage
+ * User document interface
  */
-const UserSchema = new Schema<UserDocument>(
-  {
-    email: {
-      type: String,
-      required: true,
-      unique: true,
-      trim: true,
-      lowercase: true,
-    },
-    name: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-    password: {
-      type: String,
-    },
-    image: {
-      type: String,
-    },
-    emailVerified: {
-      type: Date,
-    },
-    lastLoginAt: {
-      type: Date
-    },
-    failedLoginAttempts: {
-      type: Number,
-      default: 0
-    },
-    lockedUntil: {
-      type: Date
-    },
-    role: {
-      type: String,
-      enum: ['student', 'parent', 'admin', 'support'],
-      required: true,
-      default: 'student',
-    },
-    testMode: {
-      type: Boolean,
-      default: false,
-    },
-    profileCompleteness: {
-      score: {
-        type: Number,
-        default: 0
-      },
-      missingFields: {
-        type: [String],
-        default: []
-      },
-      lastUpdated: {
-        type: Date,
-        default: Date.now
-      }
-    },
-    studentIds: [{
-      type: Schema.Types.ObjectId,
-      ref: 'User',
-    }],
-    parentIds: [{
-      type: Schema.Types.ObjectId,
-      ref: 'User',
-    }],
-    partnerIds: [{
-      type: Schema.Types.ObjectId,
-      ref: 'User',
-    }],
-    preferences: {
-      type: Schema.Types.Mixed,
-      default: {
-        theme: 'system',
-        emailNotifications: true,
-        language: 'en'
-      }
-    }
-  },
-  {
-    timestamps: true,
-  }
-);
-
-// Add indexes for commonly queried fields
-UserSchema.index({ email: 1 });
-UserSchema.index({ role: 1 });
-UserSchema.index({ studentIds: 1 });
-UserSchema.index({ parentIds: 1 });
-UserSchema.index({ testMode: 1 }); // Add index for testMode
-UserSchema.index({ "profileCompleteness.score": 1 }); // Index for profile completeness score
-
-/**
- * Calculate profile completeness score based on filled fields
- * @param user User document
- * @returns Profile completeness score (0-100)
- */
-export const calculateProfileCompleteness = (user: UserDocument): ProfileCompleteness => {
-  const requiredFields = ['name', 'email', 'image'];
-  const preferenceFields = ['preferences.theme', 'preferences.language'];
-  
-  // Fields that should be filled based on user role
-  const roleBasedFields: Record<UserRole, string[]> = {
-    student: [],
-    parent: ['studentIds'],
-    admin: [],
-    support: []
-  };
-  
-  // All fields that should be checked for this user
-  const fieldsToCheck = [...requiredFields, ...preferenceFields, ...(roleBasedFields[user.role] || [])];
-  const missingFields: string[] = [];
-  
-  // Check each field
-  fieldsToCheck.forEach(field => {
-    if (field.includes('.')) {
-      // Handle nested fields
-      const [parent, child] = field.split('.');
-      if (!user[parent] || !user[parent][child]) {
-        missingFields.push(field);
-      }
-    } else if (!user[field] || (Array.isArray(user[field]) && user[field].length === 0)) {
-      missingFields.push(field);
-    }
-  });
-  
-  // Calculate score as percentage of completed fields
-  const filledFields = fieldsToCheck.length - missingFields.length;
-  const score = Math.round((filledFields / fieldsToCheck.length) * 100);
-  
-  return {
-    score,
-    missingFields,
-    lastUpdated: new Date()
-  };
-};
-
-// Pre-save middleware to calculate profile completeness
-UserSchema.pre('save', function(next) {
-  // Only recalculate if relevant fields have changed
-  if (this.isModified('name') || this.isModified('email') || this.isModified('image') ||
-      this.isModified('preferences') || this.isModified('studentIds') || this.isModified('parentIds')) {
-    this.profileCompleteness = calculateProfileCompleteness(this);
-  }
-  next();
-});
+export interface UserDocument extends Document {
+  email: string;
+  password: string;
+  firstName: string;
+  lastName: string;
+  name: string; // Full name (computed from firstName and lastName)
+  role: UserRole;
+  image?: string;
+  emailVerified: boolean;
+  preferences?: UserPreferences;
+  testMode?: boolean;
+  profileCompleteness?: ProfileCompleteness;
+  createdAt: Date;
+  updatedAt: Date;
+  failedLoginAttempts?: number;
+  lockedUntil?: Date;
+  lastLogin?: Date;
+  services?: string[];
+  studentIds?: string[];
+  parentIds?: string[];
+  partnerIds?: string[];
+}
 
 /**
  * Interface for the User model with static methods
  */
-export interface UserModel extends Model<UserDocument> {
+export interface UserModel extends Model<UserDocument, {}, {}, {}, any> {
+  findOne(filter: any): Promise<UserDocument | null>;
   findByEmail(email: string): Promise<UserDocument | null>;
   findByIds(ids: string[]): Promise<UserDocument[]>;
-  findStudents(parentId: string): Promise<UserDocument[]>;
-  findParents(studentId: string): Promise<UserDocument[]>;
-  updateLoginTimestamp(userId: string): Promise<boolean>;
+  findStudents(userId: string): Promise<UserDocument[]>;
+  findParents(userId: string): Promise<UserDocument[]>;
+  findByRole(role: UserRole): Promise<UserDocument[]>;
+  findByRoles(roles: UserRole[]): Promise<UserDocument[]>;
+  findByService(serviceName: string): Promise<UserDocument[]>;
+  findByServiceAndRole(serviceName: string, role: UserRole): Promise<UserDocument[]>;
+  findByServiceAndRoles(serviceName: string, roles: UserRole[]): Promise<UserDocument[]>;
 }
 
-// Static method implementations
-UserSchema.statics.findByEmail = async function(email: string): Promise<UserDocument | null> {
-  return this.findOne({ email: email.toLowerCase() });
+/**
+ * Create the user schema
+ */
+const userSchema = new Schema<UserDocument, UserModel>({
+  email: {
+    type: String,
+    required: true,
+    unique: true,
+    trim: true,
+    lowercase: true
+  },
+  password: {
+    type: String,
+    required: true
+  },
+  firstName: {
+    type: String,
+    required: true,
+    trim: true
+  },
+  lastName: {
+    type: String,
+    required: true,
+    trim: true
+  },
+  name: {
+    type: String,
+    required: true,
+    trim: true
+  },
+  role: {
+    type: String,
+    enum: Object.values(UserRole),
+    required: true
+  },
+  image: {
+    type: String
+  },
+  emailVerified: {
+    type: Boolean,
+    default: false
+  },
+  preferences: {
+    type: Schema.Types.Mixed,
+    default: {}
+  },
+  testMode: {
+    type: Boolean,
+    default: false
+  },
+  profileCompleteness: {
+    score: {
+      type: Number,
+      default: 0
+    },
+    missingFields: [{
+      type: String
+    }],
+    lastUpdated: {
+      type: Date
+    }
+  },
+  failedLoginAttempts: {
+    type: Number,
+    default: 0
+  },
+  lockedUntil: {
+    type: Date
+  },
+  lastLogin: {
+    type: Date
+  },
+  services: [{
+    type: String
+  }],
+  studentIds: [{
+    type: Schema.Types.ObjectId,
+    ref: 'User'
+  }],
+  parentIds: [{
+    type: Schema.Types.ObjectId,
+    ref: 'User'
+  }],
+  partnerIds: [{
+    type: Schema.Types.ObjectId,
+    ref: 'User'
+  }]
+}, {
+  timestamps: true
+});
+
+// Add indexes for commonly queried fields
+userSchema.index({ email: 1 });
+userSchema.index({ role: 1 });
+
+// Add static methods
+userSchema.statics.findByEmail = function(email: string): Promise<UserDocument | null> {
+  return this.findOne({ email });
 };
 
-UserSchema.statics.findByIds = async function(ids: string[]): Promise<UserDocument[]> {
-  return this.find({ _id: { $in: ids } });
-};
-
-UserSchema.statics.findStudents = async function(parentId: string): Promise<UserDocument[]> {
-  return this.find({ parentIds: parentId });
-};
-
-UserSchema.statics.findParents = async function(studentId: string): Promise<UserDocument[]> {
-  return this.find({ studentIds: studentId });
-};
-
-// Update the user's last login timestamp
-UserSchema.statics.updateLoginTimestamp = async function(userId: string): Promise<boolean> {
-  const result = await this.updateOne(
-    { _id: userId },
-    { lastLoginAt: new Date() }
-  );
-  return result.modifiedCount > 0;
-};
-
-// Create the model
-// Use a function to avoid model recompilation errors in development
-export const getUserModel = (): UserModel => {
-  return (mongoose.models.User as UserModel) || 
-    mongoose.model<UserDocument, UserModel>('User', UserSchema);
-};
-
-export default getUserModel; 
+// Create and export the model
+export const User = mongoose.model<UserDocument, UserModel>('User', userSchema);
+export default User; 

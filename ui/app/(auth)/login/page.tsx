@@ -7,8 +7,9 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useUserContext } from '@/features/user/context/UserContext';
 
 export default function LoginPage() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState('qiang@kevin.ai');
+  const [password, setPassword] = useState('your_default_password');
+  const [rememberMe, setRememberMe] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const router = useRouter();
@@ -16,7 +17,7 @@ export default function LoginPage() {
   const { isAuthenticated } = useUserContext();
   
   // Get return URL from query parameters
-  const callbackUrl = searchParams.get('callbackUrl') || '/chat';
+  const callbackUrl = searchParams?.get('callbackUrl') || '/chat';
   
   // Redirect if already authenticated
   useEffect(() => {
@@ -176,6 +177,8 @@ export default function LoginPage() {
                   id="remember-me"
                   name="remember-me"
                   type="checkbox"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
                   className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                 />
                 <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-900">

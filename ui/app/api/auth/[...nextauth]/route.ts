@@ -15,8 +15,8 @@ export const authOptions: NextAuthOptions = {
         }
 
         try {
-          // Replace with your actual backend API endpoint
-          const response = await fetch('http://localhost:8000/api/auth/login', {
+          // Connect to real authentication service
+          const response = await fetch('http://localhost:8001/api/auth/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -29,14 +29,13 @@ export const authOptions: NextAuthOptions = {
             throw new Error('Invalid credentials');
           }
 
-          const { user, token } = await response.json();
-
+          const { data } = await response.json();
           return {
-            id: user.id,
-            email: user.email,
-            name: user.name,
-            role: user.role,
-            token
+            id: data.user.id,
+            email: data.user.email,
+            name: data.user.name,
+            role: data.user.role || 'admin',
+            token: data.token
           };
         } catch (error) {
           console.error('Authentication error:', error);

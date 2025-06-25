@@ -1,34 +1,28 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useUserProfile } from '@/hooks/useUserProfile';
-import { ProfileUpdateData } from '@/lib/interfaces/services/userProfile.service';
+import { useUserContext } from '@/features/user/context/UserContext';
 
 export function ProfileForm() {
-  const { user, updateProfile, isLoading, error } = useUserProfile();
-  const [formData, setFormData] = useState<ProfileUpdateData>({
-    firstName: '',
-    lastName: '',
-    bio: '',
-    phone: '',
-    address: ''
+  const { profile, updateProfile, isLoading, error } = useUserContext();
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    image: ''
   });
   const [success, setSuccess] = useState(false);
 
-  // Update form data when user data is loaded
   useEffect(() => {
-    if (user) {
+    if (profile) {
       setFormData({
-        firstName: user.firstName || '',
-        lastName: user.lastName || '',
-        bio: user.bio || '',
-        phone: user.phone || '',
-        address: user.address || ''
+        name: profile.name || '',
+        email: profile.email || '',
+        image: profile.image || ''
       });
     }
-  }, [user]);
+  }, [profile]);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
@@ -48,8 +42,8 @@ export function ProfileForm() {
     }
   };
 
-  if (!user) {
-    return <div className="p-4">Loading profile...</div>;
+  if (!profile) {
+    return <div className="p-4">Loading...</div>;
   }
 
   return (
@@ -68,75 +62,45 @@ export function ProfileForm() {
         </div>
       )}
       
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <label htmlFor="firstName" className="block text-sm font-medium mb-1">
-            First Name
-          </label>
-          <input
-            type="text"
-            id="firstName"
-            name="firstName"
-            value={formData.firstName}
-            onChange={handleChange}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            required
-          />
-        </div>
-        
-        <div>
-          <label htmlFor="lastName" className="block text-sm font-medium mb-1">
-            Last Name
-          </label>
-          <input
-            type="text"
-            id="lastName"
-            name="lastName"
-            value={formData.lastName}
-            onChange={handleChange}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            required
-          />
-        </div>
-      </div>
-      
       <div>
-        <label htmlFor="bio" className="block text-sm font-medium mb-1">
-          Bio
-        </label>
-        <textarea
-          id="bio"
-          name="bio"
-          value={formData.bio}
-          onChange={handleChange}
-          rows={4}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-      </div>
-      
-      <div>
-        <label htmlFor="phone" className="block text-sm font-medium mb-1">
-          Phone Number
-        </label>
-        <input
-          type="tel"
-          id="phone"
-          name="phone"
-          value={formData.phone}
-          onChange={handleChange}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-      </div>
-      
-      <div>
-        <label htmlFor="address" className="block text-sm font-medium mb-1">
-          Address
+        <label htmlFor="name" className="block text-sm font-medium mb-1">
+          Name
         </label>
         <input
           type="text"
-          id="address"
-          name="address"
-          value={formData.address}
+          id="name"
+          name="name"
+          value={formData.name}
+          onChange={handleChange}
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          required
+        />
+      </div>
+      
+      <div>
+        <label htmlFor="email" className="block text-sm font-medium mb-1">
+          Email
+        </label>
+        <input
+          type="email"
+          id="email"
+          name="email"
+          value={formData.email}
+          onChange={handleChange}
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          required
+        />
+      </div>
+      
+      <div>
+        <label htmlFor="image" className="block text-sm font-medium mb-1">
+          Profile Image URL
+        </label>
+        <input
+          type="url"
+          id="image"
+          name="image"
+          value={formData.image}
           onChange={handleChange}
           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
